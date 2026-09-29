@@ -2,37 +2,39 @@
 
 Step-by-step deployment for a Marketing Cloud Engagement (MCE) admin. SQL Studio runs entirely inside MCE: one Cloud Page, two Code Resources and an Installed Package. There is no external hosting and no build step at deploy time. The release files are ready to paste.
 
-The files live under `src/` in the repository:
+The [SQL Studio page](https://mateuszdabrowski.pl/sql-studio) explains what each piece does and how they work together. This page only covers deployment.
+
+**Publish nothing until step 4.** Each piece is published once, with its code and its settings already in place. A piece published earlier, for example with empty settings, can keep answering with that first version for a few minutes after you publish the finished one, and a sign-in against it fails. So step 2 only creates the pieces, to get their URLs, and step 4 publishes them.
+
+## 1. Get the code
+
+Download the three release files and open them in the code editor of your choice. You fill in their settings in steps 2 and 3, and paste them into MCE in step 4.
 
 | File | Name in Web Studio | What it becomes |
 |---|---|---|
-| `src/code-resources/sql-studio-backend.html` | SQL Studio Backend | a JSON Code Resource |
-| `src/code-resources/sql-studio-frontend.js` | SQL Studio Frontend | a JavaScript Code Resource, with the styles built in |
-| `src/cloud-page/sql-studio.html` | SQL Studio | the Cloud Page users open |
+| [`src/code-resources/sql-studio-backend.html`](../src/code-resources/sql-studio-backend.html) | SQL Studio Backend | a JSON Code Resource |
+| [`src/code-resources/sql-studio-frontend.js`](../src/code-resources/sql-studio-frontend.js) | SQL Studio Frontend | a JavaScript Code Resource, with the styles built in |
+| [`src/cloud-page/sql-studio.html`](../src/cloud-page/sql-studio.html) | SQL Studio | the Cloud Page users open |
 
-The [SQL Studio page](https://mateuszdabrowski.pl/sql-studio) explains what each piece does and how they work together. This page only covers deployment.
+## 2. Create the pieces, without publishing
 
-Each piece is published once, with its code and its settings already in place. A piece published earlier, for example with empty settings, can keep answering with that first version for a few minutes after you publish the finished one, and a sign-in against it fails. So step 1 only creates the pieces, to get their URLs, and step 4 publishes them.
+Web Studio > CloudPages. Create these three, and name each one exactly as in the "Name it" column. Save each one and open it: its URL shows at the top of the editor before any publish. Copy the URL into the settings at the top of your files, as the last column says. Do not publish them yet.
 
-## 1. Create the pieces, without publishing
+| Name it | Create it with | Paste its URL into |
+|---|---|---|
+| SQL Studio Backend | Code Resources > New > JSON | `backendURL` in both `sql-studio-backend.html` and `sql-studio.html` |
+| SQL Studio Frontend | Code Resources > New > JavaScript | `frontendURL` in `sql-studio.html` |
+| SQL Studio | New Landing Page, in Code View, with no layout | `pageURL` in `sql-studio-backend.html` |
 
-Web Studio > CloudPages. Create these three, the two Code Resources first, and copy each one's URL. Name each one exactly as in the "Name" column below, save it and open it: its URL shows at the top of the editor before any publish. Do not publish them yet.
+Start SQL Studio from a blank page with no layout, as with any Cloud Page App. A layout, for example one with a Code Snippet block, wraps the page in its own HTML and styles, which break the app's full-height layout.
 
-| Piece | Name | Where | Type |
-|---|---|---|---|
-| Backend | SQL Studio Backend | Code Resources > New | JSON |
-| Frontend | SQL Studio Frontend | Code Resources > New | JavaScript |
-| Cloud Page | SQL Studio | New Landing Page, in Code View | Landing Page |
+## 3. Create the Installed Package
 
-Do not give the Cloud Page a layout with a Code Snippet block: the layout wraps the page in its own HTML and styles, which break the app's full-height layout.
-
-## 2. Create the Installed Package
-
-Setup > Platform Tools > Apps > Installed Packages > New. It needs the Backend's URL from step 1, and it gives you the values the Backend's settings need in step 4.
+Setup > Platform Tools > Apps > Installed Packages > New. It needs SQL Studio Backend's URL from step 2, and it gives you the three values the Backend's settings still need.
 
 ### Marketing Cloud App component
 
-- Login endpoint: the Backend Code Resource's URL.
+- Login endpoint: SQL Studio Backend's URL.
 - Logout endpoint: the same URL.
 
 ### API Integration component (Web App type)
@@ -40,21 +42,23 @@ Setup > Platform Tools > Apps > Installed Packages > New. It needs the Backend's
 - Redirect URI: the same Backend URL again.
 - Scopes: `data_extensions_read`, `data_extensions_write`, `automations_read`, `automations_write`, `automations_execute`. Leave "offline access" off. SQL Studio does not request refresh tokens (see `docs/EXTENDING.md` if you want to add them back).
 
-After saving, copy the Client ID, the Client Secret and the API Base URI. You need only the tenant subdomain of the API Base URI: the 28 characters that start with `mc`, between `https://` and `.auth.marketingcloudapis.com`, for example `mc563885gzs27c5t9-63k636ttgm`. Select it by dragging, as a double-click stops at its hyphen.
+### Access
 
-## 3. Paste the code
+On the Installed Package's Access tab, grant the Business Units and roles that should see SQL Studio in the AppExchange (Marketing Cloud App) menu. For Business Units under the one that holds SQL Studio, see step 6.
 
-| Piece | Paste |
+### The three values for the Backend
+
+After saving, paste three of the package's values into the settings of `sql-studio-backend.html`:
+
+| Setting | Value |
 |---|---|
-| Backend | The whole of `src/code-resources/sql-studio-backend.html` |
-| Frontend | The whole of `src/code-resources/sql-studio-frontend.js` |
-| Cloud Page | The whole of `src/cloud-page/sql-studio.html` |
+| `clientID` | The API Integration's Client ID |
+| `clientSecret` | The API Integration's Client Secret |
+| `clientBase` | The tenant subdomain of the API Base URI, not the Client ID |
 
-There is no separate error page. When Marketing Cloud Engagement sends the visitor back with `?error=`, the same Cloud Page skips the session check and shows a small "SQL Studio could not sign you in" block with a "Try again" link.
+The tenant subdomain is the 28 characters that start with `mc`, between `https://` and `.auth.marketingcloudapis.com`, for example `mc563885gzs27c5t9-63k636ttgm`. Select it by dragging, as a double-click stops at its hyphen.
 
-The Monaco Editor's `loader.js` is loaded from jsdelivr with a `<script integrity="sha384-..." crossorigin="anonymous">` tag pinned to `monaco-editor@0.52.2`. The browser refuses the file if it does not match the hash baked into the Cloud Page. `loader.js` then fetches the rest of the editor from the same pinned `https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs` path. Upgrading the version means regenerating the hash (`curl -s <loader.js URL> | openssl dgst -sha384 -binary | openssl base64 -A`) and updating both the Cloud Page and this note.
-
-## 4. Fill in the settings, then publish
+## 4. Paste the code, then publish
 
 The Backend and the Cloud Page each start with a section called `1. CONFIGURATION`. Everything an organisation sets lives there, above this line:
 
@@ -62,18 +66,18 @@ The Backend and the Cloud Page each start with a section called `1. CONFIGURATIO
 /* =================== APP CODE - replace from here on update =================== */
 ```
 
-Edit only that section. The Frontend has none. When both are filled in, publish the two Code Resources first and the Cloud Page last. In practice, Code Resources go live sooner after publishing than Cloud Pages, so the page then never loads before the Backend and the Frontend it calls.
+Steps 2 and 3 filled in the settings every deployment needs. The tables below list every setting. Leave the others as they are, unless you want server-side history. The Frontend has no settings at all.
 
 ### Backend (`sql-studio-backend.html`)
 
 | Setting | Value |
 |---|---|
 | `configVersion` | Leave as it is. It tells the code which settings to expect. |
-| `pageURL` | The URL of "SQL Studio", the Cloud Page, from step 1 |
-| `backendURL` | The URL of "SQL Studio Backend" itself (this Code Resource's own URL), from step 1 |
-| `clientID` | Client ID, from step 2 |
-| `clientSecret` | Client Secret, from step 2 |
-| `clientBase` | The tenant subdomain, from step 2: 28 characters that start with `mc`, not the Client ID |
+| `pageURL` | The URL of "SQL Studio", the Cloud Page, from step 2 |
+| `backendURL` | The URL of "SQL Studio Backend" itself (this Code Resource's own URL), from step 2 |
+| `clientID` | Client ID, from step 3 |
+| `clientSecret` | Client Secret, from step 3 |
+| `clientBase` | The tenant subdomain, from step 3: 28 characters that start with `mc`, not the Client ID |
 | `authDE` | `SQL Studio Auth Log`. Change it only for a Data Extension you created yourself under another name (see step 7), with the `ENT.` prefix when it is shared. |
 | `errorDE` | `SQL Studio Error Log`, with the same rule as `authDE` |
 | `historyDE` | Empty keeps query history in each browser. `SQLStudioHistory` keeps it in Marketing Cloud Engagement (see step 7). |
@@ -85,33 +89,45 @@ Edit only that section. The Frontend has none. When both are filled in, publish 
 | Setting | Value |
 |---|---|
 | `configVersion` | Leave as it is. |
-| `backendURL` | The URL of "SQL Studio Backend", from step 1 |
-| `frontendURL` | The URL of "SQL Studio Frontend", from step 1 |
+| `backendURL` | The URL of "SQL Studio Backend", from step 2 |
+| `frontendURL` | The URL of "SQL Studio Frontend", from step 2 |
 | `authDE` | The same value as the Backend's `authDE` |
 
 The Backend refuses to run, and says so with `CONFIG_INVALID` naming the setting, while `pageURL`, `backendURL`, `clientID` or `clientSecret` is empty or still holds its placeholder. The Cloud Page shows a "The settings section is not filled in" card while its `backendURL` or `frontendURL` does. Neither shows the value.
+
+### Paste and publish
+
+Paste each whole file, with its settings filled in, into its piece:
+
+| Piece | Paste |
+|---|---|
+| SQL Studio Backend | The whole of `sql-studio-backend.html` |
+| SQL Studio Frontend | The whole of `sql-studio-frontend.js` |
+| SQL Studio | The whole of `sql-studio.html` |
+
+Publish the two Code Resources first and SQL Studio last. SQL Studio loads the other two, so this way it never opens before they are live. Code Resources also tend to go live sooner after publishing than Cloud Pages.
+
+There is no separate error page. When Marketing Cloud Engagement sends the visitor back with `?error=`, the same Cloud Page skips the session check and shows a small "SQL Studio could not sign you in" block with a "Try again" link.
+
+The Monaco Editor's `loader.js` is loaded from jsdelivr with a `<script integrity="sha384-..." crossorigin="anonymous">` tag pinned to `monaco-editor@0.52.2`. The browser refuses the file if it does not match the hash baked into the Cloud Page. `loader.js` then fetches the rest of the editor from the same pinned `https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs` path. Upgrading the version means regenerating the hash (`curl -s <loader.js URL> | openssl dgst -sha384 -binary | openssl base64 -A`) and updating both the Cloud Page and this note.
 
 ### Where the client secret lives
 
 The client secret sits in the Backend's settings section. Opening the Backend's URL runs the code on the server and never returns its source. No response, log row or debug output carries the secret, an access token or the key derived from the secret. Users with access to Web Studio in this Business Unit can still open the Code Resource and read it, as with any Cloud Page App. The release files ship with placeholders only, so no real value ever reaches the repository.
 
-## 5. Grant access
-
-On the Installed Package's Access tab, grant the Business Units and roles that should see SQL Studio in the AppExchange (Marketing Cloud App) menu.
-
-### Child Business Units
-
-One deployment in the parent Business Unit serves its child BUs too: a user opens SQL Studio from the child BU, and every query runs there with their own login and permissions. It costs more API calls there, by design. SQL Studio reads a run's row count and its first 2,000 rows without an API call only in the Business Unit that holds the Backend, so from a child BU those reads go through the REST API, and a run cost about 15 API calls instead of about 10 in a test. To avoid that for a child BU that runs many queries, deploy SQL Studio again inside that BU, with its own Installed Package, and give its users that one. SQL Studio does not read a child BU's rows from the parent through WSProxy: that would act with the app's own permissions instead of the user's, and every other call SQL Studio makes runs with the user's own login.
-
-## 6. First open
+## 5. First open
 
 Code Resources and Cloud Pages take a few minutes to go live after publishing, so wait about five minutes after step 4.
 
-1. Open SQL Studio from the AppExchange menu as a user granted access in step 5. If you are already logged in to MCE, you land on the editor with no login screen.
-2. On this first sign-in, the Backend creates SQL Studio Auth Log. Once the app has loaded, it creates SQL Studio Error Log, moves both into the SQL Studio folder, and says so once in the Status tab.
+1. Open SQL Studio from the AppExchange menu as a user granted access in step 3. If you are already logged in to MCE, you land on the editor with no login screen.
+2. On this first sign-in, the Backend creates SQL Studio Auth Log. Once the app has loaded, it creates SQL Studio Error Log, moves both into the SQL Studio folder, and says so once in the Status tab. If it asks you to set their retention by hand, do it straight away: 1 day for SQL Studio Auth Log and 180 days for SQL Studio Error Log (see step 7).
 3. Run `SELECT TOP 10 SubscriberKey FROM _Subscribers` and confirm it returns rows. In a child Business Unit, query any Data Extension you have instead.
 
 If a check fails, see the troubleshooting table below.
+
+## 6. Child Business Units
+
+One deployment in the parent Business Unit serves its child BUs too: a user opens SQL Studio from the child BU, and every query runs there with their own login and permissions. Grant the child BUs on the Installed Package's Access tab (step 3). It costs more API calls there, by design. SQL Studio reads a run's row count and its first 2,000 rows without an API call only in the Business Unit that holds the Backend, so from a child BU those reads go through the REST API, and a run cost about 15 API calls instead of about 10 in a test. To avoid that for a child BU that runs many queries, deploy SQL Studio again inside that BU, with its own Installed Package, and give its users that one. SQL Studio does not read a child BU's rows from the parent through WSProxy: that would act with the app's own permissions instead of the user's, and every other call SQL Studio makes runs with the user's own login.
 
 ## 7. Data Extensions
 
@@ -127,7 +143,7 @@ On the first sign-in, the Backend finds that its sign-in log, `SQL Studio Auth L
 
 All of it happens in the Business Unit that holds the Backend Code Resource, and the Status tab reports the result once. A step that fails runs again the next time the app opens. The app also checks for the Error Log every time it opens, and recreates it in the folder when it is missing, for example after someone deleted it. It skips names with the `ENT.` prefix, because it does not create shared Data Extensions, and it never changes a Data Extension that already existed. Two users signing in for the first time at the same moment both get in: whichever create loses finds the Auth Log already there and writes to it.
 
-Setting a retention policy needs the "Data Extension | Manage Data Extension Retention" permission (Salesforce's DataExtension API reference). The Backend's own context lacked it on the first org deployment, so the app sets the retention with the signed-in user's token. If that user lacks the permission too, the app tells you to set it by hand: Auth Log to 1 day and Error Log to 180 days, in each Data Extension's properties. Do it straight away, because the Auth Log holds live access tokens.
+Setting a retention policy needs the "Data Extension | Manage Data Extension Retention" permission (Salesforce's DataExtension API reference). The Backend's own context lacked it on the first org deployment, so the app sets the retention with the signed-in user's token. If that user lacks the permission too, the app tells you to set it by hand: Auth Log to 1 day and Error Log to 180 days, in each Data Extension's properties. Do it straight away. The Auth Log's tokens are encrypted, and the 1-day retention keeps each row no longer than the day it is needed.
 
 Create them yourself instead when you want them in another folder, under other names, or shared. Use the tables below, then set `authDE` and `errorDE` to match in step 4. An `ErrorLog` from another Cloud Page App built on the same pattern can be reused, as SQL Studio's rows are told apart by the `appName` value `SQLStudio`. An `AuthLog` from one can be reused only with the fields below, as SQL Studio stores hashed sessions, encrypted tokens and a user id: without the `userId` field, sign-in stops with "SQL Studio Auth Log is from an older release". When the Error Log is missing, SQL Studio creates it in the SQL Studio folder the next time the app opens.
 
@@ -209,7 +225,7 @@ Code Resources and Cloud Pages take a few minutes to go live after publishing. U
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | Opening SQL Studio ends on a browser error such as "...auth.marketingcloudapis.com's server IP address could not be found", or on raw JSON with `CONFIG_INVALID` | The Backend's `clientBase` is not the tenant subdomain: most often only its part before the hyphen, since a double-click stops selecting there, or the Client ID, a full URL or the placeholder. The Backend refuses a value that cannot be a subdomain and says which mistake it looks like, without showing the value | Copy the 28 characters that start with `mc` from the API Integration's Authentication Base URI into `clientBase`, publish SQL Studio Backend again, and wait a few minutes before you open SQL Studio. |
-| Sign-in ends on Marketing Cloud Engagement's own error about the redirect URI, or SQL Studio says it signed you in but cannot find the session | The Backend's `backendURL` does not exactly match the Redirect URI on the API Integration component (step 2), or the Cloud Page and the Backend use different `authDE` values | Compare both URLs character by character, including `https://` and any trailing slash. Confirm both `authDE` settings name the same Data Extension. |
+| Sign-in ends on Marketing Cloud Engagement's own error about the redirect URI, or SQL Studio says it signed you in but cannot find the session | The Backend's `backendURL` does not exactly match the Redirect URI on the API Integration component (step 3), or the Cloud Page and the Backend use different `authDE` values | Compare both URLs character by character, including `https://` and any trailing slash. Confirm both `authDE` settings name the same Data Extension. |
 | Blank page, or the editor area never appears | The Monaco Editor CDN (`cdn.jsdelivr.net`) is blocked by a network policy, or the pinned file no longer matches the integrity hash in the Cloud Page | SQL Studio falls back to a plain text box with a warning after 15 seconds when the CDN is unreachable. With no fallback and no warning, open the browser console. Check whether the `frontendURL` Code Resource (SQL Studio Frontend) failed to load (a 404 or an unpublished resource), or whether the browser blocked `loader.js` for failing its integrity check. |
 | "SQL Studio could not sign you in" instead of the editor | Marketing Cloud Engagement refused the sign-in or the token exchange | Read the error text on the page, and the `ErrorLog` row, which carries Marketing Cloud Engagement's own error code (for example `invalid_client` for a wrong Client ID or Client Secret). It is usually a mismatched Redirect URI or a misconfigured Installed Package. Fix the cause, then use the page's "Try again" link. |
 | "SQL Studio could not sign you in", saying it could not save your sign-in because of its AuthLog Data Extension | SQL Studio could not create or write AuthLog: `authDE` has the `ENT.` prefix and does not exist, or the name is taken by a Data Extension with other fields | Create the Data Extension yourself from the tables in step 7, or point `authDE` at one that matches them. |
@@ -221,5 +237,5 @@ Code Resources and Cloud Pages take a few minutes to go live after publishing. U
 | `SESSION_EXPIRED`, or a Session expired or Session ending dialog | The access token (about 20 minutes, of which SQL Studio uses about 15) expired, and the background renewal did not run or failed. It does not run after 15 minutes without activity, and it fails once you sign out of Marketing Cloud Engagement | Click Renew. It signs in again with one click and keeps your query text and results. The console lines prefixed `[SQL Studio]` give the time left after sign-in and the reason a background renewal failed. |
 | The browser console shows `408 (Request Timeout)` for the Backend URL, and a run waits long before it starts | A Backend call ran past Marketing Cloud Engagement's time limit, and Marketing Cloud Engagement stopped it | Filter the console by `[SQL Studio]`: each slow or failed call is listed with its time. Report those lines in [GitHub issues](https://github.com/MateuszDabrowski/sqlstudio/issues). The rest of the console, the "[Report Only]" security messages, comes from Marketing Cloud Engagement's own page and does not affect SQL Studio. |
 | Status line: "This org does not allow retention on API-created Data Extensions" | The user lacks the "Data Extension \| Manage Data Extension Retention" permission | Grant it if temporary Data Extensions should expire on their own. Otherwise SQL Studio deletes the user's own leftovers each time the app opens, once they are more than six hours old. |
-| 404 on `/automation/v1/queries` from a child Business Unit | Community reports mixed results calling these endpoints from a non-top-level Business Unit | Confirm the user's Automation Studio permissions in that Business Unit, and that the Installed Package is granted to it (step 5). If it still fails, report it in [GitHub issues](https://github.com/MateuszDabrowski/sqlstudio/issues). |
+| 404 on `/automation/v1/queries` from a child Business Unit | Community reports mixed results calling these endpoints from a non-top-level Business Unit | Confirm the user's Automation Studio permissions in that Business Unit, and that the Installed Package is granted to it (step 3). If it still fails, report it in [GitHub issues](https://github.com/MateuszDabrowski/sqlstudio/issues). |
 | Temporary `SQLStudio_*` Data Extensions still exist after two days | Retention was not applied (see the permission row above), or MCE's retention flags behave differently than assumed | Open SQL Studio as the user who ran them, which deletes that user's leftovers older than six hours, or delete them in Contact Builder. Report it in [GitHub issues](https://github.com/MateuszDabrowski/sqlstudio/issues). |
