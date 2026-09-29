@@ -1,0 +1,506 @@
+<script runat="server">
+
+    /* -------------------------------------------------------------------------
+    SQL Studio Cloud Page.
+    Copyright (c) 2026 Mateusz Dąbrowski. Licensed under the EUPL 1.2.
+    Free to use, change and share, commercial use included, as long as this notice stays.
+
+    Fill in section 1 (CONFIGURATION) once, when you first deploy this Cloud
+    Page. On every later update, keep everything above the "APP CODE" line
+    unchanged and replace everything from that line to the end of the file
+    with the new release.
+    -------------------------------------------------------------------------- */
+
+    /* ----------------------------------------------------------------------- */
+    /* -------------------------- 1. CONFIGURATION ---------------------------- */
+    /* ----------------------------------------------------------------------- */
+
+    var configVersion = 2;                             // matches the Backend Code Resource's configVersion
+    var backendURL = 'SQL_STUDIO_BACKEND_URL';          // the published URL of "SQL Studio Backend", the JSON Code Resource
+    var frontendURL = 'SQL_STUDIO_FRONTEND_URL';        // the published URL of "SQL Studio Frontend", the JavaScript Code Resource (also injects the CSS)
+    var authDE = 'SQL Studio Auth Log';                             // maps a session to a token; add 'ENT.' prefix when the DE is shared
+
+    /* =================== APP CODE - replace from here on update =================== */
+
+    /* Write() and the other Core library globals exist only once Core is loaded. Without this
+    line, every path that writes the page fails with MCE's generic "page content contains errors". */
+    Platform.Load('core', '1');
+
+    /* ----------------------------------------------------------------------- */
+    /* ------------------------ 2. GLOBAL VARIABLES --------------------------- */
+    /* ----------------------------------------------------------------------- */
+
+    var appName = 'SQLStudio';
+
+    /* The same guard as the backend's: when this "APP CODE" section is newer than the
+    "1. CONFIGURATION" section above it, show a settings notice instead of running against
+    settings a newer release may have added. Bump this only when a release adds, removes or
+    renames a section 1 variable. */
+    var REQUIRED_CONFIG_VERSION = 2;
+    var isConfigOutdated = (typeof configVersion === 'undefined') || (configVersion < REQUIRED_CONFIG_VERSION);
+
+    /* ----------------------------------------------------------------------- */
+    /* ------------------------ 3. HELPER FUNCTIONS --------------------------- */
+    /* ----------------------------------------------------------------------- */
+
+    /**
+     * @function htmlEscape
+     * @description Escapes a string for safe inclusion in HTML text content.
+     * @param {string} value
+     * @returns {string}
+     */
+    function htmlEscape(value) {
+        /* split and join, not replace: a regular-expression replace failed on the org's engine in the Backend. */
+        return ('' + value).split('&').join('&amp;').split('<').join('&lt;').split('>').join('&gt;').split('"').join('&quot;');
+    };
+
+    /**
+     * @function stripChars
+     * @description Removes every character of chars from value.
+     * @param {string} value
+     * @param {string} chars
+     * @returns {string}
+     */
+    function stripChars(value, chars) {
+        var text = '' + value;
+        for (var i = 0; i < chars.length; i++) {
+            text = text.split(chars.charAt(i)).join('');
+        };
+        return text;
+    };
+
+    /**
+     * @function queryParam
+     * @description Reads a query string parameter as plain text. A missing parameter comes back from
+     *              MCE as null, and the error page crashed on one on the first org deployment, so every
+     *              read goes through here and a missing or unreadable value becomes ''.
+     * @param {string} name
+     * @returns {string}
+     */
+    function queryParam(name) {
+        var paramValue = null;
+        try {
+            paramValue = Platform.Request.GetQueryStringParameter(name);
+        } catch (readErr) {
+            return '';
+        };
+        if (paramValue === null || paramValue === undefined) {
+            return '';
+        };
+        return String(paramValue);
+    };
+
+    /**
+     * @function hasQueryParam
+     * @description Tells whether the request URL carries a parameter at all, even an empty one.
+     * @param {string} name
+     * @returns {boolean}
+     */
+    function hasQueryParam(name) {
+        var requestUrl = '';
+        try {
+            requestUrl = String(Platform.Request.RequestURL);
+        } catch (urlErr) {
+            return false;
+        };
+        return new RegExp('[?&]' + name + '=').test(requestUrl);
+    };
+
+    /**
+     * @function sha256Hex
+     * @description SHA256 of a text as 64 lowercase hex characters, from AMPscript's SHA256 through
+     *              TreatAsContent. The Auth Log is keyed by the SHA256 of each session id, never by the
+     *              id, and the Backend computes it the same way. The AMPscript is built in pieces so this
+     *              file never holds a literal AMPscript block for the page to run on its own.
+     * @param {string} text
+     * @returns {string} 64 lowercase hex characters, or '' when the platform did not answer with them
+     */
+    function sha256Hex(text) {
+        var hashed = '';
+        try {
+            Platform.Variable.SetValue('@ssHashInput', String(text));
+            hashed = String(Platform.Function.TreatAsContent('%' + '%=SHA256(@ssHashInput)=%' + '%')).toLowerCase();
+            Platform.Variable.SetValue('@ssHashInput', '');
+        } catch (hashErr) {
+            hashed = '';
+        };
+        return /^[0-9a-f]{64}$/.test(hashed) ? hashed : '';
+    };
+
+    /* The user key the app scopes its browser stores by, computed exactly as the Backend's
+    computeUserHash does (fnvMultiply32, toHex8 and fnv1aHex are copies of its own, and
+    tools/test-backend.js checks that both give the same key), so the stores are this user's from the
+    page's first moment, before the app's first call. */
+
+    /**
+     * @function fnvMultiply32
+     * @description Multiplies two unsigned 32-bit integers modulo 2^32, in 16-bit halves so the
+     *              intermediate products stay within the float-safe integer range (the SSJS engine has no
+     *              Math.imul).
+     * @param {number} a
+     * @param {number} b
+     * @returns {number} unsigned 32-bit product.
+     */
+    function fnvMultiply32(a, b) {
+        var aLow = a & 0xffff;
+        var aHigh = (a >>> 16) & 0xffff;
+        var bLow = b & 0xffff;
+        var bHigh = (b >>> 16) & 0xffff;
+        var cross = (aHigh * bLow + aLow * bHigh) & 0xffff;
+        return ((cross << 16) + aLow * bLow) >>> 0;
+    };
+
+    /**
+     * @function toHex8
+     * @description Formats an unsigned 32-bit integer as exactly 8 lowercase hex characters.
+     * @param {number} value
+     * @returns {string}
+     */
+    function toHex8(value) {
+        var hex = (value >>> 0).toString(16);
+        while (hex.length < 8) {
+            hex = '0' + hex;
+        };
+        return hex;
+    };
+
+    /**
+     * @function fnv1aHex
+     * @description FNV-1a 32-bit hash of a string, as 8 lowercase hex characters.
+     * @param {string} text
+     * @returns {string}
+     */
+    function fnv1aHex(text) {
+        var str = '' + text;
+        var hash = 2166136261;
+        for (var i = 0; i < str.length; i++) {
+            hash = hash ^ str.charCodeAt(i);
+            hash = fnvMultiply32(hash, 16777619);
+        };
+        return toHex8(hash);
+    };
+
+    /**
+     * @function userKeyOf
+     * @description The user key for an Auth Log userId: the FNV-1a hash of the trimmed, lowercased id,
+     *              as the Backend's computeUserHash gives it.
+     * @param {*} userId
+     * @returns {string} 8 lowercase hex characters, or '' for an empty id
+     */
+    function userKeyOf(userId) {
+        var id = trimLikeBackend(userId == undefined ? '' : userId);
+        return id === '' ? '' : fnv1aHex(id.toLowerCase());
+    };
+
+    /**
+     * @function trimLikeBackend
+     * @description The Backend's trimString, copied: it strips exactly these seven characters from each
+     *              end, so an id with any other space-like character keeps it on both sides and the two
+     *              keys still match.
+     * @param {*} value
+     * @returns {string}
+     */
+    function trimLikeBackend(value) {
+        var text = '' + value;
+        var start = 0;
+        var end = text.length;
+        while (start < end && ' \t\n\r\f\v\u00a0'.indexOf(text.charAt(start)) !== -1) {
+            start++;
+        };
+        while (end > start && ' \t\n\r\f\v\u00a0'.indexOf(text.charAt(end - 1)) !== -1) {
+            end--;
+        };
+        return text.substring(start, end);
+    };
+
+    /**
+     * @function findUnsetSetting
+     * @description Finds the first of the two settings this page needs to work (backendURL and
+     *              frontendURL) that is empty or still holds its placeholder. The answer is the
+     *              setting's name, never its value.
+     * @returns {string} the setting's name, or '' when both are filled in
+     */
+    function findUnsetSetting() {
+        var settings = [
+            { name: 'backendURL', value: backendURL, placeholder: 'SQL_STUDIO_BACKEND_URL' },
+            { name: 'frontendURL', value: frontendURL, placeholder: 'SQL_STUDIO_FRONTEND_URL' }
+        ];
+        for (var i = 0; i < settings.length; i++) {
+            var value = settings[i].value;
+            if (typeof value !== 'string' || /^\s*$/.test(value) || value === settings[i].placeholder) {
+                return settings[i].name;
+            };
+        };
+        return '';
+    };
+
+    var isDocumentStarted = false;
+
+    /**
+     * @function startDocument
+     * @description Writes the doctype once, before the page's first output. Without it the page
+     *              renders in quirks mode, where tables do not inherit the text colour: the results
+     *              grid came out black on the dark theme on the first org deployment.
+     */
+    function startDocument() {
+        if (isDocumentStarted) {
+            return;
+        };
+        isDocumentStarted = true;
+        Write('<!DOCTYPE html>');
+    };
+
+    /**
+     * @function writeErrorBlock
+     * @description Writes the small full-page card the Cloud Page shows instead of the app, with a
+     *              "Try again" link to the backend. Every text argument is plain text and is
+     *              HTML-escaped here.
+     * @param {string} title
+     * @param {string} message
+     * @param {string} [detail] - Optional second line; nothing is written when it is empty.
+     * @param {boolean} [isRetryHidden] - true leaves out the "Try again" link, for a block shown
+     *        because backendURL itself is not filled in, which the link would point to.
+     */
+    function writeErrorBlock(title, message, detail, isRetryHidden) {
+        startDocument();
+        Write('<div class="ss-authError">');
+        Write('  <div class="ss-authError__card">');
+        Write('    <h1 class="ss-authError__title">' + htmlEscape(title) + '</h1>');
+        Write('    <p class="ss-authError__error">' + htmlEscape(message) + '</p>');
+        if (detail) {
+            Write('    <p class="ss-authError__description">' + htmlEscape(detail) + '</p>');
+        };
+        if (!isRetryHidden) {
+            Write('    <p class="ss-authError__retry"><a href="' + htmlEscape(backendURL) + '">Try again</a></p>');
+        };
+        Write('  </div>');
+        Write('</div>');
+        Write('<style>');
+        Write('  body { margin: 0; background: #f3f2f2; font-family: Arial, Helvetica, sans-serif; }');
+        Write('  .ss-authError { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; box-sizing: border-box; }');
+        Write('  .ss-authError__card { max-width: 420px; text-align: center; }');
+        Write('  .ss-authError__title { margin: 0 0 12px; font-size: 22px; font-weight: 700; color: #181818; }');
+        Write('  .ss-authError__error { margin: 0 0 8px; font-size: 15px; font-weight: 600; color: #181818; }');
+        Write('  .ss-authError__description { margin: 0 0 20px; font-size: 14px; color: #3e3e3c; }');
+        Write('  .ss-authError__retry a { font-size: 14px; font-weight: 600; color: #0176d3; text-decoration: none; }');
+        Write('  .ss-authError__retry a:hover { text-decoration: underline; }');
+        Write('<\/style>');
+    };
+
+    /**
+     * @function writeSignInRetry
+     * @description For a session this page cannot find, right after the backend sent the visitor
+     *              here with it: sends the visitor back to sign in, from the browser, at most three
+     *              times a minute, then shows an error instead. A server-side redirect here would
+     *              loop silently and forever if the backend and this page ever disagreed about the
+     *              session, since the Marketing Cloud Engagement sign-in itself completes silently.
+     */
+    function writeSignInRetry() {
+        startDocument();
+        Write('<div id="ss-retry-error" style="display: none;">');
+        writeErrorBlock('SQL Studio cannot find your sign-in',
+            'SQL Studio signed you in, but this page cannot find the session. Check that SQL Studio Backend and this Cloud Page use the same authDE setting.',
+            '');
+        Write('</div>');
+        Write('<script>');
+        Write('(function () {');
+        Write('    var backendUrl = ' + Stringify(String(backendURL)) + ';');
+        Write('    var key = \'ss.signInAttempts\';');
+        Write('    var now = Date.now();');
+        Write('    var attempts = null;');
+        Write('    try { attempts = JSON.parse(sessionStorage.getItem(key) || \'[]\').filter(function (t) { return now - t < 60000; }); } catch (e) { attempts = null; }');
+        Write('    if (attempts === null || attempts.length >= 3) {');
+        Write('        try { sessionStorage.removeItem(key); } catch (e) {}');
+        Write('        document.getElementById(\'ss-retry-error\').style.display = \'block\';');
+        Write('        return;');
+        Write('    }');
+        Write('    attempts.push(now);');
+        Write('    try { sessionStorage.setItem(key, JSON.stringify(attempts)); } catch (e) { document.getElementById(\'ss-retry-error\').style.display = \'block\'; return; }');
+        Write('    location.replace(backendUrl);');
+        Write('})();');
+        Write('<\/script>');
+    };
+
+    /* 3.1. An OAuth failure sends the visitor back here with ?error=...; when
+    that is present, skip the session gate entirely and render the error
+    block (section 4) instead of the app (section 6). */
+    /* An error parameter that is present but empty still means sign-in failed. Read as "no error",
+    it sent the visitor back to sign in, in an endless loop, on the first org deployment. */
+    var authError = queryParam('error');
+    if (authError === '' && hasQueryParam('error')) {
+        authError = 'server_error';
+    };
+
+    if (isConfigOutdated) {
+
+        /* The clause names what changed since that section's own version: rewrite it when
+        REQUIRED_CONFIG_VERSION goes up again. */
+        var isConfigVersionOne = (typeof configVersion !== 'undefined') && configVersion == 1;
+        writeErrorBlock('The settings section is from an older version',
+            'This Cloud Page\'s "1. CONFIGURATION" section is from an older release than its "APP CODE" section. Copy the new "1. CONFIGURATION" section from the release file into this Cloud Page, fill in your values again' +
+            (isConfigVersionOne ? ' (1.0.0 renamed "appScriptURL" to "frontendURL" and gave it and "backendURL" new placeholder values)' : '') + ', and publish.',
+            '');
+
+    } else if (findUnsetSetting() !== '') {
+
+        /* A backendURL or frontendURL still on its placeholder would send the visitor to an address
+        that does not exist. The message names the setting, never its value. */
+        writeErrorBlock('The settings section is not filled in',
+            'This Cloud Page\'s "' + findUnsetSetting() + '" setting is empty or still holds its placeholder from the release file. Fill it in with the published URL of the matching Code Resource, and publish.',
+            '', true);
+
+    } else if (authError !== '') {
+
+        /* --------------------------------------------------------------------- */
+        /* --------------------------- 4. ERROR BLOCK ---------------------------- */
+        /* --------------------------------------------------------------------- */
+
+        /* L6: `error` and `error_description` arrive on the query string and must never be reflected
+        as free text - a crafted link could otherwise show a spoofed message on the tenant domain.
+        `error` is an error CODE (see the backend's authErrorRedirectUrl), mapped here to fixed copy,
+        and anything not in this list shows a generic line. `error_description` is never shown, for
+        any code: the block holds only this page's own text. The Backend's ErrorLog row has the detail. */
+        var authErrorMessages = {
+            access_denied: 'Access was denied. Ask your Marketing Cloud Engagement admin to give you access to SQL Studio in the Installed Package.',
+            invalid_request: 'The sign-in request was malformed. Try again, and check the Installed Package settings if it keeps failing.',
+            invalid_client: 'Marketing Cloud Engagement did not recognize this app. Check the Installed Package settings.',
+            unauthorized_client: 'This app is not authorized to sign in this way. Check the Installed Package settings.',
+            server_error: 'Marketing Cloud Engagement reported a server error during sign-in. Try again shortly.',
+            authlog_unavailable: 'SQL Studio could not save your sign-in, because its sign-in log Data Extension, ' + authDE + ', is missing or does not match the documented fields. Ask your Marketing Cloud Engagement admin to check it.',
+            authlog_old_layout: authDE + ' is from an older release: delete it in Contact Builder, and SQL Studio creates it again on the next sign-in.',
+            identity_unavailable: 'Marketing Cloud Engagement did not tell SQL Studio which user you are, so it cannot sign you in. Ask your Marketing Cloud Engagement admin to check SQL Studio\'s error log Data Extension.',
+            invalid_state: 'The sign-in link was not valid. Try again.',
+            signin_failed: 'SQL Studio hit an unexpected error while signing you in. Try again, and if it keeps failing, ask your Marketing Cloud Engagement admin to check SQL Studio\'s error log Data Extension.',
+            token_exchange_failed: 'Marketing Cloud Engagement did not accept the sign-in. Try again, and check the Installed Package settings if it keeps failing.'
+        };
+        var authErrorText = authErrorMessages.hasOwnProperty(authError) ? authErrorMessages[authError] : 'Sign-in failed.';
+
+        writeErrorBlock('SQL Studio could not sign you in', authErrorText, '');
+
+    } else {
+
+        /* --------------------------------------------------------------------- */
+        /* --------------------------- 5. SESSION GATE --------------------------- */
+        /* --------------------------------------------------------------------- */
+
+        /* 5.1. Get session code and the optional post-setup flag from the query string. L1: validate
+        the session's shape before it is used in any Lookup filter - anything that is not GUID-shaped
+        is treated the same as "no session" and sent back to sign in, so a malformed `s` never reaches
+        a Lookup. Only the exact value 'created' counts for setup; anything else is treated as absent. */
+        var session = queryParam('s');
+        var sessionIsValid = /^[0-9a-fA-F-]{36}$/.test(session);
+        var isSetupPending = queryParam('setup') === 'pending';
+
+        /* 5.2. Read the session from AuthLog and decide what to show. The decision is made inside the
+        try and acted on after it: Platform.Response.Redirect stops the script, and a catch around it
+        could swallow that. A Lookup failure, most likely a missing or renamed authDE, renders an error
+        block instead of redirecting, which would loop back to the same failure forever. The fields
+        are read with Platform.Function.Lookup, one at a time, as the author's Cloud Page App
+        template does in production. The Auth Log is keyed by the SHA256 of the session id, so the id
+        is hashed before any Lookup. The page only needs to know that the row exists, so it reads the
+        userId field: the token field holds the access token, encrypted, and this page never reads it.
+
+        The page does not judge the token's expiry. The backend checks it on every call, and the
+        app's Renew handles an expired session. A page-level check that misread the stored date sent
+        every visitor straight back to sign in, in an endless loop, on the first org deployment. */
+        var gate = 'signIn';
+        var authRow = null;
+        if (sessionIsValid) {
+            var sessionKey = sha256Hex(session);
+            if (sessionKey === '') {
+                gate = 'hashError';
+            } else {
+                try {
+                    var sessionUserId = Platform.Function.Lookup(authDE, 'userId', ['appName', 'session'], [appName, sessionKey]);
+                    if (sessionUserId != undefined && String(sessionUserId) !== '') {
+                        authRow = {
+                            userName: Platform.Function.Lookup(authDE, 'userName', ['appName', 'session'], [appName, sessionKey]),
+                            userEmail: Platform.Function.Lookup(authDE, 'userEmail', ['appName', 'session'], [appName, sessionKey]),
+                            userKey: userKeyOf(sessionUserId)
+                        };
+                        gate = 'app';
+                    } else {
+                        gate = 'signInRetry';
+                    };
+                } catch (authLogErr) {
+                    gate = 'authLogError';
+                };
+            };
+        };
+
+        if (gate === 'signIn') {
+            Platform.Response.Redirect(backendURL);
+        } else if (gate === 'signInRetry') {
+            writeSignInRetry();
+        } else if (gate === 'hashError') {
+            writeErrorBlock('SQL Studio cannot check your sign-in',
+                'This Marketing Cloud Engagement account did not answer AMPscript\'s SHA256 function, which SQL Studio needs to look up your sign-in. Ask your Marketing Cloud Engagement admin to check SQL Studio\'s error log Data Extension.',
+                '');
+        } else if (gate === 'authLogError') {
+            writeErrorBlock('SQL Studio cannot read its sign-in log',
+                'The "' + authDE + '" Data Extension could not be read. Check that it exists in this Business Unit and that it is the layout of this release: one from an older release must be deleted in Contact Builder, and SQL Studio creates it again on the next sign-in.',
+                '');
+        } else {
+
+            /* 5.4. The display name and email for the header (blank if missing). The values are
+            injected into a JavaScript string literal below: strip anything that could break it. */
+            var userName = (authRow.userName == undefined) ? '' : String(authRow.userName);
+            var userEmail = (authRow.userEmail == undefined) ? '' : String(authRow.userEmail);
+            userName = stripChars(userName, '\\\'"<>\r\n');
+            userEmail = stripChars(userEmail, '\\\'"<>\r\n');
+
+            /* --------------------------------------------------------------------- */
+            /* ------------------------------- 6. APP -------------------------------- */
+            /* --------------------------------------------------------------------- */
+
+            /* An inline style, applied before the app div, paints the page in the theme the app is
+            about to use, so it does not flash while the SQL Studio Frontend bundle loads. It reads the
+            ss.settings localStorage entry as Settings.load does: colorTheme 'light', 'dark' or
+            'system' (the operating system's mode, dark where the browser cannot say), or, from before
+            0.6.0, theme 'light'. */
+            startDocument();
+            Write('<style>html, body { margin: 0; background: #212121; }');
+            Write('html.ss-preload-light, html.ss-preload-light body { background: #F5F6F7; }<\/style>');
+            Write('<script>var s = {}; try { s = JSON.parse(localStorage.getItem(\'ss.settings\') || \'{}\') || {}; } catch (e) {}');
+            Write(' try { var t = s.colorTheme === undefined ? (s.theme === \'light\' ? \'light\' : \'system\') : s.colorTheme;');
+            Write(' if (t !== \'light\' && t !== \'dark\') t = window.matchMedia && window.matchMedia(\'(prefers-color-scheme: light)\').matches ? \'light\' : \'dark\';');
+            Write(' if (t === \'light\') document.documentElement.className += \' ss-preload-light\'; } catch (e) {}<\/script>');
+            Write('<div id="sqlstudio" class="ss"></div>');
+
+            Write('<script>');
+            Write('window.SQLStudioConfig = {');
+            Write('    session: \'' + session + '\',');
+            Write('    backendUrl: \'' + backendURL + '\',');
+            Write('    userName: \'' + userName + '\',');
+            Write('    userEmail: \'' + userEmail + '\',');
+            Write('    userKey: \'' + (/^[0-9a-f]{8}$/.test(authRow.userKey) ? authRow.userKey : '') + '\',');
+            Write('    version: \'1.0.0\',');
+            Write('    mock: false,');
+            Write('    setupPending: ' + (isSetupPending ? 'true' : 'false') + ',');
+            Write('    monacoBase: \'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs\',');
+            Write('    docsBase: \'https://mateuszdabrowski.pl/docs/category/salesforce/marketing-cloud-engagement/sql/\'');
+            Write('};');
+            Write('<\/script>');
+
+            /* L3: the loader is pinned to an exact version and verified with Subresource Integrity;
+            docs/DEPLOYMENT.md explains what this covers and how the hash was produced. */
+            Write('<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js" integrity="sha384-pHG02SG8pId94Np3AbPmBEJ1yPqaH0IkJGLSNGXYmuGhkazT8Lr/57WYpbkGjJtu" crossorigin="anonymous"><\/script>');
+            Write('<script src="' + frontendURL + '"><\/script>');
+
+            Write('<script>');
+            Write('    function ssBoot() {');
+            Write('        if (window.SQLStudio && typeof window.SQLStudio.boot === \'function\') {');
+            Write('            window.SQLStudio.boot();');
+            Write('        }');
+            Write('    }');
+            Write('    if (document.readyState === \'loading\') {');
+            Write('        document.addEventListener(\'DOMContentLoaded\', ssBoot);');
+            Write('    } else {');
+            Write('        ssBoot();');
+            Write('    }');
+            Write('<\/script>');
+
+        };
+    };
+
+</script>

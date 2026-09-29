@@ -1,0 +1,13 @@
+{
+  "version": "1.0.0",
+  "date": "2026-09-29",
+  "highlights": [
+    "Four query tabs that run at the same time, each on its own Query Activity.",
+    "Lint for what Marketing Cloud Engagement refuses, with one-click fixes, and a formatter that follows the author's SQL style guide.",
+    "Results that keep their types: dates with their seconds, sorted as dates, numbers sorted as numbers, paged, and exported in full to CSV.",
+    "No server outside your account: every call runs with your own login, and the code is open to audit.",
+    "Sessions stored hashed and encrypted, and renewed in the background while you work."
+  ],
+  "updateGuide": "https://github.com/MateuszDabrowski/sqlstudio/blob/main/docs/DEPLOYMENT.md#8-updating",
+  "changelog": "https://github.com/MateuszDabrowski/sqlstudio/blob/main/CHANGELOG.md"
+}
