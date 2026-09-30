@@ -16,7 +16,7 @@ Download the release as one ZIP file, [sqlstudio-main.zip](https://github.com/Ma
 | `src/code-resources/sql-studio-frontend.js` | SQL Studio Frontend | a JavaScript Code Resource, with the styles built in |
 | `src/cloud-page/sql-studio.html` | SQL Studio | the Cloud Page users open |
 
-Do not save a file from its page on GitHub with the browser's Save As. That saves GitHub's own web page, which has none of SQL Studio's code in it.
+To download one file at a time instead, use the download links on the [SQL Studio page](https://mateuszdabrowski.pl/sql-studio#deployment-guide), or open the file on GitHub and use the "Download raw file" button at the top right of its code. Do not save a file from its page on GitHub with the browser's Save As. That saves GitHub's own web page, which has none of SQL Studio's code in it.
 
 Open the files in a code editor, such as the free VS Code. Do not use Word, TextEdit or another word processor: they can turn the code's straight quotes into curly ones, and the code then stops working.
 
