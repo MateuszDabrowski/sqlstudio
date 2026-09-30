@@ -32,15 +32,33 @@ A file that starts with `<!DOCTYPE html>` and mentions `github.githubassets.com`
 
 ## 2. Create the pieces, without publishing
 
-Web Studio > CloudPages. Open a CloudPages folder, or create one for SQL Studio, and create these three in it. Name each one exactly as in the "Name it" column. Save each one and open it: its URL shows at the top of the editor before any publish. Paste the URL into your downloaded files, on the lines the last column names. Do not publish them yet.
+If your account has private domains, CloudPages asks for URL settings as you create each piece below:
 
-| Name it | Create it with | Paste its URL into |
+1. **URL:** pick the domain.
+2. **Site Key:** give each piece its own readable name, for example `sql-studio`, `sql-studio-backend` and `sql-studio-frontend`. It becomes the path in the piece's URL. Do not leave it blank: a blank Site Key makes the piece the root page of that domain, and a domain has only one.
+3. **HTTPS:** turn it on. Marketing Cloud Engagement's own page runs on HTTPS, and browsers block an HTTP page inside it. HTTPS needs an SSL certificate for CloudPages on that domain, so pick a domain that has one.
+
+Web Studio > CloudPages. Open a CloudPages folder, or create one for SQL Studio, and create these three in it. Name each one exactly as in the "Name it" column. Save each one and open it: its URL shows at the top of the editor before any publish. Copy the three URLs, and do not publish the pieces yet.
+
+| Name it | Create it with |
+|---|---|
+| SQL Studio Backend | Code Resources > New > JSON |
+| SQL Studio Frontend | Code Resources > New > JavaScript |
+| SQL Studio | New Landing Page, in Code View, with no layout |
+
+Start SQL Studio from a blank page with no layout, as with any Cloud Page App. A layout, for example one with a Code Snippet block, wraps the page in its own HTML and styles, which break the app's full-height layout.
+
+Then paste the three URLs into two of your downloaded files:
+
+| In this file | On this line | Paste the URL of |
 |---|---|---|
-| SQL Studio Backend | Code Resources > New > JSON | `sql-studio-backend.html`, line 19: `var backendURL = 'SQL_STUDIO_BACKEND_URL';`<br>`sql-studio.html`, line 19: `var backendURL = 'SQL_STUDIO_BACKEND_URL';` |
-| SQL Studio Frontend | Code Resources > New > JavaScript | `sql-studio.html`, line 20: `var frontendURL = 'SQL_STUDIO_FRONTEND_URL';` |
-| SQL Studio | New Landing Page, in Code View, with no layout | `sql-studio-backend.html`, line 18: `var pageURL = 'SQL_STUDIO_PAGE_URL';` |
+| `sql-studio-backend.html` | line 18: `var pageURL = 'SQL_STUDIO_PAGE_URL';` | SQL Studio, the Landing Page |
+| `sql-studio-backend.html` | line 19: `var backendURL = 'SQL_STUDIO_BACKEND_URL';` | SQL Studio Backend |
+| `sql-studio.html` | line 19: `var backendURL = 'SQL_STUDIO_BACKEND_URL';` | SQL Studio Backend |
+| `sql-studio.html` | line 20: `var frontendURL = 'SQL_STUDIO_FRONTEND_URL';` | SQL Studio Frontend |
+| `sql-studio-frontend.js` | none | nothing: it has no settings, and you paste it as it is in step 4 |
 
-These settings are not a menu in Marketing Cloud Engagement. They are lines of code near the top of each file, under `1. CONFIGURATION`. Open the file in your code editor and find the line the table names: search for its placeholder with Ctrl+F (Cmd+F on a Mac), for example `SQL_STUDIO_BACKEND_URL`, or go to the line number with Ctrl+G. Select the placeholder, paste the URL over it, keep the quotes around it, and save the file with Ctrl+S (Cmd+S on a Mac):
+These settings are not a menu in Marketing Cloud Engagement. They are lines of code near the top of each file, under `1. CONFIGURATION`. Open the file in your code editor and find the line: search for its placeholder with Ctrl+F (Cmd+F on a Mac), for example `SQL_STUDIO_BACKEND_URL`, or go to the line number with Ctrl+G. Select the placeholder, paste the URL over it, keep the quotes around it, and save the file with Ctrl+S (Cmd+S on a Mac):
 
 ```js
 var backendURL = 'SQL_STUDIO_BACKEND_URL';
@@ -51,14 +69,6 @@ becomes
 ```js
 var backendURL = 'https://pages.example.com/sql-studio-backend';
 ```
-
-Start SQL Studio from a blank page with no layout, as with any Cloud Page App. A layout, for example one with a Code Snippet block, wraps the page in its own HTML and styles, which break the app's full-height layout.
-
-If your account has private domains, CloudPages asks for URL settings as you create each piece:
-
-1. **URL:** pick the domain.
-2. **Site Key:** give each piece its own readable name, for example `sql-studio`, `sql-studio-backend` and `sql-studio-frontend`. It becomes the path in the piece's URL. Do not leave it blank: a blank Site Key makes the piece the root page of that domain, and a domain has only one.
-3. **HTTPS:** turn it on. Marketing Cloud Engagement's own page runs on HTTPS, and browsers block an HTTP page inside it. HTTPS needs an SSL certificate for CloudPages on that domain, so pick a domain that has one.
 
 ## 3. Create the Installed Package
 
@@ -82,11 +92,11 @@ On the Installed Package's Access tab, grant the Business Units and roles that s
 
 After saving, paste three of the package's values into the settings of `sql-studio-backend.html`, the same way as the URLs in step 2:
 
-| Paste | Into |
-|---|---|
-| The API Integration's Client ID | `sql-studio-backend.html`, line 20: `var clientID = 'CLIENT_ID';` |
-| The API Integration's Client Secret | `sql-studio-backend.html`, line 21: `var clientSecret = 'CLIENT_SECRET';` |
-| The tenant subdomain of the API Base URI, not the Client ID | `sql-studio-backend.html`, line 22: `var clientBase = 'API_BASE_URI';` |
+| In this file | On this line | Paste |
+|---|---|---|
+| `sql-studio-backend.html` | line 20: `var clientID = 'CLIENT_ID';` | The API Integration's Client ID |
+| `sql-studio-backend.html` | line 21: `var clientSecret = 'CLIENT_SECRET';` | The API Integration's Client Secret |
+| `sql-studio-backend.html` | line 22: `var clientBase = 'API_BASE_URI';` | The tenant subdomain of the API Base URI, not the Client ID |
 
 The tenant subdomain is the 28 characters that start with `mc`, between `https://` and `.auth.marketingcloudapis.com`, for example `mc563885gzs27c5t9-63k636ttgm`. Select it by dragging, as a double-click stops at its hyphen.
 
