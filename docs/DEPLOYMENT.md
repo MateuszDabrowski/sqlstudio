@@ -16,7 +16,7 @@ Download the release as one ZIP file, [sqlstudio-main.zip](https://github.com/Ma
 | `src/code-resources/sql-studio-frontend.js` | SQL Studio Frontend | a JavaScript Code Resource, with the styles built in |
 | `src/cloud-page/sql-studio.html` | SQL Studio | the Cloud Page users open |
 
-To download one file at a time instead, use the download links on the [SQL Studio page](https://mateuszdabrowski.pl/sql-studio#deployment-guide), or open the file on GitHub and use the "Download raw file" button at the top right of its code. Do not save a file from its page on GitHub with the browser's Save As. That saves GitHub's own web page, which has none of SQL Studio's code in it.
+To download one file at a time instead, use the download links on the [SQL Studio page](https://mateuszdabrowski.pl/sql-studio#deployment-guide), or open the file on GitHub and use the "Download raw file" button at the top right of its code.
 
 Open the files in a code editor, such as the free VS Code. Do not use Word, TextEdit or another word processor: they can turn the code's straight quotes into curly ones, and the code then stops working.
 
@@ -28,17 +28,15 @@ To check that you have the right files, look at their first lines:
 | `sql-studio.html` | `<script runat="server">` |
 | `sql-studio-frontend.js` | `/* SQL Studio 1.0.0 - SQL Studio Frontend, ...`, with the release's version |
 
-A file that starts with `<!DOCTYPE html>` and mentions `github.githubassets.com` is GitHub's web page: download the ZIP again.
-
 ## 2. Create the pieces, without publishing
 
-If your account has private domains, CloudPages asks for URL settings as you create each piece below:
+Web Studio > CloudPages. Open a CloudPages folder, or create one for SQL Studio, and create these three in it. Name each one exactly as in the "Name it" column. Save each one and open it: its URL shows at the top of the editor before any publish. Copy the three URLs, and do not publish the pieces yet.
+
+If your account has private domains, CloudPages asks for URL settings as you create each piece:
 
 1. **URL:** pick the domain.
 2. **Site Key:** give each piece its own readable name, for example `sql-studio`, `sql-studio-backend` and `sql-studio-frontend`. It becomes the path in the piece's URL. Do not leave it blank: a blank Site Key makes the piece the root page of that domain, and a domain has only one.
 3. **HTTPS:** turn it on. Marketing Cloud Engagement's own page runs on HTTPS, and browsers block an HTTP page inside it. HTTPS needs an SSL certificate for CloudPages on that domain, so pick a domain that has one.
-
-Web Studio > CloudPages. Open a CloudPages folder, or create one for SQL Studio, and create these three in it. Name each one exactly as in the "Name it" column. Save each one and open it: its URL shows at the top of the editor before any publish. Copy the three URLs, and do not publish the pieces yet.
 
 | Name it | Create it with |
 |---|---|
