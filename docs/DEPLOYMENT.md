@@ -160,7 +160,7 @@ The client secret sits in the Backend's settings section. Opening the Backend's 
 Code Resources and Cloud Pages take a few minutes to go live after publishing, so wait about five minutes after step 4.
 
 1. Open SQL Studio from the AppExchange menu as a user granted access in step 3. If you are already logged in to MCE, you land on the editor with no login screen.
-2. On this first sign-in, the Backend creates SQL Studio Auth Log. Once the app has loaded, it creates SQL Studio Error Log, moves both into the SQL Studio folder, and says so once in the Status tab. If it asks you to set their retention by hand, do it straight away: 1 day for SQL Studio Auth Log and 180 days for SQL Studio Error Log (see step 7).
+2. On this first sign-in, the Backend creates SQL Studio Auth Log. Once the app has loaded, it creates SQL Studio Error Log, moves both into the SQL Studio folder, and sets their retention: 1 day for SQL Studio Auth Log and 180 days for SQL Studio Error Log. The Status tab then says once "First run: SQL Studio created its Data Extensions in the SQL Studio folder." and nothing more, and there is nothing for you to do. Only if Marketing Cloud Engagement did not let it set the retention, a second notice asks you to set it by hand in each Data Extension's properties (see step 7).
 3. Run `SELECT TOP 10 SubscriberKey FROM _Subscribers` and confirm it returns rows. In a child Business Unit, query any Data Extension you have instead.
 
 If a check fails, see the troubleshooting table below.
