@@ -8,13 +8,27 @@ The [SQL Studio page](https://mateuszdabrowski.pl/sql-studio) explains what each
 
 ## 1. Get the code
 
-Download the three release files and open them in the code editor of your choice. You fill in their settings in steps 2 and 3, and paste them into MCE in step 4.
+Download the release as one ZIP file, [sqlstudio-main.zip](https://github.com/MateuszDabrowski/sqlstudio/archive/refs/heads/main.zip), and unpack it. The three files you need are in its `src` folder. You fill in their settings in steps 2 and 3, and paste them into MCE in step 4.
 
 | File | Name in Web Studio | What it becomes |
 |---|---|---|
-| [`src/code-resources/sql-studio-backend.html`](../src/code-resources/sql-studio-backend.html) | SQL Studio Backend | a JSON Code Resource |
-| [`src/code-resources/sql-studio-frontend.js`](../src/code-resources/sql-studio-frontend.js) | SQL Studio Frontend | a JavaScript Code Resource, with the styles built in |
-| [`src/cloud-page/sql-studio.html`](../src/cloud-page/sql-studio.html) | SQL Studio | the Cloud Page users open |
+| `src/code-resources/sql-studio-backend.html` | SQL Studio Backend | a JSON Code Resource |
+| `src/code-resources/sql-studio-frontend.js` | SQL Studio Frontend | a JavaScript Code Resource, with the styles built in |
+| `src/cloud-page/sql-studio.html` | SQL Studio | the Cloud Page users open |
+
+Do not save a file from its page on GitHub with the browser's Save As. That saves GitHub's own web page, which has none of SQL Studio's code in it.
+
+Open the files in a code editor, such as the free VS Code. Do not use Word, TextEdit or another word processor: they can turn the code's straight quotes into curly ones, and the code then stops working.
+
+To check that you have the right files, look at their first lines:
+
+| File | Its first line |
+|---|---|
+| `sql-studio-backend.html` | `<script runat="server">` |
+| `sql-studio.html` | `<script runat="server">` |
+| `sql-studio-frontend.js` | `/* SQL Studio 1.0.0 - SQL Studio Frontend, ...`, with the release's version |
+
+A file that starts with `<!DOCTYPE html>` and mentions `github.githubassets.com` is GitHub's web page: download the ZIP again.
 
 ## 2. Create the pieces, without publishing
 
@@ -26,7 +40,7 @@ Web Studio > CloudPages. Open a CloudPages folder, or create one for SQL Studio,
 | SQL Studio Frontend | Code Resources > New > JavaScript | `sql-studio.html`, line 20: `var frontendURL = 'SQL_STUDIO_FRONTEND_URL';` |
 | SQL Studio | New Landing Page, in Code View, with no layout | `sql-studio-backend.html`, line 18: `var pageURL = 'SQL_STUDIO_PAGE_URL';` |
 
-These settings are not a menu in Marketing Cloud Engagement. They are lines of code near the top of each file, under `1. CONFIGURATION`. Open the file in your code editor, go to the line the table names, and replace the placeholder between the quotes with the URL, keeping the quotes:
+These settings are not a menu in Marketing Cloud Engagement. They are lines of code near the top of each file, under `1. CONFIGURATION`. Open the file in your code editor and find the line the table names: search for its placeholder with Ctrl+F (Cmd+F on a Mac), for example `SQL_STUDIO_BACKEND_URL`, or go to the line number with Ctrl+G. Select the placeholder, paste the URL over it, keep the quotes around it, and save the file with Ctrl+S (Cmd+S on a Mac):
 
 ```js
 var backendURL = 'SQL_STUDIO_BACKEND_URL';
@@ -115,7 +129,7 @@ The Backend refuses to run, and says so with `CONFIG_INVALID` naming the setting
 
 ### Paste and publish
 
-Paste each whole file, with its settings filled in, into its piece:
+Paste each whole file, with its settings filled in, into its piece. In your code editor, select the whole file with Ctrl+A (Cmd+A on a Mac) and copy it. In Web Studio, open the piece, click into its code, select everything already there the same way, and paste over it. Then save the piece.
 
 | Piece | Paste |
 |---|---|
@@ -242,6 +256,8 @@ Code Resources and Cloud Pages take a few minutes to go live after publishing. U
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
+| The file in your code editor starts with `<!DOCTYPE html>`, mentions `github.githubassets.com`, and has none of the lines step 2 names | It is GitHub's web page, saved from the browser, not the release file | Download the ZIP from step 1 and use the files in its `src` folder. |
+| SQL Studio Backend or SQL Studio answers with an error page, or nothing at all, right after you pasted it | A setting lost one of its quotes or its closing `';`, or a word processor turned the straight quotes `'` into curly ones | Edit the settings again in a code editor. Each value sits between two straight quotes, and each line ends with `';`, as in step 2. |
 | Creating a piece in CloudPages asks for a URL and a "Site Key" | The account has private domains, so each piece gets a URL on one of them | Pick the domain, give each piece its own Site Key such as `sql-studio-backend`, never a blank one, and turn HTTPS on (step 2). |
 | Opening SQL Studio ends on a browser error such as "...auth.marketingcloudapis.com's server IP address could not be found", or on raw JSON with `CONFIG_INVALID` | The Backend's `clientBase` is not the tenant subdomain: most often only its part before the hyphen, since a double-click stops selecting there, or the Client ID, a full URL or the placeholder. The Backend refuses a value that cannot be a subdomain and says which mistake it looks like, without showing the value | Copy the 28 characters that start with `mc` from the API Integration's Authentication Base URI into `clientBase`, publish SQL Studio Backend again, and wait a few minutes before you open SQL Studio. |
 | Sign-in ends on Marketing Cloud Engagement's own error about the redirect URI, or SQL Studio says it signed you in but cannot find the session | The Backend's `backendURL` does not exactly match the Redirect URI on the API Integration component (step 3), or the Cloud Page and the Backend use different `authDE` values | Compare both URLs character by character, including `https://` and any trailing slash. Confirm both `authDE` settings name the same Data Extension. |
