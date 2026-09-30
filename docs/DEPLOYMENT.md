@@ -18,15 +18,33 @@ Download the three release files and open them in the code editor of your choice
 
 ## 2. Create the pieces, without publishing
 
-Web Studio > CloudPages. Create these three, and name each one exactly as in the "Name it" column. Save each one and open it: its URL shows at the top of the editor before any publish. Copy the URL into the settings at the top of your files, as the last column says. Do not publish them yet.
+Web Studio > CloudPages. Open a CloudPages folder, or create one for SQL Studio, and create these three in it. Name each one exactly as in the "Name it" column. Save each one and open it: its URL shows at the top of the editor before any publish. Paste the URL into your downloaded files, on the lines the last column names. Do not publish them yet.
 
 | Name it | Create it with | Paste its URL into |
 |---|---|---|
-| SQL Studio Backend | Code Resources > New > JSON | `backendURL` in both `sql-studio-backend.html` and `sql-studio.html` |
-| SQL Studio Frontend | Code Resources > New > JavaScript | `frontendURL` in `sql-studio.html` |
-| SQL Studio | New Landing Page, in Code View, with no layout | `pageURL` in `sql-studio-backend.html` |
+| SQL Studio Backend | Code Resources > New > JSON | `sql-studio-backend.html`, line 19: `var backendURL = 'SQL_STUDIO_BACKEND_URL';`<br>`sql-studio.html`, line 19: `var backendURL = 'SQL_STUDIO_BACKEND_URL';` |
+| SQL Studio Frontend | Code Resources > New > JavaScript | `sql-studio.html`, line 20: `var frontendURL = 'SQL_STUDIO_FRONTEND_URL';` |
+| SQL Studio | New Landing Page, in Code View, with no layout | `sql-studio-backend.html`, line 18: `var pageURL = 'SQL_STUDIO_PAGE_URL';` |
+
+These settings are not a menu in Marketing Cloud Engagement. They are lines of code near the top of each file, under `1. CONFIGURATION`. Open the file in your code editor, go to the line the table names, and replace the placeholder between the quotes with the URL, keeping the quotes:
+
+```js
+var backendURL = 'SQL_STUDIO_BACKEND_URL';
+```
+
+becomes
+
+```js
+var backendURL = 'https://pages.example.com/sql-studio-backend';
+```
 
 Start SQL Studio from a blank page with no layout, as with any Cloud Page App. A layout, for example one with a Code Snippet block, wraps the page in its own HTML and styles, which break the app's full-height layout.
+
+If your account has private domains, CloudPages asks for URL settings as you create each piece:
+
+1. **URL:** pick the domain.
+2. **Site Key:** give each piece its own readable name, for example `sql-studio`, `sql-studio-backend` and `sql-studio-frontend`. It becomes the path in the piece's URL. Do not leave it blank: a blank Site Key makes the piece the root page of that domain, and a domain has only one.
+3. **HTTPS:** turn it on. Marketing Cloud Engagement's own page runs on HTTPS, and browsers block an HTTP page inside it. HTTPS needs an SSL certificate for CloudPages on that domain, so pick a domain that has one.
 
 ## 3. Create the Installed Package
 
@@ -48,13 +66,13 @@ On the Installed Package's Access tab, grant the Business Units and roles that s
 
 ### The three values for the Backend
 
-After saving, paste three of the package's values into the settings of `sql-studio-backend.html`:
+After saving, paste three of the package's values into the settings of `sql-studio-backend.html`, the same way as the URLs in step 2:
 
-| Setting | Value |
+| Paste | Into |
 |---|---|
-| `clientID` | The API Integration's Client ID |
-| `clientSecret` | The API Integration's Client Secret |
-| `clientBase` | The tenant subdomain of the API Base URI, not the Client ID |
+| The API Integration's Client ID | `sql-studio-backend.html`, line 20: `var clientID = 'CLIENT_ID';` |
+| The API Integration's Client Secret | `sql-studio-backend.html`, line 21: `var clientSecret = 'CLIENT_SECRET';` |
+| The tenant subdomain of the API Base URI, not the Client ID | `sql-studio-backend.html`, line 22: `var clientBase = 'API_BASE_URI';` |
 
 The tenant subdomain is the 28 characters that start with `mc`, between `https://` and `.auth.marketingcloudapis.com`, for example `mc563885gzs27c5t9-63k636ttgm`. Select it by dragging, as a double-click stops at its hyphen.
 
@@ -224,6 +242,7 @@ Code Resources and Cloud Pages take a few minutes to go live after publishing. U
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
+| Creating a piece in CloudPages asks for a URL and a "Site Key" | The account has private domains, so each piece gets a URL on one of them | Pick the domain, give each piece its own Site Key such as `sql-studio-backend`, never a blank one, and turn HTTPS on (step 2). |
 | Opening SQL Studio ends on a browser error such as "...auth.marketingcloudapis.com's server IP address could not be found", or on raw JSON with `CONFIG_INVALID` | The Backend's `clientBase` is not the tenant subdomain: most often only its part before the hyphen, since a double-click stops selecting there, or the Client ID, a full URL or the placeholder. The Backend refuses a value that cannot be a subdomain and says which mistake it looks like, without showing the value | Copy the 28 characters that start with `mc` from the API Integration's Authentication Base URI into `clientBase`, publish SQL Studio Backend again, and wait a few minutes before you open SQL Studio. |
 | Sign-in ends on Marketing Cloud Engagement's own error about the redirect URI, or SQL Studio says it signed you in but cannot find the session | The Backend's `backendURL` does not exactly match the Redirect URI on the API Integration component (step 3), or the Cloud Page and the Backend use different `authDE` values | Compare both URLs character by character, including `https://` and any trailing slash. Confirm both `authDE` settings name the same Data Extension. |
 | Blank page, or the editor area never appears | The Monaco Editor CDN (`cdn.jsdelivr.net`) is blocked by a network policy, or the pinned file no longer matches the integrity hash in the Cloud Page | SQL Studio falls back to a plain text box with a warning after 15 seconds when the CDN is unreachable. With no fallback and no warning, open the browser console. Check whether the `frontendURL` Code Resource (SQL Studio Frontend) failed to load (a 404 or an unpublished resource), or whether the browser blocked `loader.js` for failing its integrity check. |
