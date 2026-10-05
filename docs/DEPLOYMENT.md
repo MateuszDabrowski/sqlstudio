@@ -13,8 +13,10 @@ Download the release as one ZIP file, [sqlstudio-main.zip](https://github.com/Ma
 | File | Name in Web Studio | What it becomes |
 |---|---|---|
 | `src/code-resources/sql-studio-backend.html` | SQL Studio Backend | a JSON Code Resource |
-| `src/code-resources/sql-studio-frontend.js` | SQL Studio Frontend | a JavaScript Code Resource, with the styles built in |
+| `src/code-resources/sql-studio-frontend.min.js` | SQL Studio Frontend | a JavaScript Code Resource, with the styles built in |
 | `src/cloud-page/sql-studio.html` | SQL Studio | the Cloud Page users open |
+
+The same folder holds `sql-studio-frontend.js`, the same code with its comments, for reading. Do not paste that one: Marketing Cloud Engagement served it in 18 seconds against 2 for the `.min.js` on the author's account, so SQL Studio opened that much slower. Its first line says so.
 
 To download one file at a time instead, use the download links on the [SQL Studio page](https://mateuszdabrowski.pl/sql-studio#deployment-guide), or open the file on GitHub and use the "Download raw file" button at the top right of its code.
 
@@ -26,7 +28,7 @@ To check that you have the right files, look at their first lines:
 |---|---|
 | `sql-studio-backend.html` | `<script runat="server">` |
 | `sql-studio.html` | `<script runat="server">` |
-| `sql-studio-frontend.js` | `/* SQL Studio 1.0.0 - SQL Studio Frontend, ...`, with the release's version |
+| `sql-studio-frontend.min.js` | `/* SQL Studio 1.1.0 - SQL Studio Frontend, ...`, with the release's version |
 
 ## 2. Create the pieces, without publishing
 
@@ -54,7 +56,7 @@ Then paste the three URLs into two of your downloaded files:
 | `sql-studio-backend.html` | line 19: `var backendURL = 'SQL_STUDIO_BACKEND_URL';` | SQL Studio Backend |
 | `sql-studio.html` | line 19: `var backendURL = 'SQL_STUDIO_BACKEND_URL';` | SQL Studio Backend |
 | `sql-studio.html` | line 20: `var frontendURL = 'SQL_STUDIO_FRONTEND_URL';` | SQL Studio Frontend |
-| `sql-studio-frontend.js` | none | nothing: it has no settings, and you paste it as it is in step 4 |
+| `sql-studio-frontend.min.js` | none | nothing: it has no settings, and you paste it as it is in step 4 |
 
 These settings are not a menu in Marketing Cloud Engagement. They are lines of code near the top of each file, under `1. CONFIGURATION`. Open the file in your code editor and find the line: search for its placeholder with Ctrl+F (Cmd+F on a Mac), for example `SQL_STUDIO_BACKEND_URL`, or go to the line number with Ctrl+G. Select the placeholder, paste the URL over it, keep the quotes around it, and save the file with Ctrl+S (Cmd+S on a Mac):
 
@@ -106,7 +108,7 @@ The Backend and the Cloud Page each start with a section called `1. CONFIGURATIO
 /* =================== APP CODE - replace from here on update =================== */
 ```
 
-Steps 2 and 3 filled in the settings every deployment needs. The tables below list every setting. Leave the others as they are, unless you want server-side history. The Frontend has no settings at all.
+Steps 2 and 3 filled in the settings every deployment needs. The tables below list every setting. Leave the others as they are. The one choice to make is `historyDE`: whether query history stays in each browser, or is also kept in MCE, where other users can read it. The Frontend has no settings at all.
 
 ### Backend (`sql-studio-backend.html`)
 
@@ -120,7 +122,7 @@ Steps 2 and 3 filled in the settings every deployment needs. The tables below li
 | `clientBase` | The tenant subdomain, from step 3: 28 characters that start with `mc`, not the Client ID |
 | `authDE` | `SQL Studio Auth Log`. Change it only for a Data Extension you created yourself under another name (see step 7), with the `ENT.` prefix when it is shared. |
 | `errorDE` | `SQL Studio Error Log`, with the same rule as `authDE` |
-| `historyDE` | Empty keeps query history in each browser. `SQLStudioHistory` keeps it in Marketing Cloud Engagement (see step 7). |
+| `historyDE` | Where each user's query history is kept. Empty, the default: in each user's own browser only. `SQLStudioHistory`: also in a Data Extension in MCE for 90 days, so it follows users to other browsers, but every user with Data Extension access in this Business Unit can read every user's queries. Choose before you publish (see step 7). |
 | `allowedReferrers` | Optional list of URL prefixes allowed to call the Backend. Empty turns the check off. A referrer matches a prefix only when it is that prefix, or continues with `/`, `?` or `#` after it, so `https://host` does not allow `https://host.evil.io`. |
 | `debugging` | `false`. `true` writes debug output into responses instead of logging to the error log, and is for troubleshooting only. |
 
@@ -142,7 +144,7 @@ Paste each whole file, with its settings filled in, into its piece. In your code
 | Piece | Paste |
 |---|---|
 | SQL Studio Backend | The whole of `sql-studio-backend.html` |
-| SQL Studio Frontend | The whole of `sql-studio-frontend.js` |
+| SQL Studio Frontend | The whole of `sql-studio-frontend.min.js` |
 | SQL Studio | The whole of `sql-studio.html` |
 
 Publish the two Code Resources first and SQL Studio last. SQL Studio loads the other two, so this way it never opens before they are live. Code Resources also tend to go live sooner after publishing than Cloud Pages.
@@ -154,6 +156,10 @@ The Monaco Editor's `loader.js` is loaded from jsdelivr with a `<script integrit
 ### Where the client secret lives
 
 The client secret sits in the Backend's settings section. Opening the Backend's URL runs the code on the server and never returns its source. No response, log row or debug output carries the secret, an access token or the key derived from the secret. Users with access to Web Studio in this Business Unit can still open the Code Resource and read it, as with any Cloud Page App. The release files ship with placeholders only, so no real value ever reaches the repository.
+
+### What the Backend reads through WSProxy
+
+WSProxy is a way for server-side scripts to call MCE from inside MCE. Until Salesforce confirms whether its API limit counts WSProxy calls, SQL Studio counts them as API calls. A run's API call count includes them, and hovering the count shows how many went through the API and how many through WSProxy. The Backend uses it in its own Business Unit, the one that holds the Backend, and never signs in for another one. It reads a run's status, SQL Studio's own Query Activities and temporary Data Extensions, and the names, keys, folders and fields of that Business Unit's shared and synchronized Data Extensions. It never reads their rows. It reads a run's status this way only for the user who started the run, in any of that user's sessions. In the same Business Unit it also reads the rows of a run's temporary Data Extension for Export CSV, up to 2,500 rows at a time. Each 2,500-row read counts as one API call. A sorted result, a result of more than 100 columns and every session in a child BU export through the REST API instead. If the WSProxy read fails, the export reads all the rows again through the REST API. The confirmation before the export says how many API calls that takes. It also deletes a user's own old temporary Data Extensions when cleaning up, and creates SQL Studio's own folder and log Data Extensions during the first-run setup in step 7. Everything else that creates, changes or starts something for a user uses the signed-in user's own login and permissions. That covers the temporary Data Extension, the Query Activity, starting a run, Save, Save As and folders. When a WSProxy read fails, the Backend does the same step with the user's login, and the user sees no error. The list of the parent's shared Data Extensions has no such step, because the user's login in a child BU cannot see them. When that read fails, the sidebar's folder tree shows none of the parent's Data Extensions, and a search shows no "Parent BU" group. SQL Studio asks for the list again the next time it opens, or when the user clicks Reload under the sidebar's Data Extensions section.
 
 ## 5. First open
 
@@ -167,7 +173,15 @@ If a check fails, see the troubleshooting table below.
 
 ## 6. Child Business Units
 
-One deployment in the parent Business Unit serves its child BUs too: a user opens SQL Studio from the child BU, and every query runs there with their own login and permissions. Grant the child BUs on the Installed Package's Access tab (step 3). It costs more API calls there, by design. SQL Studio reads a run's row count and its first 2,000 rows without an API call only in the Business Unit that holds the Backend, so from a child BU those reads go through the REST API, and a run cost about 15 API calls instead of about 10 in a test. To avoid that for a child BU that runs many queries, deploy SQL Studio again inside that BU, with its own Installed Package, and give its users that one. SQL Studio does not read a child BU's rows from the parent through WSProxy: that would act with the app's own permissions instead of the user's, and every other call SQL Studio makes runs with the user's own login.
+One deployment in the parent Business Unit serves its child BUs too. A user opens SQL Studio from the child BU, and every query runs there with their own login and permissions. Grant the child BUs on the Installed Package's Access tab (step 3).
+
+**Shared Data Extensions.** With SQL Studio installed in the parent, a child BU user sees the parent's shared and synchronized Data Extensions in the sidebar's folder tree, in folders with the parent's own names, such as "Shared Items" and "Synchronized Data Extensions", with a SHARED or SYNCED badge on each. A search lists them in a group called "Parent BU", with each folder path under the name. Completion and inserts add the `ENT.` prefix for them, which MCE needs when a child BU queries its parent. With SQL Studio installed in a child BU instead, the sidebar lists only that BU's own Data Extensions.
+
+The list shows every shared Data Extension of the parent. It cannot tell which ones are shared with the child BU. If a user picks one that is not shared with their BU, MCE's own error says so when the query runs.
+
+**API calls.** It costs more API calls in a child BU, by design. SQL Studio reads a run's row count and its first 2,000 rows without an API call only in the Business Unit that holds the Backend. In that Business Unit, the Backend also checks a run's status, looks up SQL Studio's own Query Activity, cleans up old temporary Data Extensions and reads the rows for Export CSV through WSProxy. SQL Studio counts these calls as API calls too, and a run's breakdown lists them apart. A child BU session still uses the user's own login for those steps and for reading results, so each of them is an API call. In a test with 1.0.0, a run cost about 15 API calls from a child BU instead of about 10 in the parent. To avoid that for a child BU that runs many queries, deploy SQL Studio again inside that BU, with its own Installed Package, and give its users that one.
+
+SQL Studio does not read a child BU's temporary Data Extensions from the parent. The Backend never switches into another Business Unit, so everything that creates, changes or starts something in a child BU runs with the user's own login.
 
 ## 7. Data Extensions
 
@@ -224,7 +238,7 @@ SQL Studio writes `createdDate` and `errorDate` itself, so the fields need no de
 
 ### SQLStudioHistory (optional)
 
-Server-side history keeps each user's runs in a Data Extension instead of the browser. History then survives cleared site data and follows the user across devices. To turn it on, set `historyDE = 'SQLStudioHistory'` in step 4. SQL Studio creates the Data Extension on the first run that saves history, with a 90-day retention on individual records.
+Server-side history keeps each user's runs in a Data Extension as well as in the browser. History then survives cleared site data and follows the user across devices. The rows hold each query's full SQL text, including any values written into it, such as an email address in a `WHERE` clause. MCE has no folder-level restrictions for Data Extensions, so every user with Data Extension access in the Business Unit that holds SQL Studio can read every user's history, child BU users' queries included. Each user's History dialog says where their history is kept. Turning it on starts the history in MCE from the next run: entries already in a browser stay in that browser, and are not copied. To turn it on, set `historyDE = 'SQLStudioHistory'` in step 4. SQL Studio creates the Data Extension on the first run that saves history, with a 90-day retention on individual records.
 
 | Name | Data type | Length | Nullable |
 |--|--|--|--|
@@ -244,13 +258,14 @@ Leave the `sql` field length blank if you create it yourself, so long queries fi
 
 - **AuthLog**: the SHA256 of each session id, an access token valid for about 20 minutes and stored encrypted, and the signed-in user's id, name and e-mail. Any user with Data Extension access in the Business Unit can read it, but not use it: the hash does not open a session, and the token is unreadable without the client secret. Keep the 1-day retention anyway, which limits how long the row exists.
 - **ErrorLog**: backend error messages and descriptions, cut to 2000 characters each. They can include fragments of Marketing Cloud Engagement API error responses, but never a token, a session id or the client secret.
+- **The parent's shared Data Extensions, for child BU users**: with SQL Studio installed in the parent, a user who opens it from a child BU sees the names, keys, folders and fields of all the parent's shared and synchronized Data Extensions, whether or not that BU has access to them. They never see the rows. The Backend reads this with its own access, not the user's. To keep it from a child BU's users, install SQL Studio in that BU instead (step 6).
 - **SQLStudioHistory**: every user's own SQL text, when history is on. Any user with Data Extension access can read every other user's history. Query text does not include results, but it can reveal Data Extension and field names, business logic, or values written into a `WHERE` clause.
 
 ## 8. Updating
 
 Update the Code Resources first and the Cloud Page last, for the same reason as in step 4.
 
-1. **Frontend**: open "SQL Studio Frontend", replace its whole content with the new `sql-studio-frontend.js`, and publish. It has no settings.
+1. **Frontend**: open "SQL Studio Frontend", replace its whole content with the new `sql-studio-frontend.min.js`, and publish. It has no settings.
 2. **Backend**: open "SQL Studio Backend". Select from the `APP CODE - replace from here on update` line to the end of the file, paste the same range from the new `sql-studio-backend.html`, and publish. Your settings above the line stay as they are.
 3. **Cloud Page**: do the same as for the Backend, when the release changed it.
 
@@ -280,5 +295,6 @@ Code Resources and Cloud Pages take a few minutes to go live after publishing. U
 | `SESSION_EXPIRED`, or a Session expired or Session ending dialog | The access token (about 20 minutes, of which SQL Studio uses about 15) expired, and the background renewal did not run or failed. It does not run after 15 minutes without activity, and it fails once you sign out of Marketing Cloud Engagement | Click Renew. It signs in again with one click and keeps your query text and results. The console lines prefixed `[SQL Studio]` give the time left after sign-in and the reason a background renewal failed. |
 | The browser console shows `408 (Request Timeout)` for the Backend URL, and a run waits long before it starts | A Backend call ran past Marketing Cloud Engagement's time limit, and Marketing Cloud Engagement stopped it | Filter the console by `[SQL Studio]`: each slow or failed call is listed with its time. Report those lines in [GitHub issues](https://github.com/MateuszDabrowski/sqlstudio/issues). The rest of the console, the "[Report Only]" security messages, comes from Marketing Cloud Engagement's own page and does not affect SQL Studio. |
 | Status line: "This org does not allow retention on API-created Data Extensions" | The user lacks the "Data Extension \| Manage Data Extension Retention" permission | Grant it if temporary Data Extensions should expire on their own. Otherwise SQL Studio deletes the user's own leftovers each time the app opens, once they are more than six hours old. |
+| A child BU user sees no parent Data Extension in the sidebar's tree, and no "Parent BU" group in a search | SQL Studio is installed in the child BU itself, so it can list only that BU's own Data Extensions. Or the parent has no shared or synchronized Data Extensions. Or the Backend's read of the parent's list failed. Or the list was loaded before one was added | Install SQL Studio in the parent (step 6), or click Reload under the sidebar's Data Extensions section. |
 | 404 on `/automation/v1/queries` from a child Business Unit | Community reports mixed results calling these endpoints from a non-top-level Business Unit | Confirm the user's Automation Studio permissions in that Business Unit, and that the Installed Package is granted to it (step 3). If it still fails, report it in [GitHub issues](https://github.com/MateuszDabrowski/sqlstudio/issues). |
 | Temporary `SQLStudio_*` Data Extensions still exist after two days | Retention was not applied (see the permission row above), or MCE's retention flags behave differently than assumed | Open SQL Studio as the user who ran them, which deletes that user's leftovers older than six hours, or delete them in Contact Builder. Report it in [GitHub issues](https://github.com/MateuszDabrowski/sqlstudio/issues). |

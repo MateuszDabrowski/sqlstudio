@@ -1,6 +1,6 @@
 # SQL Studio for Marketing Cloud Engagement
 
-SQL Studio for MCE is an open-source rebuild of Salesforce Labs' Query Studio for Marketing Cloud Engagement (MCE). It runs entirely inside MCE as a Cloud Page App, with each user's own Marketing Cloud Engagement login and permissions. There is no external server, and no query or result leaves your account.
+SQL Studio for MCE is an open-source rebuild of Salesforce Labs' Query Studio for Marketing Cloud Engagement (MCE). It runs entirely inside MCE as a Cloud Page App. Everything SQL Studio creates, changes or starts for you runs with your own login and permissions. Inside MCE, it reads its own runs and results and the names and fields of the parent Business Unit's shared Data Extensions, sets up its own folder and logs on the first run, and cleans up its own temporary Data Extensions. It does this through WSProxy and MCE's own data functions, both built into MCE's server-side scripts. There is no external server, and no query or result leaves your account.
 
 Read what it does, how it works and the FAQ on the [SQL Studio page](https://mateuszdabrowski.pl/sql-studio).
 
@@ -18,8 +18,10 @@ SQL Studio is one Cloud Page, two Code Resources and an Installed Package. An ad
 | File | Name in Web Studio | What it becomes |
 |---|---|---|
 | `src/code-resources/sql-studio-backend.html` | SQL Studio Backend | a JSON Code Resource |
-| `src/code-resources/sql-studio-frontend.js` | SQL Studio Frontend | a JavaScript Code Resource |
+| `src/code-resources/sql-studio-frontend.min.js` | SQL Studio Frontend | a JavaScript Code Resource |
 | `src/cloud-page/sql-studio.html` | SQL Studio | the Cloud Page users open |
+
+`src/code-resources/sql-studio-frontend.js` is the same code with its comments, for reading. Paste the `.min.js`: Marketing Cloud Engagement served the readable file in 18 seconds against 2 for the `.min.js` on the author's account.
 
 To update, keep each file's settings section and replace everything below its "APP CODE" line. [CHANGELOG.md](CHANGELOG.md) lists what changed in each release.
 
@@ -50,7 +52,7 @@ This summary only explains what I mean by the licence. The text in [LICENSE](LIC
 
 These come with SQL Studio under their own licences, not the EUPL:
 
-- [Salesforce Lightning Design System](https://www.lightningdesignsystem.com/) icons 2.29.1: 25 utility icons, unchanged, in SQL Studio Frontend's icon sprite - © Salesforce, Inc., [Creative Commons Attribution-NoDerivatives 4.0](https://creativecommons.org/licenses/by-nd/4.0/).
+- [Salesforce Lightning Design System](https://www.lightningdesignsystem.com/) icons 2.29.1: 27 utility icons, unchanged, in SQL Studio Frontend's icon sprite - © Salesforce, Inc., [Creative Commons Attribution-NoDerivatives 4.0](https://creativecommons.org/licenses/by-nd/4.0/).
 - [Monaco Editor](https://microsoft.github.io/monaco-editor/) 0.52.2 - © Microsoft Corporation, MIT. The Cloud Page loads it from the jsDelivr CDN, so it is not part of these files.
 
 Built by [Mateusz Dąbrowski](https://mateuszdabrowski.pl).

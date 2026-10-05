@@ -1,12 +1,12 @@
 {
-  "version": "1.0.0",
-  "date": "2026-09-29",
+  "version": "1.1.0",
+  "date": "2026-10-05",
   "highlights": [
-    "Four query tabs that run at the same time, each on its own Query Activity.",
-    "Lint for what Marketing Cloud Engagement refuses, with one-click fixes, and a formatter that follows the author's SQL style guide.",
-    "Results that keep their types: dates with their seconds, sorted as dates, numbers sorted as numbers, paged, and exported in full to CSV.",
-    "No server outside your account: every call runs with your own login, and the code is open to audit.",
-    "Sessions stored hashed and encrypted, and renewed in the background while you work."
+    "SQL Studio opens twice as fast.",
+    "Child Business Units see the parent's shared and synchronized Data Extensions, with ENT. added for you.",
+    "JOIN autocomplete writes the whole join for Data Views and Data Extensions.",
+    "Fewer API calls, a free export up to 1,999 rows, and its cost shown before the click.",
+    "Mistyped Data Views and unknown Data Extensions flagged before Run, with fixes."
   ],
   "updateGuide": "https://github.com/MateuszDabrowski/sqlstudio/blob/main/docs/DEPLOYMENT.md#8-updating",
   "changelog": "https://github.com/MateuszDabrowski/sqlstudio/blob/main/CHANGELOG.md"

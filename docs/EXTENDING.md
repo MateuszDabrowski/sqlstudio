@@ -20,7 +20,7 @@ For an access token that exposure lasts about 20 minutes. A refresh token stays 
 4. Store the refresh token encrypted, exactly as the access token is. `encryptToken(token, sessionKey, userId)` and `decryptToken(cipherText, sessionKey, userId)` bind a ciphertext to its row and user, and the same pair works for a second token. Never store a refresh token in plain text.
 5. Consider a key that does not come from the client secret: a Key Management symmetric key (Setup > Key Management), passed to `EncryptSymmetric` and `DecryptSymmetric` by its external key instead of the `@null` and the derived password the Backend uses today. Then reading the Backend's code no longer gives the key.
 
-Never write the AMPscript openers `%%[` or `%%=` literally anywhere in the Backend or the Cloud Page. Marketing Cloud Engagement evaluates those sequences wherever they appear in the file, not only inside the SSJS block. Build them from two pieces instead, as the Backend's `cryptToken` does: `'%' + '%='`.
+Never write the AMPscript openers `%%[` or `%%=` literally anywhere in the Backend or the Cloud Page. Marketing Cloud Engagement evaluates those sequences wherever they appear in the file, not only inside the SSJS block. Build them from two pieces instead, as the Backend's `cryptToken` does: `'%' + '%='`. The same goes for a personalization string such as `%%memberid%%`, which the Backend writes as `'%' + '%memberid%' + '%'`.
 
 ### The refresh itself
 

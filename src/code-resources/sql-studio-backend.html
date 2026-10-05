@@ -22,7 +22,7 @@
     var clientBase = 'API_BASE_URI';                    // tenant subdomain only, e.g. mc563885gzs27c5t9-63k636ttgm
     var authDE = 'SQL Studio Auth Log';                 // sign-in sessions; created on first sign-in; add 'ENT.' prefix when shared
     var errorDE = 'SQL Studio Error Log';               // backend error log; created on first sign-in
-    var historyDE = '';                                 // optional server-side query history DE name; empty = history stays in the browser's localStorage
+    var historyDE = '';                                 // query history in MCE: '' = off, each user's history stays in their own browser; 'SQLStudioHistory' = on, also kept in that Data Extension for 90 days, which every user with Data Extension access in this Business Unit can read
     var allowedReferrers = [];                          // optional allowlist of URL prefixes; empty = disabled
     var debugging = false;                              // true writes debug output instead of logging to ErrorLog; keep false in production
 
@@ -116,6 +116,7 @@
     3.5. Validation helpers
     3.6. Session, naming and misc helpers
     3.7. Data Extension provisioning (WSProxy)
+    3.8. Reads through WSProxy, in this Business Unit
     4. Authentication Flow (GET)
     4.1. Authorization
     4.2. Authentication with REST Token
@@ -134,7 +135,7 @@
     /* ----------------------------------------------------------------------- */
 
     var appName        = 'SQLStudio';
-    var appVersion      = '1.0.0';
+    var appVersion      = '1.1.0';
     // No refresh tokens: see docs/EXTENDING.md ("Refresh tokens (optional, not shipped)") for why
     // and what it would take to add one back. Sessions last about 20 minutes; the frontend's
     // expiry modal re-authenticates with one click.
@@ -153,6 +154,8 @@
 
     var method = Platform.Request.Method();
     var apiCallCount = 0;                              // SOAP + REST calls made while serving this request; returned as meta.apiCalls
+    var wsproxyCallCount = 0;                          // WSProxy calls made while serving this request, inside Marketing Cloud Engagement and counted apart from API calls; returned as meta.wsproxyCalls
+    var currentAccessToken = '';                       // the access token this request works with, for maskSecrets: set where the POST flow loads a session's token and where sign-in receives one
 
     /* ----------------------------------------------------------------------- */
     /* ---------------------- 3. HELPER FUNCTIONS ----------------------------- */
@@ -176,7 +179,7 @@
     /**
      * @function apiError
      * @description Builds a plain error object carrying one of the documented error codes.
-     * @param {string} code - One of BAD_REQUEST, SESSION_INVALID, SESSION_EXPIRED, UNKNOWN_ACTION, MCE_ERROR, NOT_FOUND, RUN_IN_PROGRESS, HISTORY_OLD_LAYOUT, INTERNAL.
+     * @param {string} code - One of BAD_REQUEST, SESSION_INVALID, SESSION_EXPIRED, UNKNOWN_ACTION, MCE_ERROR, WSPROXY_FAILED, NOT_FOUND, RUN_IN_PROGRESS, HISTORY_OLD_LAYOUT, INTERNAL.
      * @param {string} message - Human readable message.
      * @param {string} [details] - Optional raw detail text.
      * @returns {Object} error object with code, message, details.
@@ -188,6 +191,21 @@
             details: (details === undefined) ? null : details
         };
         return err;
+    };
+
+    /**
+     * @function callMeta
+     * @description The `meta` every POST answer carries: the API calls (SOAP and REST) and the WSProxy
+     *              calls made while serving the request. WSProxy runs inside Marketing Cloud Engagement,
+     *              and SQL Studio counts its calls apart from its API calls.
+     * @returns {{apiCalls: number, wsproxyCalls: number}}
+     */
+    function callMeta() {
+        var meta = {
+            apiCalls: apiCallCount,
+            wsproxyCalls: wsproxyCallCount
+        };
+        return meta;
     };
 
     /**
@@ -219,20 +237,22 @@
 
     /**
      * @function sfmcErrorFromResponse
-     * @description Builds an MCE_ERROR from a failed REST call.
+     * @description Builds an MCE_ERROR from a failed REST call. The details are masked before they are
+     *              cut to 2000 characters, so the cut never leaves part of a secret for maskSecrets to miss.
      * @param {Object} res - Result of httpJSON.
      * @returns {Object} apiError.
      */
     function sfmcErrorFromResponse(res) {
         var message = mostSpecificMessage(res);
-        var details = truncate(res ? res.text : '', 2000);
+        var details = truncate(maskSecrets(res ? res.text : ''), 2000);
         var err = apiError('MCE_ERROR', message, details);
         return err;
     };
 
     /**
      * @function sfmcErrorFromSoap
-     * @description Builds an MCE_ERROR from a failed SOAP call.
+     * @description Builds an MCE_ERROR from a failed SOAP call. The details are masked before they are
+     *              cut to 2000 characters, as in sfmcErrorFromResponse.
      * @param {Object} soapRes - Result of soap().
      * @returns {Object} apiError.
      */
@@ -245,7 +265,7 @@
             };
         };
         var statusLine = (soapRes && soapRes.httpStatus) ? 'HTTP status: ' + soapRes.httpStatus + '\n' : '';
-        var details = truncate(statusLine + (soapRes ? soapRes.raw : ''), 2000);
+        var details = truncate(maskSecrets(statusLine + (soapRes ? soapRes.raw : '')), 2000);
         var err = apiError('MCE_ERROR', message, details);
         return err;
     };
@@ -329,6 +349,13 @@
             errorDetails = (err.description === undefined) ? null : String(err.description);
         };
 
+        /* Every text that leaves here, the response and the ErrorLog row alike, is masked first: a
+        platform error or an MCE answer can quote the client secret, the key material or the token. */
+        errorText = maskSecrets(errorText);
+        if (typeof errorDetails == 'string') {
+            errorDetails = maskSecrets(errorDetails);
+        };
+
         var result = {
             ok: false,
             error: { code: errorCode, message: errorText, details: errorDetails }
@@ -338,9 +365,9 @@
             var logDescription = errorDetails;
             if (logDescription === null) {
                 try {
-                    logDescription = Stringify(err);
+                    logDescription = maskSecrets(Stringify(err));
                 } catch (stringifyErr) {
-                    logDescription = String(err);
+                    logDescription = maskSecrets(String(err));
                 };
             };
             logError(errorText, logDescription);
@@ -351,21 +378,111 @@
     /* ---------------------- 3.3. XML helpers ---------------------------------- */
 
     /**
+     * @function isDigitsOf
+     * @description Tells whether a text is one or more characters, all of them in a set of digits.
+     * @param {string} text
+     * @param {string} digits - the allowed characters, such as '0123456789'
+     * @returns {boolean}
+     */
+    function isDigitsOf(text, digits) {
+        if (text.length === 0) {
+            return false;
+        };
+        for (var i = 0; i < text.length; i++) {
+            if (digits.indexOf(text.charAt(i)) === -1) {
+                return false;
+            };
+        };
+        return true;
+    };
+
+    /**
+     * @function xmlEntityText
+     * @description The text one XML reference stands for, from what is between its & and its ;: one of the
+     *              five named entities, or a numeric character reference, decimal (#13) or hexadecimal (#xD),
+     *              a code point above U+FFFF as its two UTF-16 units. Null for anything else, and for a number
+     *              that is no character XML allows (0, a surrogate, above U+10FFFF), which is then left as it is.
+     * @param {string} name - such as 'amp', '#13' or '#x1F600'
+     * @returns {?string}
+     */
+    function xmlEntityText(name) {
+        if (name === 'lt') {
+            return '<';
+        };
+        if (name === 'gt') {
+            return '>';
+        };
+        if (name === 'quot') {
+            return '"';
+        };
+        if (name === 'apos') {
+            return '\'';
+        };
+        if (name === 'amp') {
+            return '&';
+        };
+        if (name.charAt(0) !== '#') {
+            return null;
+        };
+        var codePoint;
+        if (name.charAt(1) === 'x') {
+            if (!isDigitsOf(name.substring(2), '0123456789abcdefABCDEF')) {
+                return null;
+            };
+            codePoint = parseInt(name.substring(2), 16);
+        } else {
+            if (!isDigitsOf(name.substring(1), '0123456789')) {
+                return null;
+            };
+            codePoint = parseInt(name.substring(1), 10);
+        };
+        if (isNaN(codePoint) || codePoint < 1 || codePoint > 0x10FFFF || (codePoint >= 0xD800 && codePoint <= 0xDFFF)) {
+            return null;
+        };
+        if (codePoint <= 0xFFFF) {
+            return String.fromCharCode(codePoint);
+        };
+        var offset = codePoint - 0x10000;
+        return String.fromCharCode(0xD800 + Math.floor(offset / 0x400), 0xDC00 + (offset % 0x400));
+    };
+
+    /**
      * @function xmlDecode
-     * @description Decodes the small set of XML entities used by SOAP responses.
+     * @description Decodes the references of XML text: the five named entities and numeric character
+     *              references (&#13;, &#xD;, &#x1F600;), in one pass from left to right, so the text a
+     *              reference gives is never read again: &amp;lt; is "&lt;", not "<". An & that starts no
+     *              reference is kept as it is.
      * @param {string} text
      * @returns {string}
      */
     function xmlDecode(text) {
-        /* split and join, not replace: on the org a regular-expression replace failed with "Object
+        /* indexOf and substring, not replace: on the org a regular-expression replace failed with "Object
         expected: replace" in listRuns and the Data Extension search action 0.6.0 removed, and
         nowhere else. */
-        var result = '' + text;
-        result = result.split('&lt;').join('<');
-        result = result.split('&gt;').join('>');
-        result = result.split('&quot;').join('"');
-        result = result.split('&apos;').join('\'');
-        result = result.split('&amp;').join('&');
+        var source = '' + text;
+        if (source.indexOf('&') === -1) {
+            return source;
+        };
+        var result = '';
+        var at = 0;
+        while (at < source.length) {
+            var ampAt = source.indexOf('&', at);
+            if (ampAt === -1) {
+                result += source.substring(at);
+                break;
+            };
+            result += source.substring(at, ampAt);
+            var semicolonAt = source.indexOf(';', ampAt + 1);
+            /* The longest reference is &#x10FFFF; or &#1114111;: a ; further on ends no reference. */
+            var decoded = (semicolonAt !== -1 && semicolonAt - ampAt <= 10) ? xmlEntityText(source.substring(ampAt + 1, semicolonAt)) : null;
+            if (decoded === null) {
+                result += '&';
+                at = ampAt + 1;
+            } else {
+                result += decoded;
+                at = semicolonAt + 1;
+            };
+        };
         return result;
     };
 
@@ -838,18 +955,30 @@
     };
 
     /**
+     * @function isTaskIdShape
+     * @description Tells whether a value has the shape of a SOAP Perform Task ID: a string of 1 to 64
+     *              letters, digits and hyphens. The exact shape Marketing Cloud Engagement returns is not
+     *              documented, so this only tells an identifier from a value that clearly is not one.
+     *              Shared by requireTaskId, actionRunQuery's check of the ID Perform answered, and
+     *              getOneRunStatus's check of each entry's taskId.
+     * @param {*} value
+     * @returns {boolean}
+     */
+    function isTaskIdShape(value) {
+        return typeof value === 'string' && value.length >= 1 && value.length <= 64 && /^[A-Za-z0-9-]+$/.test(value);
+    };
+
+    /**
      * @function requireTaskId
      * @description Validates a SOAP Perform Task ID (actionRunQuery's taskId, read back by
-     *              getRunOutcome): letters, digits and hyphens only, 1 to 64 characters. The
-     *              exact shape Marketing Cloud Engagement returns is not documented, so this only
-     *              guards against a value that is clearly not an identifier.
+     *              getRunOutcome) with isTaskIdShape.
      * @param {*} value
      * @param {string} fieldName
      * @returns {string}
      */
     function requireTaskId(value, fieldName) {
         requireString(value, fieldName, 1, 64);
-        if (!/^[A-Za-z0-9-]+$/.test(value)) {
+        if (!isTaskIdShape(value)) {
             throw apiError('BAD_REQUEST', 'Field "' + fieldName + '" must contain only letters, digits and hyphens.', null);
         };
         return value;
@@ -871,7 +1000,9 @@
 
     /**
      * @function validateColumns
-     * @description Validates the runQuery column list per the naming rules in the spec.
+     * @description Validates the runQuery column list: 1 to 500 names of 1 to 128 characters, made of letters,
+     * digits, spaces, underscores, dots and hyphens, with no leading underscore, no name of digits only and no
+     * duplicate (compared without regard to case).
      * @param {*} columns
      * @returns {string[]} the trimmed, validated column names.
      */
@@ -1015,10 +1146,49 @@
     /* ---------------------- 3.6. Session, naming and misc helpers --------------- */
 
     /**
+     * @function maskSecrets
+     * @description Replaces every secret this request holds with '[redacted]' in a text that is about
+     *              to leave the Backend in an error: the client secret, the token key material
+     *              (password, salt and IV) and the access token in use (currentAccessToken). A platform
+     *              error can quote a request body, a header or an argument, so describeError and
+     *              buildErrorResponse mask every text they pass on. A secret of three characters or
+     *              fewer is left alone, since masking it would mangle the text around it.
+     * @param {*} text - The text, or anything that reads as one. null and undefined give ''.
+     * @returns {string} the text without the secrets
+     */
+    function maskSecrets(text) {
+        var masked = (text === null || text === undefined) ? '' : String(text);
+        var secrets = [clientSecret, currentAccessToken];
+        if (tokenKeyMaterial) {
+            secrets.push(tokenKeyMaterial.password);
+            secrets.push(tokenKeyMaterial.salt);
+            secrets.push(tokenKeyMaterial.iv);
+        };
+        for (var i = 0; i < secrets.length; i++) {
+            var secret = secrets[i];
+            if (secret && String(secret).length > 3) {
+                masked = masked.split(String(secret)).join('[redacted]');
+            };
+        };
+        return masked;
+    };
+
+    /**
+     * @function maskNullable
+     * @description maskSecrets for a value that may be absent, such as a field of an MCE answer: null and
+     *              undefined stay null, so the app still tells an empty value from a missing one.
+     * @param {*} text
+     * @returns {?string}
+     */
+    function maskNullable(text) {
+        return (text === null || text === undefined) ? null : maskSecrets(text);
+    };
+
+    /**
      * @function describeError
      * @description Turns a caught error into plain text for ErrorLog or debug output: its message and
-     *              description, with the client secret and the token key material masked in case a
-     *              platform error ever quotes a request body or an argument, cut to 2000 characters.
+     *              description, with the secrets masked (maskSecrets) in case a platform error ever
+     *              quotes a request body or an argument, cut to 2000 characters.
      * @param {*} err - Whatever was caught.
      * @returns {string}
      */
@@ -1032,15 +1202,7 @@
         } catch (describeErr) {
             text = 'Unknown error';
         };
-        if (clientSecret && String(clientSecret).length > 3) {
-            text = text.split(String(clientSecret)).join('[redacted]');
-        };
-        if (tokenKeyMaterial) {
-            text = text.split(tokenKeyMaterial.password).join('[redacted]');
-            text = text.split(tokenKeyMaterial.salt).join('[redacted]');
-            text = text.split(tokenKeyMaterial.iv).join('[redacted]');
-        };
-        return truncate(text, 2000);
+        return truncate(maskSecrets(text), 2000);
     };
 
     /**
@@ -1348,6 +1510,101 @@
             return '';
         };
         return rest.substring(separator + 1);
+    };
+
+    /* A run's Task ID is bound to the user who started it. Task IDs are sequential numbers, so they can be
+    guessed, and with the inBackendBu hint the Backend reads AsyncActivityStatus through WSProxy in its own
+    Business Unit, where the user's token does not limit what it reads. runQuery answers each Task ID with
+    its signature, and getRunStatus reads a task through WSProxy only for an entry whose signature matches
+    this user's. Without one, it reads with the token, whose own context limits what it can see. It is bound
+    to the user hash, not the session key, as an export's read is (exportSignature): every sign-in makes a
+    new session key, so a run bound to its session would lose its WSProxy reads when the session renews
+    itself, and in a second window of the same user. The signature is keyed with the token key's password,
+    which never leaves the Backend. */
+    var TASK_SIG_LABEL = 'SQLStudio.task.v1';
+    var TASK_SIG_LENGTH = 32;
+
+    /**
+     * @function taskSignature
+     * @description The signature that binds a Task ID to a user: the first TASK_SIG_LENGTH hex characters of
+     *              SHA256(token key password + '|' + TASK_SIG_LABEL + '|' + user hash + '|' + Task ID).
+     * @param {string} taskId - already checked with isTaskIdShape
+     * @param {string} userHash - computeUserHash of the session's row
+     * @returns {string} TASK_SIG_LENGTH lowercase hex characters
+     * @throws {Object} apiError INTERNAL when the platform cannot compute the hash (sha256Hex).
+     */
+    function taskSignature(taskId, userHash) {
+        return sha256Hex(tokenKey().password + '|' + TASK_SIG_LABEL + '|' + userHash + '|' + taskId).substring(0, TASK_SIG_LENGTH);
+    };
+
+    /**
+     * @function isTaskSignatureOk
+     * @description Tells whether a getRunStatus entry's taskSig is the one taskSignature gives for its Task ID
+     *              and this user, in whichever of the user's sessions it was given. A missing value, one of
+     *              another shape, a signature for another user and a hash the platform cannot compute are all
+     *              a no. It never throws.
+     * @param {string} taskId - already checked with isTaskIdShape
+     * @param {*} taskSig - the entry's taskSig, as the app sent it
+     * @param {string} userHash - computeUserHash of the session's row
+     * @returns {boolean}
+     */
+    function isTaskSignatureOk(taskId, taskSig, userHash) {
+        if (typeof taskSig !== 'string' || taskSig.length !== TASK_SIG_LENGTH || !userHash) {
+            return false;
+        };
+        try {
+            return taskSignature(taskId, userHash) === taskSig;
+        } catch (sigErr) {
+            return false;
+        };
+    };
+
+    /* An export's WSProxy read is bound to the user and the Data Extension it reads. A RequestID is a GUID
+    that WSProxy gives a read with more rows to come, and getNextBatch continues whichever read the RequestID
+    belongs to, whatever object type it is given. So exportRows answers each RequestID with its signature, and
+    a continuation must carry the one for this user and this Data Extension. It is bound to the user hash, not
+    the session key, so an export goes on when the session renews itself partway. The key is lowercased, as
+    Marketing Cloud Engagement matches a CustomerKey without regard to case. The signature is keyed with the
+    token key's password, which never leaves the Backend. */
+    var EXPORT_SIG_LABEL = 'SQLStudio.export.v1';
+    var EXPORT_SIG_LENGTH = 32;
+
+    /**
+     * @function exportSignature
+     * @description The signature that binds an export's RequestID to a user and a Data Extension: the first
+     *              EXPORT_SIG_LENGTH hex characters of SHA256(token key password + '|' + EXPORT_SIG_LABEL + '|' +
+     *              user hash + '|' + the key lowercased + '|' + RequestID).
+     * @param {string} requestId - a GUID WSProxy answered
+     * @param {string} userHash - computeUserHash of the session's row
+     * @param {string} deKey - the temporary Data Extension's key, already checked with isOwnTempDeKey
+     * @returns {string} EXPORT_SIG_LENGTH lowercase hex characters
+     * @throws {Object} apiError INTERNAL when the platform cannot compute the hash (sha256Hex).
+     */
+    function exportSignature(requestId, userHash, deKey) {
+        return sha256Hex(tokenKey().password + '|' + EXPORT_SIG_LABEL + '|' + userHash + '|' + String(deKey).toLowerCase() + '|' + requestId).substring(0, EXPORT_SIG_LENGTH);
+    };
+
+    /**
+     * @function isExportSignatureOk
+     * @description Tells whether an exportRows continuation's requestSig is the one exportSignature gives for its
+     *              RequestID, this user and this Data Extension. A missing value, one of another shape, a signature
+     *              for another user or another Data Extension and a hash the platform cannot compute are all a no.
+     *              It never throws.
+     * @param {string} requestId - already checked with requireGuid
+     * @param {*} requestSig - the payload's requestSig, as the app sent it
+     * @param {string} userHash
+     * @param {string} deKey
+     * @returns {boolean}
+     */
+    function isExportSignatureOk(requestId, requestSig, userHash, deKey) {
+        if (typeof requestSig !== 'string' || requestSig.length !== EXPORT_SIG_LENGTH || !userHash) {
+            return false;
+        };
+        try {
+            return exportSignature(requestId, userHash, deKey) === requestSig;
+        } catch (sigErr) {
+            return false;
+        };
     };
 
     /**
@@ -1706,7 +1963,7 @@
     /**
      * @function authLogFields
      * @description Field definitions for an auto-created AuthLog Data Extension, matching
-     *              docs/DEPLOYMENT.md section 1 ("AuthLog").
+     *              docs/DEPLOYMENT.md section 7 ("AuthLog").
      * @returns {Object[]}
      */
     function authLogFields() {
@@ -1725,7 +1982,7 @@
     /**
      * @function errorLogFields
      * @description Field definitions for an auto-created ErrorLog Data Extension, matching
-     *              docs/DEPLOYMENT.md section 1 ("ErrorLog").
+     *              docs/DEPLOYMENT.md section 7 ("ErrorLog").
      * @returns {Object[]}
      */
     function errorLogFields() {
@@ -1795,14 +2052,14 @@
      * @function isDataExtensionPresent
      * @description Tells whether a Data Extension already exists, by Name, using
      *              Script.Util.WSProxy. Runs in this Code Resource's own Business Unit and needs
-     *              no user token or permission. Counts toward apiCallCount like every other MCE
-     *              API call this backend makes. A WSProxy failure is treated as "not present" so
+     *              no user token or permission. Counts toward wsproxyCallCount, not apiCallCount,
+     *              as SQL Studio counts WSProxy calls apart. A WSProxy failure is treated as "not present" so
      *              the caller falls through to its own error handling instead of throwing here.
      * @param {string} deName
      * @returns {boolean}
      */
     function isDataExtensionPresent(deName) {
-        apiCallCount++;
+        wsproxyCallCount++;
         try {
             var proxy = new Script.Util.WSProxy();
             var result = proxy.retrieve('DataExtension', ['CustomerKey'], {
@@ -1839,7 +2096,7 @@
         var folderId = null;
         try {
             var proxy = new Script.Util.WSProxy();
-            apiCallCount++;
+            wsproxyCallCount++;
             var named = proxy.retrieve('DataFolder', ['ID', 'Name'], {
                 LeftOperand: { Property: 'Name', SimpleOperator: 'equals', Value: tempFolderName },
                 LogicalOperator: 'AND',
@@ -1848,14 +2105,14 @@
             if (named && named.Results && named.Results.length > 0) {
                 folderId = named.Results[0].ID;
             } else {
-                apiCallCount++;
+                wsproxyCallCount++;
                 var roots = proxy.retrieve('DataFolder', ['ID'], {
                     LeftOperand: { Property: 'ParentFolder.ID', SimpleOperator: 'equals', Value: 0 },
                     LogicalOperator: 'AND',
                     RightOperand: { Property: 'ContentType', SimpleOperator: 'equals', Value: 'dataextension' }
                 });
                 if (roots && roots.Results && roots.Results.length > 0) {
-                    apiCallCount++;
+                    wsproxyCallCount++;
                     var created = proxy.createItem('DataFolder', {
                         Name: tempFolderName,
                         CustomerKey: tempPrefix + 'Folder',
@@ -1915,7 +2172,7 @@
      * @returns {boolean}
      */
     function isWsProxyCreateOk(deName, fields, retentionDays, description, folderId) {
-        apiCallCount++;
+        wsproxyCallCount++;
         var isCreated = false;
         try {
             var proxy = new Script.Util.WSProxy();
@@ -2030,7 +2287,7 @@
      * @returns {boolean}
      */
     function isDataExtensionMoved(deName, folderId) {
-        apiCallCount++;
+        wsproxyCallCount++;
         var isMoved = false;
         try {
             var proxy = new Script.Util.WSProxy();
@@ -2114,6 +2371,94 @@
         return 'failed';
     };
 
+    /* ---------------------- 3.8. Reads through WSProxy, in this Business Unit -- */
+
+    /* The rules every WSProxy call in this file follows.
+    1. Own context only. WSProxy runs in this Code Resource's own Business Unit, with no setClientId
+    (impersonation reaches downwards only) and no options object: on the org, any options object
+    failed with "Unable to retrieve security descriptor for this frame".
+    2. Own objects only: the user's temporary Data Extensions (isOwnTempDeKey), with an export's read of
+    one continued only for the user and the key it was started for (its requestSig, see exportSignature),
+    the user's ad-hoc Query Activities (compared with adHocActivityKey), AsyncActivityStatus for a Task ID
+    the user started (its taskSig, see taskSignature), and the metadata of this Business Unit's own
+    shared and synchronized Data Extensions, never their rows.
+    3. Reads, and SQL Studio's own clean-up. Nothing here creates, updates or starts anything for a user.
+    4. The token path is the fallback. The app's inBackendBu hint only routes a request and never grants
+    anything. Without it, or when a WSProxy call throws, answers an error or finds nothing where an
+    object must exist, the caller runs the token code for that step, and the user sees no error. */
+
+    /**
+     * @function wsproxyRetrieve
+     * @description One WSProxy retrieve in this Code Resource's own Business Unit, counted in
+     *              wsproxyCallCount. It takes exactly three arguments on purpose: no options object (rule 1).
+     *              Its Status is read as isSoapError reads a SOAP OverallStatus: only OK and
+     *              MoreDataAvailable are answers, so a Status such as "Error: <message>" is a failure too.
+     *              Never throws, so a caller can always fall back to the token path.
+     * @param {string} objectType - e.g. 'QueryDefinition', 'AsyncActivityStatus', 'DataExtension'.
+     * @param {string[]} properties
+     * @param {Object} filter - { Property, SimpleOperator, Value }
+     * @returns {?Object[]} the Results (empty when nothing matches), or null when the call threw or answered an error.
+     */
+    function wsproxyRetrieve(objectType, properties, filter) {
+        wsproxyCallCount++;
+        try {
+            var proxy = new Script.Util.WSProxy();
+            var answer = proxy.retrieve(objectType, properties, filter);
+            if (!answer || isSoapError(String(answer.Status))) {
+                return null;
+            };
+            return answer.Results ? answer.Results : [];
+        } catch (retrieveErr) {
+            return null;
+        };
+    };
+
+    /**
+     * @function isWsproxyDeleteOk
+     * @description One WSProxy deleteItem in this Code Resource's own Business Unit, counted in
+     *              wsproxyCallCount. For SQL Studio's own clean-up only (rule 3), so its callers check
+     *              the key first. Its StatusCode is a CLR value, so it is read through String().
+     *              Never throws.
+     * @param {string} objectType - 'DataExtension'
+     * @param {Object} identifier - { CustomerKey } of the object to delete.
+     * @returns {boolean} true when the object is deleted.
+     */
+    function isWsproxyDeleteOk(objectType, identifier) {
+        wsproxyCallCount++;
+        try {
+            var proxy = new Script.Util.WSProxy();
+            var answer = proxy.deleteItem(objectType, identifier);
+            if (!answer) {
+                return false;
+            };
+            if (answer.Results && answer.Results.length > 0) {
+                return String(answer.Results[0].StatusCode) === 'OK';
+            };
+            return String(answer.Status) === 'OK';
+        } catch (deleteErr) {
+            return false;
+        };
+    };
+
+    /**
+     * @function wsproxyPropertyValues
+     * @description Reads an ObjectExtension result's Properties, an array of { Name, Value }, as WSProxy
+     *              answers an AsyncActivityStatus retrieve on the org.
+     * @param {Object} result - one WSProxy Results entry
+     * @returns {Object} value by name (text, or null for an empty value), empty when there are no properties.
+     */
+    function wsproxyPropertyValues(result) {
+        var values = {};
+        var properties = (result && result.Properties) ? result.Properties : [];
+        for (var i = 0; i < properties.length; i++) {
+            if (properties[i] && properties[i].Name !== undefined && properties[i].Name !== null) {
+                var value = properties[i].Value;
+                values[String(properties[i].Name)] = (value === null || value === undefined) ? null : String(value);
+            };
+        };
+        return values;
+    };
+
     if (isConfigOutdated) {
 
         /* CONFIG_OUTDATED short-circuit: runs instead of sections 4/5 below, whatever the method,
@@ -2131,7 +2476,7 @@
                 ok: false,
                 error: { code: 'CONFIG_OUTDATED', message: configOutdatedMessage, details: null }
             };
-            response.meta = { apiCalls: apiCallCount };
+            response.meta = callMeta();
             Platform.Response.SetResponseHeader('Content-Type', 'application/json; charset=utf-8');
             Platform.Response.SetResponseHeader('Cache-Control', 'no-store');
             /* Emitted by the ctrl:var line for stringifiedResponse at the end of the file, like every
@@ -2160,7 +2505,7 @@
                 ok: false,
                 error: { code: 'CONFIG_INVALID', message: configInvalidMessage, details: null }
             };
-            response.meta = { apiCalls: apiCallCount };
+            response.meta = callMeta();
             Platform.Response.SetResponseHeader('Content-Type', 'application/json; charset=utf-8');
             Platform.Response.SetResponseHeader('Cache-Control', 'no-store');
             var stringifiedResponse = Stringify(response);
@@ -2196,11 +2541,14 @@
             if (errorCode === '') {
                 errorCode = 'server_error';
             };
-            var errorText = (error && error.message) ? String(error.message) : errorCode;
-            var errorDetails = (error && error.description) ? String(error.description) : '';
-            var errorUrl = pageURL + '?error=' + urlEncode(errorCode) + '&error_description=' + urlEncode(errorDetails);
+            /* Every text that leaves here, the URL, the ErrorLog row and the debug output alike, is masked
+            first, as buildErrorResponse masks a POST error: a description can quote what a platform
+            error or Marketing Cloud Engagement's answer held. */
+            var errorText = maskSecrets((error && error.message) ? String(error.message) : errorCode);
+            var errorDetails = maskSecrets((error && error.description) ? String(error.description) : '');
+            var errorUrl = pageURL + '?error=' + urlEncode(maskSecrets(errorCode)) + '&error_description=' + urlEncode(errorDetails);
             if (debugging) {
-                debugValue('Found error', error);
+                debugValue('Found error', maskSecrets(Stringify(error)));
                 return null;
             };
             /* M4: a failed write to errorDE must never block the redirect. */
@@ -2250,20 +2598,21 @@
          * @description Describes a failed token exchange for ErrorLog: the HTTP status plus the
          *              OAuth error code and description Marketing Cloud Engagement returned, such as
          *              invalid_client or a redirect_uri mismatch. The token endpoint's error body
-         *              carries neither the client secret nor a token.
+         *              carries neither the client secret nor a token. Each part is masked before it is
+         *              cut all the same, so a cut never leaves part of a secret behind.
          * @param {Object} tokenRes - Result of httpJSON.
          * @returns {string}
          */
         function tokenErrorText(tokenRes) {
             var text = 'Status: ' + tokenRes.status;
             if (tokenRes.status === 0 && tokenRes.text) {
-                text += '. ' + truncate(tokenRes.text, 500);
+                text += '. ' + truncate(maskSecrets(tokenRes.text), 500);
             };
             if (tokenRes.json && typeof tokenRes.json.error === 'string') {
-                text += '. Error: ' + truncate(tokenRes.json.error, 100);
+                text += '. Error: ' + truncate(maskSecrets(tokenRes.json.error), 100);
             };
             if (tokenRes.json && typeof tokenRes.json.error_description === 'string') {
-                text += '. ' + truncate(tokenRes.json.error_description, 500);
+                text += '. ' + truncate(maskSecrets(tokenRes.json.error_description), 500);
             };
             return text;
         };
@@ -2399,6 +2748,8 @@
                     var accessToken = (tokenRes.status === 200 && tokenRes.json && tokenRes.json.access_token) ? String(tokenRes.json.access_token) : '';
 
                     if (accessToken !== '') {
+                        /* From here on, any error text this request writes is masked of the token too. */
+                        currentAccessToken = accessToken;
                         var tokenExpire = computeExpiry(tokenRes.json.expires_in);
 
                         /* 4.2.4. Get user details. userName and userEmail are for display only. Who the
@@ -2516,6 +2867,42 @@
         };
 
         /**
+         * @function readBackendMid
+         * @description Reads the MID of this Code Resource's own Business Unit without an API call, with
+         *              the platform's member id personalisation string. It is built from two pieces, as
+         *              readRowCount builds its AMPscript, because Marketing Cloud Engagement evaluates such a
+         *              sequence anywhere in this file. The app compares it with whoami's `mid` to learn
+         *              whether the session is in this Business Unit, which is when it may send the
+         *              inBackendBu hint.
+         * @returns {?string} the MID, or null when the platform does not answer with digits (it leaves
+         *          the text as it is, or throws).
+         */
+        function readBackendMid() {
+            try {
+                var rendered = trimString(String(Platform.Function.TreatAsContent('%' + '%memberid%' + '%')));
+                return /^[0-9]+$/.test(rendered) ? rendered : null;
+            } catch (midErr) {
+                return null;
+            };
+        };
+
+        /**
+         * @function readStackKey
+         * @description Reads the account's stack from the "organization" object of /v2/userinfo: its
+         *              `stack_key`, such as 'S1' or 'S50'. The app puts it in the host of a link to
+         *              Contact Builder, so only the shape S and digits passes. Anything else, a missing
+         *              value, an empty one or a number, is null, and the app then shows no link.
+         * @param {?Object} organization - json.organization of the /v2/userinfo answer
+         * @returns {?string} the stack key, or null
+         */
+        function readStackKey(organization) {
+            if (!organization || typeof organization.stack_key !== 'string') {
+                return null;
+            };
+            return /^S[0-9]+$/.test(organization.stack_key) ? organization.stack_key : null;
+        };
+
+        /**
          * @function actionWhoami
          * @description Returns who is signed in, the Business Unit, the session's remaining seconds,
          *              whether server-side history is on, and which of SQL Studio's own Data Extensions
@@ -2524,6 +2911,10 @@
          *              id itself. `identitySource` says where the user id came from, 'sub' or
          *              'preferred_username', read from the same /v2/userinfo call (null when that call
          *              fails), for the console line and the org check. The e-mail is for display only.
+         *              `backendMid` is the MID of the Business Unit this Backend is installed in, as text.
+         *              `stackKey` is the account's stack from the same call (organization.stack_key, such as
+         *              'S1'), or null when it is not of the shape S and digits: the app builds its Contact
+         *              Builder link from it and never from a guess.
          * @param {Object} payload - {}
          * @param {Object} authRow
          * @returns {Object}
@@ -2534,6 +2925,7 @@
             var mid = null;
             var enterpriseId = null;
             var identitySource = null;
+            var stackKey = null;
 
             var res = httpJSON('GET', authBase + '/v2/userinfo', null, authRow.token);
             if (res.status === 200 && res.json) {
@@ -2554,6 +2946,7 @@
                     if (res.json.organization.enterprise_id !== undefined) {
                         enterpriseId = res.json.organization.enterprise_id;
                     };
+                    stackKey = readStackKey(res.json.organization);
                 };
             };
 
@@ -2571,7 +2964,9 @@
                 userKey: computeUserHash(authRow),
                 identitySource: identitySource,
                 mid: mid,
+                backendMid: readBackendMid(),
                 enterpriseId: enterpriseId,
+                stackKey: stackKey,
                 tokenSecondsLeft: secondsUntil(authRow.tokenExpire),
                 backendVersion: appVersion,
                 historyEnabled: (historyDE !== ''),
@@ -3077,7 +3472,7 @@
                     queryRootId = findTopFolderId(queryFolders, 'queryactivity');
                     folders = folders.concat(queryFolders);
                 } catch (listErr) {
-                    warnings.push('Could not list the query folders: ' + ((listErr && listErr.message) ? listErr.message : String(listErr)));
+                    warnings.push(maskSecrets('Could not list the query folders: ' + ((listErr && listErr.message) ? listErr.message : String(listErr))));
                 };
             };
 
@@ -3091,7 +3486,7 @@
                     created.push('dataextension');
                 } else {
                     deFolderId = deRootId;
-                    warnings.push(deCreate.message);
+                    warnings.push(maskSecrets(deCreate.message));
                 };
             };
             if (!queryFolderId) {
@@ -3101,7 +3496,7 @@
                     created.push('queryactivity');
                 } else {
                     queryFolderId = queryRootId;
-                    warnings.push(queryCreate.message);
+                    warnings.push(maskSecrets(queryCreate.message));
                 };
             };
 
@@ -3165,15 +3560,17 @@
          *              run Data Extensions (tempPrefix + an 8-char hex user hash + a
          *              yyyyMMdd_HHmmss stamp, from any user and any slot in the pool - see
          *              makeTempDeKey), so actionListDataExtensions can leave it out of the list it
-         *              returns. Matched with indexOf/substring/charAt, not a regex: a regex replace()
-         *              failed with "Object expected: replace" on the first org deployment (see the
-         *              note above actionListRuns).
+         *              returns, and the WSProxy reads of shared Data Extensions never touch one. Matched
+         *              without regard to case, as Marketing Cloud Engagement matches a CustomerKey: a key
+         *              such as 'sqlstudio_FFFFFFFF_20260919_100000' names the same Data Extension. Matched
+         *              with indexOf/substring/charAt, not a regex: a regex replace() failed with "Object
+         *              expected: replace" on the first org deployment (see the note above actionListRuns).
          * @param {string} key
          * @returns {boolean}
          */
         function isTempDeKey(key) {
-            var text = '' + (key || '');
-            if (text.indexOf(tempPrefix) !== 0) {
+            var text = ('' + (key || '')).toLowerCase();
+            if (text.indexOf(tempPrefix.toLowerCase()) !== 0) {
                 return false;
             };
             /* <8-char hex userHash>_<8-digit date>_<6-digit time> = 24 characters, once a slot
@@ -3204,49 +3601,401 @@
             return true;
         };
 
+        /* The five properties the Data Extension list always asks for. */
+        var DE_LIST_PROPERTIES = ['ObjectID', 'CustomerKey', 'Name', 'CategoryID', 'IsSendable'];
+        /* The four it asks for besides, free in the same call: the Data Extension's send relationship (the field of the
+        Data Extension and the subscriber field of Marketing Cloud Engagement it maps to), the key of the template it was made
+        from, and its description. A Retrieve that asks for a property Marketing Cloud Engagement cannot retrieve fails as a
+        whole, with an error such as "The Request Property(s) ... do not match with the fields of DataExtension retrieve"
+        (an org check saw that wording from WSProxy), so actionListDataExtensions asks again without them. */
+        var DE_LIST_EXTRA_PROPERTIES = ['SendableDataExtensionField.Name', 'SendableSubscriberField.Name', 'Template.CustomerKey', 'Description'];
+        /* The longest description an item carries: a Data Extension list of 2,500 per page stays a bounded answer. */
+        var DE_LIST_DESCRIPTION_MAX = 1000;
+        /* The longest error text of a refusal the answer carries (extrasError). */
+        var DE_LIST_ERROR_MAX = 300;
+
+        /**
+         * @function containsText
+         * @description Tells whether a list of strings holds a value, compared without regard to case. A loop, as
+         *              Array.prototype.indexOf is not ES3.
+         * @param {string[]} list
+         * @param {string} value
+         * @returns {boolean}
+         */
+        function containsText(list, value) {
+            var lower = ('' + value).toLowerCase();
+            for (var i = 0; i < list.length; i++) {
+                if (('' + list[i]).toLowerCase() === lower) {
+                    return true;
+                };
+            };
+            return false;
+        };
+
+        /**
+         * @function isPropertyNameChar
+         * @description Tells whether a character can be part of a property name as Marketing Cloud Engagement
+         *              writes one: letters, digits and underscores.
+         * @param {string} ch
+         * @returns {boolean}
+         */
+        function isPropertyNameChar(ch) {
+            return (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch === '_';
+        };
+
+        /**
+         * @function mentionsProperty
+         * @description Tells whether an error text names a property as a word of its own, compared without regard to
+         *              case: not inside a longer name, and not as the start of a dotted one, so "Template" is not
+         *              found in "Template.Name", and "Description" is not found in "DescriptionText". A full stop that
+         *              ends a sentence does not continue the name.
+         * @param {string} text
+         * @param {string} property
+         * @returns {boolean}
+         */
+        function mentionsProperty(text, property) {
+            var haystack = text.toLowerCase();
+            var needle = property.toLowerCase();
+            var from = 0;
+            var at = haystack.indexOf(needle, from);
+            while (at !== -1) {
+                var before = (at === 0) ? '' : haystack.charAt(at - 1);
+                var afterAt = at + needle.length;
+                var after = (afterAt < haystack.length) ? haystack.charAt(afterAt) : '';
+                var isAfterOpen = (after === '.' && afterAt + 1 < haystack.length && isPropertyNameChar(haystack.charAt(afterAt + 1))) ||
+                    (after !== '' && isPropertyNameChar(after));
+                var isBeforeOpen = (before !== '' && (isPropertyNameChar(before) || before === '.'));
+                if (!isAfterOpen && !isBeforeOpen) {
+                    return true;
+                };
+                from = at + 1;
+                at = haystack.indexOf(needle, from);
+            };
+            return false;
+        };
+
+        /**
+         * @function errorText
+         * @description Gathers the text of a failed SOAP answer that says what went wrong: its OverallStatus, the
+         *              StatusMessage of its first result and a fault's faultstring. Not the whole answer, so a word
+         *              of some other part of it is never taken for a property name.
+         * @param {Object} soapRes - Result of soap().
+         * @returns {string}
+         */
+        function errorText(soapRes) {
+            var text = '' + (soapRes.overallStatus || '');
+            if (soapRes.results && soapRes.results.length > 0) {
+                text += ' ' + (xmlValue(soapRes.results[0], 'StatusMessage') || '');
+            };
+            text += ' ' + (xmlValue(soapRes.raw, 'faultstring') || '');
+            return text;
+        };
+
+        /**
+         * @function refusedPropertiesText
+         * @description The part of a refusal's error text (errorText) that lists the properties Marketing Cloud
+         *              Engagement did not accept: what stands between "Request Property(s)" and "do not match", as in
+         *              "The Request Property(s) Template.CustomerKey do not match with the fields of DataExtension
+         *              retrieve". An error of another shape lists none, whatever words it holds, so "Permission denied.
+         *              See the description of your role." does not name Description.
+         * @param {Object} soapRes - Result of soap().
+         * @returns {string} The list, or an empty string when the text has no such part.
+         */
+        function refusedPropertiesText(soapRes) {
+            var text = errorText(soapRes);
+            var lower = text.toLowerCase();
+            var start = lower.indexOf('request propert');
+            if (start === -1) {
+                return '';
+            };
+            var listAt = lower.indexOf(' ', start + 'request propert'.length);
+            var end = lower.indexOf('not match', start);
+            if (listAt === -1 || end === -1 || end < listAt) {
+                return '';
+            };
+            return text.substring(listAt, end);
+        };
+
+        /**
+         * @function namedExtras
+         * @description Finds which of the extra properties a failed Retrieve names, so that only those are left out of
+         *              the next try. Only the list of a refusal's own wording is read (refusedPropertiesText), and in it
+         *              a property counts when it is named in full, or, for a dotted one, by its object alone
+         *              ("SendableSubscriberField", "Template"), which Marketing Cloud Engagement may write instead. An
+         *              error of any other wording names none.
+         * @param {Object} soapRes - Result of soap().
+         * @param {string[]} asked - The extra properties the failed request asked for.
+         * @returns {string[]} The properties named, in the order they were asked.
+         */
+        function namedExtras(soapRes, asked) {
+            var text = refusedPropertiesText(soapRes);
+            var named = [];
+            if (text === '') {
+                return named;
+            };
+            for (var i = 0; i < asked.length; i++) {
+                var dotAt = asked[i].indexOf('.');
+                if (mentionsProperty(text, asked[i]) || (dotAt !== -1 && mentionsProperty(text, asked[i].substring(0, dotAt)))) {
+                    named.push(asked[i]);
+                };
+            };
+            return named;
+        };
+
+        /* Words of an error text that says the call ran out of time or met a passing fault, such as an OverallStatus
+        "Error: The operation has timed out". Other properties would not fix it. */
+        var TRANSIENT_ERROR_WORDS = ['timed out', 'timeout', 'try again', 'temporarily'];
+
+        /**
+         * @function isTransientError
+         * @description Tells whether the error text of a failed SOAP call (errorText) says it ran out of time or met a
+         *              passing fault (TRANSIENT_ERROR_WORDS), compared without regard to case.
+         * @param {Object} soapRes - Result of soap().
+         * @returns {boolean}
+         */
+        function isTransientError(soapRes) {
+            var text = errorText(soapRes).toLowerCase();
+            for (var i = 0; i < TRANSIENT_ERROR_WORDS.length; i++) {
+                if (text.indexOf(TRANSIENT_ERROR_WORDS[i]) !== -1) {
+                    return true;
+                };
+            };
+            return false;
+        };
+
+        /**
+         * @function isSoapRefusal
+         * @description Tells whether a failed SOAP call was refused by Marketing Cloud Engagement in a way that asking
+         *              again with other properties may fix: the service answered (not a request that failed outright),
+         *              with an error OverallStatus or a client fault, and the text does not say the token is the
+         *              problem (isSoapSessionFault) or that the call ran out of time or met a passing fault
+         *              (isTransientError). A call that ran into the time limit, or never got an answer, would fail the
+         *              same way again, so asking again would only spend the time twice.
+         * @param {Object} soapRes - Result of soap().
+         * @returns {boolean}
+         */
+        function isSoapRefusal(soapRes) {
+            if (soapRes.status === 0 || isSoapSessionFault(soapRes.raw) || isTransientError(soapRes)) {
+                return false;
+            };
+            var faultCode = xmlValue(soapRes.raw, 'faultcode');
+            return (soapRes.overallStatus !== null && soapRes.overallStatus !== '' && isSoapError(soapRes.overallStatus)) ||
+                (faultCode !== null && faultCode.toLowerCase().indexOf('client') !== -1);
+        };
+
+        /**
+         * @function dataExtensionListBody
+         * @description Builds the Retrieve of the Data Extension list: the five properties it always needs, and the
+         *              extras it was given.
+         * @param {string[]} extras - Extra properties to ask for, from DE_LIST_EXTRA_PROPERTIES.
+         * @returns {string} The RetrieveRequestMsg XML.
+         */
+        function dataExtensionListBody(extras) {
+            var propertiesXml = '';
+            var i;
+            for (i = 0; i < DE_LIST_PROPERTIES.length; i++) {
+                propertiesXml += '<Properties>' + DE_LIST_PROPERTIES[i] + '</Properties>';
+            };
+            for (i = 0; i < extras.length; i++) {
+                propertiesXml += '<Properties>' + extras[i] + '</Properties>';
+            };
+            var bodyXml = '<RetrieveRequestMsg xmlns="http://exacttarget.com/wsdl/partnerAPI">' +
+                '<RetrieveRequest>' +
+                '<ObjectType>DataExtension</ObjectType>' +
+                propertiesXml +
+                '</RetrieveRequest>' +
+                '</RetrieveRequestMsg>';
+            return bodyXml;
+        };
+
+        /**
+         * @function emptyToNull
+         * @description Trims a value read from the XML, and gives null for one that is missing or empty.
+         * @param {?string} value
+         * @param {number} [max] - The most characters to keep.
+         * @returns {?string}
+         */
+        function emptyToNull(value, max) {
+            if (value === null || value === undefined) {
+                return null;
+            };
+            var text = trimString(value);
+            if (text === '') {
+                return null;
+            };
+            return (max === undefined) ? text : truncateWhole(text, max);
+        };
+
+        /**
+         * @function truncateWhole
+         * @description Caps a string at a maximum length, as truncate does, without keeping half of a character
+         *              that takes two UTF-16 units, such as an emoji: a cut that would end on the first of the two
+         *              ends before it.
+         * @param {string} text
+         * @param {number} max
+         * @returns {string}
+         */
+        function truncateWhole(text, max) {
+            var cut = truncate(text, max);
+            if (cut.length < text.length && cut.length > 0) {
+                var lastCode = cut.charCodeAt(cut.length - 1);
+                if (lastCode >= 0xD800 && lastCode <= 0xDBFF) {
+                    cut = cut.substring(0, cut.length - 1);
+                };
+            };
+            return cut;
+        };
+
+        /**
+         * @function refusalText
+         * @description The text of a refusal (errorText) as the answer passes it on in extrasError: trimmed, masked
+         *              and cut at DE_LIST_ERROR_MAX characters, so the exact wording Marketing Cloud Engagement used can
+         *              be read on the org after the retry has made the list load.
+         * @param {Object} soapRes - Result of soap().
+         * @returns {string}
+         */
+        function refusalText(soapRes) {
+            return truncateWhole(trimString(maskSecrets(errorText(soapRes))), DE_LIST_ERROR_MAX);
+        };
+
+        /**
+         * @function extraNamesOf
+         * @description Reads a list of extra property names from the payload, as skipExtras and askedExtras give them:
+         *              an array of strings of 1 to 64 characters, of which the first 20 are read. Anything else is
+         *              BAD_REQUEST. A name it does not know is the caller's to ignore.
+         * @param {*} value
+         * @param {string} field - The payload field's name, for the error.
+         * @returns {string[]} The names as given, or an empty list when there is none.
+         */
+        function extraNamesOf(value, field) {
+            var names = [];
+            if (value === undefined || value === null) {
+                return names;
+            };
+            requireArray(value, field);
+            for (var s = 0; s < value.length && s < 20; s++) {
+                requireString(value[s], field + '[' + s + ']', 1, 64);
+                names.push(value[s]);
+            };
+            return names;
+        };
+
         /**
          * @function actionListDataExtensions
          * @description Lists Data Extensions over SOAP, one page at a time (a payload.requestId
          *              continues a previous MoreDataAvailable page instead of starting a fresh
          *              Retrieve), leaving out SQL Studio's own temporary run Data Extensions so
-         *              the App's Data Extension list never shows them.
-         * @param {Object} payload - { requestId }
+         *              the App's Data Extension list never shows them. A first page also asks for the four
+         *              extras of DE_LIST_EXTRA_PROPERTIES, except those payload.skipExtras names. When Marketing
+         *              Cloud Engagement refuses the request (isSoapRefusal) the page is asked again once with the
+         *              extras left out that its error names (namedExtras), or with none when it names none, and
+         *              once more with none when that fails the same way, so a refusal costs one or two more
+         *              calls, and the answer's extrasUnavailable lists what was left out for the app to remember,
+         *              with extrasError, the text of each refusal (refusalText), so its wording can be read, and
+         *              extrasUnnamed, those of them no error named, which the app remembers for a day only: an
+         *              error that names no property may have had nothing to do with them.
+         *              A continued page has no properties of its own: it continues the request its first page
+         *              made, and takes the property set of that one. When it is refused (isSoapRefusal) while that
+         *              request asked for extras (payload.askedExtras), one of them may be what broke it, and the same
+         *              page would fail the same way on every try: the list starts again, once, from a first page with
+         *              the five properties alone, and the answer says so (isRestarted), with all those extras in
+         *              extrasUnavailable and extrasUnnamed, so the app drops the pages it had and leaves them out for a
+         *              day. A refused continued page of a request without extras is the failure it is.
+         * @param {Object} payload - { requestId, skipExtras, askedExtras }: skipExtras lists extra properties not to ask
+         *          for, as an earlier answer's extrasUnavailable gave them, and askedExtras, with a requestId, the extras
+         *          the request it continues asked for.
          * @param {Object} authRow
-         * @returns {{items: Object[], nextRequestId: ?string}} nextRequestId is set only when
-         *          another page is available.
+         * @returns {{items: Object[], nextRequestId: ?string, extrasUnavailable: ?string[], extrasUnnamed: ?string[],
+         *          extrasError: ?string, isRestarted: ?boolean}} Each item is { objectId, key, name, categoryId,
+         *          isSendable, sendableField, sendableSubscriberField, templateKey, description }:
+         *          the last four are null when empty, or when the property was not asked for. nextRequestId is set
+         *          only when another page is available. extrasUnavailable is set only when the page had to be asked
+         *          again, and lists the extra properties left out. extrasUnnamed and extrasError come with it: those
+         *          of them that no error named (empty when each was named), and the text of the refusal, and of the
+         *          second one after " | " when there were two. isRestarted is true only when a refused continued page
+         *          made the list start again: the items are then a first page's.
          */
         function actionListDataExtensions(payload, authRow) {
             var requestId = payload.requestId;
-            var bodyXml;
+            var soapRes;
+            var extrasUnavailable = null;
+            var extrasUnnamed = [];
+            var extrasError = null;
+            var isRestarted = false;
 
             if (requestId !== undefined && requestId !== null && requestId !== '') {
                 requireString(requestId, 'requestId', 1, 64);
-                bodyXml = '<RetrieveRequestMsg xmlns="http://exacttarget.com/wsdl/partnerAPI">' +
+                var askedList = extraNamesOf(payload.askedExtras, 'askedExtras');
+                var askedExtras = [];
+                for (var k = 0; k < DE_LIST_EXTRA_PROPERTIES.length; k++) {
+                    if (containsText(askedList, DE_LIST_EXTRA_PROPERTIES[k])) {
+                        askedExtras.push(DE_LIST_EXTRA_PROPERTIES[k]);
+                    };
+                };
+                soapRes = soap('Retrieve', '<RetrieveRequestMsg xmlns="http://exacttarget.com/wsdl/partnerAPI">' +
                     '<RetrieveRequest>' +
                     '<ContinueRequest>' + xmlEscape(requestId) + '</ContinueRequest>' +
                     '</RetrieveRequest>' +
-                    '</RetrieveRequestMsg>';
+                    '</RetrieveRequestMsg>', authRow.token);
+                if (!soapRes.ok && askedExtras.length > 0 && isSoapRefusal(soapRes)) {
+                    /* Refused while its request asked for extras: the list starts again with the five properties
+                    alone. That first page asks for no extras, so its own continued pages never start it again. */
+                    extrasUnavailable = askedExtras;
+                    extrasUnnamed = askedExtras;
+                    extrasError = refusalText(soapRes);
+                    isRestarted = true;
+                    soapRes = soap('Retrieve', dataExtensionListBody([]), authRow.token);
+                };
             } else {
-                bodyXml = '<RetrieveRequestMsg xmlns="http://exacttarget.com/wsdl/partnerAPI">' +
-                    '<RetrieveRequest>' +
-                    '<ObjectType>DataExtension</ObjectType>' +
-                    '<Properties>ObjectID</Properties>' +
-                    '<Properties>CustomerKey</Properties>' +
-                    '<Properties>Name</Properties>' +
-                    '<Properties>CategoryID</Properties>' +
-                    '<Properties>IsSendable</Properties>' +
-                    '</RetrieveRequest>' +
-                    '</RetrieveRequestMsg>';
+                var skipList = extraNamesOf(payload.skipExtras, 'skipExtras');
+                var extras = [];
+                for (var e = 0; e < DE_LIST_EXTRA_PROPERTIES.length; e++) {
+                    if (!containsText(skipList, DE_LIST_EXTRA_PROPERTIES[e])) {
+                        extras.push(DE_LIST_EXTRA_PROPERTIES[e]);
+                    };
+                };
+                soapRes = soap('Retrieve', dataExtensionListBody(extras), authRow.token);
+                if (!soapRes.ok && extras.length > 0 && isSoapRefusal(soapRes)) {
+                    var named = namedExtras(soapRes, extras);
+                    var remaining = [];
+                    if (named.length > 0) {
+                        for (var r = 0; r < extras.length; r++) {
+                            if (!containsText(named, extras[r])) {
+                                remaining.push(extras[r]);
+                            };
+                        };
+                    };
+                    extrasUnavailable = (named.length > 0) ? named : extras;
+                    extrasUnnamed = (named.length > 0) ? [] : extras;
+                    extrasError = refusalText(soapRes);
+                    soapRes = soap('Retrieve', dataExtensionListBody(remaining), authRow.token);
+                    if (!soapRes.ok && remaining.length > 0 && isSoapRefusal(soapRes)) {
+                        /* The others were refused as well: the five properties alone. Those this error does not name
+                        were left out without a name. */
+                        var namedAgain = namedExtras(soapRes, remaining);
+                        for (var u = 0; u < remaining.length; u++) {
+                            if (!containsText(namedAgain, remaining[u])) {
+                                extrasUnnamed.push(remaining[u]);
+                            };
+                        };
+                        extrasUnavailable = extras;
+                        extrasError = extrasError + ' | ' + refusalText(soapRes);
+                        soapRes = soap('Retrieve', dataExtensionListBody([]), authRow.token);
+                    };
+                };
             };
-
-            var soapRes = soap('Retrieve', bodyXml, authRow.token);
             if (!soapRes.ok) {
                 throw sfmcErrorFromSoap(soapRes);
             };
 
             var items = [];
             for (var i = 0; i < soapRes.results.length; i++) {
-                var block = soapRes.results[i];
+                /* The nested objects first, so no value of theirs is taken for the Data Extension's own: a Template block
+                holds a CustomerKey, and the send relationship's fields hold a Name. */
+                var sendableFieldBlock = xmlRaw(soapRes.results[i], 'SendableDataExtensionField');
+                var sendableSubscriberBlock = xmlRaw(soapRes.results[i], 'SendableSubscriberField');
+                var templateBlock = xmlRaw(soapRes.results[i], 'Template');
+                var block = xmlWithout(xmlWithout(xmlWithout(soapRes.results[i], 'SendableDataExtensionField'), 'SendableSubscriberField'), 'Template');
                 var key = xmlValue(block, 'CustomerKey');
                 if (isTempDeKey(key)) {
                     continue;
@@ -3256,7 +4005,11 @@
                     key: key,
                     name: xmlValue(block, 'Name'),
                     categoryId: toNullableInt(xmlValue(block, 'CategoryID')),
-                    isSendable: xmlValue(block, 'IsSendable') === 'true'
+                    isSendable: xmlValue(block, 'IsSendable') === 'true',
+                    sendableField: emptyToNull(sendableFieldBlock === null ? null : xmlValue(sendableFieldBlock, 'Name')),
+                    sendableSubscriberField: emptyToNull(sendableSubscriberBlock === null ? null : xmlValue(sendableSubscriberBlock, 'Name')),
+                    templateKey: emptyToNull(templateBlock === null ? null : xmlValue(templateBlock, 'CustomerKey')),
+                    description: emptyToNull(xmlValue(block, 'Description'), DE_LIST_DESCRIPTION_MAX)
                 });
             };
 
@@ -3264,63 +4017,391 @@
                 items: items,
                 nextRequestId: (soapRes.overallStatus === 'MoreDataAvailable') ? soapRes.requestId : null
             };
+            if (extrasUnavailable !== null) {
+                data.extrasUnavailable = extrasUnavailable;
+                data.extrasUnnamed = extrasUnnamed;
+                data.extrasError = extrasError;
+            };
+            if (isRestarted) {
+                data.isRestarted = true;
+            };
+            return data;
+        };
+
+        /* The folder content types that hold the parent Business Unit's shared and synchronized Data
+        Extensions, each with the kind its Data Extensions get. A retrieve by these content types also
+        covers the subfolders of a shared folder, such as the ones Data Cloud segment activations create. */
+        var PARENT_FOLDER_KINDS = {
+            shared_data: 'shared',
+            shared_dataextension: 'shared',
+            shared_salesforcedataextension: 'shared',
+            synchronizeddataextension: 'synchronized'
+        };
+        var PARENT_FOLDER_TYPES = ['shared_data', 'shared_dataextension', 'shared_salesforcedataextension', 'synchronizeddataextension'];
+        /* WSProxy answers up to 2,500 objects per batch, so 20 batches read up to 50,000. */
+        var PARENT_LIST_MAX_BATCHES = 20;
+        /* How long the parent list may read before it answers with what it has: well inside the time
+        Marketing Cloud Engagement gives a Code Resource request, which it ends with a 408. */
+        var PARENT_LIST_TIME_BUDGET_MS = 20000;
+
+        /**
+         * @function readWsProxyBatches
+         * @description Retrieves one object type through WSProxy in this Code Resource's own Business
+         *              Unit, then follows getNextBatch until no rows are left, maxBatches batches are
+         *              read or the deadline has passed. It passes no options object: any one fails in
+         *              this context with "Unable to retrieve security descriptor for this frame". Every
+         *              call counts in wsproxyCallCount, apart from the API calls. A call that
+         *              throws, or whose Status is neither OK nor MoreDataAvailable (isSoapError), throws
+         *              here: the caller decides what to fall back to.
+         * @param {Object} proxy - a Script.Util.WSProxy
+         * @param {string} objectType
+         * @param {string[]} properties
+         * @param {?Object} filter - a simple or complex filter, or null for none
+         * @param {number} maxBatches
+         * @param {number} deadlineMs - a (new Date()).getTime() value: no call starts at or after it
+         * @returns {{results: Object[], isCapped: boolean}} isCapped is true when rows were left unread,
+         *          or when the deadline had passed before the first call
+         */
+        function readWsProxyBatches(proxy, objectType, properties, filter, maxBatches, deadlineMs) {
+            var results = [];
+            var batchCount = 0;
+            var isCapped = false;
+            if ((new Date()).getTime() >= deadlineMs) {
+                isCapped = true;
+                return {
+                    results: results,
+                    isCapped: isCapped
+                };
+            };
+            wsproxyCallCount++;
+            var res = (filter === null) ? proxy.retrieve(objectType, properties) : proxy.retrieve(objectType, properties, filter);
+            while (res) {
+                if (isSoapError(String(res.Status))) {
+                    throw apiError('MCE_ERROR', 'WSProxy answered for ' + objectType + ': ' + truncate(String(res.Status), 300), null);
+                };
+                var batch = res.Results ? res.Results : [];
+                for (var i = 0; i < batch.length; i++) {
+                    results.push(batch[i]);
+                };
+                batchCount++;
+                if (!res.HasMoreRows) {
+                    break;
+                };
+                if (batchCount >= maxBatches || (new Date()).getTime() >= deadlineMs) {
+                    isCapped = true;
+                    break;
+                };
+                wsproxyCallCount++;
+                res = proxy.getNextBatch(objectType, res.RequestID);
+            };
+            var readResult = {
+                results: results,
+                isCapped: isCapped
+            };
+            return readResult;
+        };
+
+        /**
+         * @function parentFolderNames
+         * @description Lists the names on a folder's path from its parents, as ['Shared Items',
+         *              'Shared Data Extensions', 'Customer 360 Segments', '2022-07-09'], from the top
+         *              Shared Items folder, which is shared_data. The chain stops at the first parent that is
+         *              not in the map (the root, or a folder of another content type), and after 25
+         *              steps, so a loop in the data cannot run on.
+         * @param {string} folderId
+         * @param {Object} folderById - { id: { name, parentId, kind } }
+         * @returns {string[]} the names from the top folder down
+         */
+        function parentFolderNames(folderId, folderById) {
+            var names = [];
+            var currentId = folderId;
+            var steps = 0;
+            while (currentId !== '' && folderById.hasOwnProperty(currentId) && steps < 25) {
+                names.unshift(folderById[currentId].name);
+                currentId = folderById[currentId].parentId;
+                steps++;
+            };
+            return names;
+        };
+
+        /**
+         * @function actionListParentDataExtensions
+         * @description Lists the shared and synchronized Data Extensions of the Business Unit this Code
+         *              Resource is installed in, for the sidebar of a child Business Unit session: a
+         *              child's own token cannot see them, and this context can (a child queries them as
+         *              ENT.Name). It reads metadata only, never rows, through WSProxy in this Code
+         *              Resource's own context, so it needs no hint from the app. Folders first, by
+         *              content type with the IN filter (every folder, kept to those types in code, when
+         *              the filter throws, answers an error or finds none), then the Data Extensions of
+         *              those folders with getNextBatch,
+         *              by CategoryID with the IN filter (every Data Extension when that filter throws,
+         *              answers an error or finds none), kept in code to those whose folder is one of
+         *              them. SQL Studio's own temporary Data Extensions are left out. The reads stop at
+         *              PARENT_LIST_TIME_BUDGET_MS, and the answer then says isCapped. With this Code
+         *              Resource installed in a child, its own context has no such folders, so the list
+         *              comes back empty and the Data Extension read is skipped.
+         * @param {Object} payload - {}
+         * @param {Object} authRow
+         * @returns {{items: Object[], isCapped: boolean}} items hold { objectId, key, name, categoryId,
+         *          folderPath, folderPathSegments, kind: 'shared'|'synchronized' }. folderPath is the
+         *          path for display, its folder names joined with ' / ', and folderPathSegments holds
+         *          the names themselves, as a name may hold ' / ' too. isCapped is true when either read
+         *          stopped at PARENT_LIST_MAX_BATCHES batches or at the time budget.
+         * @throws {Object} apiError MCE_ERROR when WSProxy fails
+         */
+        function actionListParentDataExtensions(payload, authRow) {
+            var deadlineMs = (new Date()).getTime() + PARENT_LIST_TIME_BUDGET_MS;
+            var folderProperties = ['ID', 'Name', 'ContentType', 'ParentFolder.ID'];
+            var dataExtensionProperties = ['ObjectID', 'CustomerKey', 'Name', 'CategoryID', 'IsSendable'];
+            var folderFilter = {
+                Property: 'ContentType',
+                SimpleOperator: 'IN',
+                Value: PARENT_FOLDER_TYPES
+            };
+            var folderRead = null;
+            var dataExtensionRead = {
+                results: [],
+                isCapped: false
+            };
+            var folderById = {};
+            var folderIds = [];
+            try {
+                var proxy = new Script.Util.WSProxy();
+                try {
+                    folderRead = readWsProxyBatches(proxy, 'DataFolder', folderProperties, folderFilter, PARENT_LIST_MAX_BATCHES, deadlineMs);
+                } catch (inFilterErr) {
+                    folderRead = null;
+                };
+                /* The IN filter threw or answered an error, or found no folder, which a filter the org reads
+                differently could also give: read every folder, and keep the wanted content types below. */
+                if (folderRead === null || (folderRead.results.length === 0 && !folderRead.isCapped)) {
+                    folderRead = readWsProxyBatches(proxy, 'DataFolder', folderProperties, null, PARENT_LIST_MAX_BATCHES, deadlineMs);
+                };
+
+                for (var i = 0; i < folderRead.results.length; i++) {
+                    var folder = folderRead.results[i];
+                    var folderType = String(folder.ContentType);
+                    if (!PARENT_FOLDER_KINDS.hasOwnProperty(folderType)) {
+                        continue;
+                    };
+                    var parentFolder = folder.ParentFolder;
+                    var hasParent = !!parentFolder && parentFolder.ID !== undefined && parentFolder.ID !== null;
+                    folderById[String(folder.ID)] = {
+                        name: String(folder.Name),
+                        parentId: hasParent ? String(parentFolder.ID) : '',
+                        kind: PARENT_FOLDER_KINDS[folderType]
+                    };
+                    folderIds.push(String(folder.ID));
+                };
+
+                if (folderIds.length > 0) {
+                    var categoryFilter = {
+                        Property: 'CategoryID',
+                        SimpleOperator: 'IN',
+                        Value: folderIds
+                    };
+                    var filteredRead = null;
+                    try {
+                        filteredRead = readWsProxyBatches(proxy, 'DataExtension', dataExtensionProperties, categoryFilter, PARENT_LIST_MAX_BATCHES, deadlineMs);
+                    } catch (categoryFilterErr) {
+                        filteredRead = null;
+                    };
+                    /* The IN filter threw or answered an error, or found nothing, which a filter the org
+                    reads differently could also give: read every Data Extension, as before the filter,
+                    and keep the folders' ones below. */
+                    var isFilteredReadUsable = filteredRead !== null && (filteredRead.results.length > 0 || filteredRead.isCapped);
+                    dataExtensionRead = isFilteredReadUsable ? filteredRead : readWsProxyBatches(proxy, 'DataExtension', dataExtensionProperties, null, PARENT_LIST_MAX_BATCHES, deadlineMs);
+                };
+            } catch (readErr) {
+                throw apiError('MCE_ERROR', 'Marketing Cloud Engagement did not list the shared and synchronized Data Extensions of the Business Unit this Backend is installed in.', describeError(readErr));
+            };
+
+            var namesById = {};
+            var items = [];
+            for (var j = 0; j < dataExtensionRead.results.length; j++) {
+                var dataExtension = dataExtensionRead.results[j];
+                var categoryId = (dataExtension.CategoryID === null || dataExtension.CategoryID === undefined) ? '' : String(dataExtension.CategoryID);
+                if (!folderById.hasOwnProperty(categoryId)) {
+                    continue;
+                };
+                var key = String(dataExtension.CustomerKey);
+                if (isTempDeKey(key)) {
+                    continue;
+                };
+                if (!namesById.hasOwnProperty(categoryId)) {
+                    namesById[categoryId] = parentFolderNames(categoryId, folderById);
+                };
+                items.push({
+                    objectId: String(dataExtension.ObjectID),
+                    key: key,
+                    name: String(dataExtension.Name),
+                    categoryId: toNullableInt(categoryId),
+                    folderPath: namesById[categoryId].join(' / '),
+                    folderPathSegments: namesById[categoryId].slice(0),
+                    kind: folderById[categoryId].kind
+                });
+            };
+
+            var data = {
+                items: items,
+                isCapped: folderRead.isCapped || dataExtensionRead.isCapped
+            };
             return data;
         };
 
         /**
+         * @function isSharedOrSynchronizedKey
+         * @description Tells whether a key names one of this Business Unit's own shared or synchronized
+         *              Data Extensions, the only ones whose metadata WSProxy may read for a user (rule 2
+         *              in section 3.8). Two WSProxy reads in this Code Resource's own Business Unit: the
+         *              Data Extension's CategoryID by its CustomerKey, then that folder's ContentType,
+         *              which must be one of PARENT_FOLDER_TYPES, the types listParentDataExtensions
+         *              lists. A temporary key of SQL Studio's own is refused before any read, as it is
+         *              a user's run and never a shared Data Extension. Anything that is not a clear yes
+         *              (a failed read, no row, no folder, another content type) is a no, so the caller
+         *              reads with the user's token instead. It never throws.
+         * @param {string} customerKey - the Data Extension's key, without the ENT. prefix
+         * @returns {boolean}
+         */
+        function isSharedOrSynchronizedKey(customerKey) {
+            if (isTempDeKey(customerKey)) {
+                return false;
+            };
+            var dataExtensionRows = wsproxyRetrieve('DataExtension', ['CustomerKey', 'CategoryID'], {
+                Property: 'CustomerKey',
+                SimpleOperator: 'equals',
+                Value: customerKey
+            });
+            if (dataExtensionRows === null || dataExtensionRows.length < 1) {
+                return false;
+            };
+            var categoryId = dataExtensionRows[0].CategoryID;
+            if (categoryId === undefined || categoryId === null || String(categoryId) === '') {
+                return false;
+            };
+            var folderRows = wsproxyRetrieve('DataFolder', ['ID', 'ContentType'], {
+                Property: 'ID',
+                SimpleOperator: 'equals',
+                Value: String(categoryId)
+            });
+            if (folderRows === null || folderRows.length < 1 || folderRows[0].ContentType === undefined || folderRows[0].ContentType === null) {
+                return false;
+            };
+            return PARENT_FOLDER_KINDS.hasOwnProperty(String(folderRows[0].ContentType));
+        };
+
+        /**
+         * @function readFieldsWithWsProxy
+         * @description Reads a Data Extension's fields through WSProxy in this Code Resource's own
+         *              Business Unit, in the shape actionGetDataExtensionFields answers with. For a
+         *              parent's shared Data Extension, which the user's token in a child Business Unit
+         *              may not read but this context can. The caller checks the key first with
+         *              isSharedOrSynchronizedKey. It never throws.
+         * @param {string} customerKey - the Data Extension's key, without the ENT. prefix
+         * @returns {?Object[]} the fields, unsorted, or null when WSProxy failed or found no field
+         */
+        function readFieldsWithWsProxy(customerKey) {
+            var asText = function (value) {
+                return (value === null || value === undefined) ? null : String(value);
+            };
+            try {
+                var proxy = new Script.Util.WSProxy();
+                wsproxyCallCount++;
+                var res = proxy.retrieve('DataExtensionField', ['Name', 'FieldType', 'MaxLength', 'IsRequired', 'IsPrimaryKey', 'Ordinal', 'Scale', 'DefaultValue'], {
+                    Property: 'DataExtension.CustomerKey',
+                    SimpleOperator: 'equals',
+                    Value: customerKey
+                });
+                if (!res || isSoapError(String(res.Status)) || !res.Results || res.Results.length < 1) {
+                    return null;
+                };
+                var fields = [];
+                for (var i = 0; i < res.Results.length; i++) {
+                    var field = res.Results[i];
+                    fields.push({
+                        name: asText(field.Name),
+                        type: asText(field.FieldType),
+                        length: toNullableInt(asText(field.MaxLength)),
+                        scale: toNullableInt(asText(field.Scale)),
+                        isPrimaryKey: String(field.IsPrimaryKey) === 'true',
+                        isNullable: String(field.IsRequired) !== 'true',
+                        ordinal: toNullableInt(asText(field.Ordinal)),
+                        defaultValue: asText(field.DefaultValue)
+                    });
+                };
+                return fields;
+            } catch (wsproxyErr) {
+                return null;
+            };
+        };
+
+        /**
          * @function actionGetDataExtensionFields
-         * @description Retrieves a Data Extension's field schema over SOAP, by CustomerKey (an
-         *              ENT. shared-DE prefix, if present, is stripped before filtering).
+         * @description Retrieves a Data Extension's field schema, by CustomerKey. An ENT. shared-DE
+         *              prefix, if present, is stripped before filtering, and lifts the key limit from
+         *              36 to 40 characters (36 plus the prefix). An ENT. key is read through WSProxy
+         *              first, in this Code Resource's own Business Unit, since that is where a parent's
+         *              shared Data Extension is visible, but only once isSharedOrSynchronizedKey finds
+         *              it in a shared or synchronized folder there: any other Data Extension of this
+         *              Business Unit, another user's temporary one included, is no business of the
+         *              caller's. When that check says no, WSProxy fails or finds nothing, and for every
+         *              other key, the field schema is read over SOAP with the user's token.
          * @param {Object} payload - { key }
          * @param {Object} authRow
          * @returns {{key: string, fields: Object[]}} fields sorted by their DE ordinal.
          */
         function actionGetDataExtensionFields(payload, authRow) {
             var key = payload.key;
-            requireString(key, 'key', 1, 36);
+            var isEntKey = (typeof key === 'string') && key.indexOf('ENT.') === 0;
+            requireString(key, 'key', 1, isEntKey ? 40 : 36);
 
             var filterKey = key;
-            if (filterKey.indexOf('ENT.') === 0) {
+            if (isEntKey) {
                 filterKey = filterKey.substring(4);
+                requireString(filterKey, 'key', 1, 36);
             };
 
-            var bodyXml = '<RetrieveRequestMsg xmlns="http://exacttarget.com/wsdl/partnerAPI">' +
-                '<RetrieveRequest>' +
-                '<ObjectType>DataExtensionField</ObjectType>' +
-                '<Properties>Name</Properties>' +
-                '<Properties>FieldType</Properties>' +
-                '<Properties>MaxLength</Properties>' +
-                '<Properties>IsRequired</Properties>' +
-                '<Properties>IsPrimaryKey</Properties>' +
-                '<Properties>Ordinal</Properties>' +
-                '<Properties>Scale</Properties>' +
-                '<Properties>DefaultValue</Properties>' +
-                '<Filter xsi:type="SimpleFilterPart">' +
-                '<Property>DataExtension.CustomerKey</Property>' +
-                '<SimpleOperator>equals</SimpleOperator>' +
-                '<Value>' + xmlEscape(filterKey) + '</Value>' +
-                '</Filter>' +
-                '</RetrieveRequest>' +
-                '</RetrieveRequestMsg>';
+            var fields = (isEntKey && isSharedOrSynchronizedKey(filterKey)) ? readFieldsWithWsProxy(filterKey) : null;
 
-            var soapRes = soap('Retrieve', bodyXml, authRow.token);
-            if (!soapRes.ok) {
-                throw sfmcErrorFromSoap(soapRes);
-            };
+            if (fields === null) {
+                var bodyXml = '<RetrieveRequestMsg xmlns="http://exacttarget.com/wsdl/partnerAPI">' +
+                    '<RetrieveRequest>' +
+                    '<ObjectType>DataExtensionField</ObjectType>' +
+                    '<Properties>Name</Properties>' +
+                    '<Properties>FieldType</Properties>' +
+                    '<Properties>MaxLength</Properties>' +
+                    '<Properties>IsRequired</Properties>' +
+                    '<Properties>IsPrimaryKey</Properties>' +
+                    '<Properties>Ordinal</Properties>' +
+                    '<Properties>Scale</Properties>' +
+                    '<Properties>DefaultValue</Properties>' +
+                    '<Filter xsi:type="SimpleFilterPart">' +
+                    '<Property>DataExtension.CustomerKey</Property>' +
+                    '<SimpleOperator>equals</SimpleOperator>' +
+                    '<Value>' + xmlEscape(filterKey) + '</Value>' +
+                    '</Filter>' +
+                    '</RetrieveRequest>' +
+                    '</RetrieveRequestMsg>';
 
-            var fields = [];
-            for (var i = 0; i < soapRes.results.length; i++) {
-                var block = soapRes.results[i];
-                fields.push({
-                    name: xmlValue(block, 'Name'),
-                    type: xmlValue(block, 'FieldType'),
-                    length: toNullableInt(xmlValue(block, 'MaxLength')),
-                    scale: toNullableInt(xmlValue(block, 'Scale')),
-                    isPrimaryKey: xmlValue(block, 'IsPrimaryKey') === 'true',
-                    isNullable: xmlValue(block, 'IsRequired') !== 'true',
-                    ordinal: toNullableInt(xmlValue(block, 'Ordinal')),
-                    defaultValue: xmlValue(block, 'DefaultValue')
-                });
+                var soapRes = soap('Retrieve', bodyXml, authRow.token);
+                if (!soapRes.ok) {
+                    throw sfmcErrorFromSoap(soapRes);
+                };
+
+                fields = [];
+                for (var i = 0; i < soapRes.results.length; i++) {
+                    var block = soapRes.results[i];
+                    fields.push({
+                        name: xmlValue(block, 'Name'),
+                        type: xmlValue(block, 'FieldType'),
+                        length: toNullableInt(xmlValue(block, 'MaxLength')),
+                        scale: toNullableInt(xmlValue(block, 'Scale')),
+                        isPrimaryKey: xmlValue(block, 'IsPrimaryKey') === 'true',
+                        isNullable: xmlValue(block, 'IsRequired') !== 'true',
+                        ordinal: toNullableInt(xmlValue(block, 'Ordinal')),
+                        defaultValue: xmlValue(block, 'DefaultValue')
+                    });
+                };
             };
 
             fields.sort(function (a, b) {
@@ -3357,12 +4438,13 @@
             if (body.errors) {
                 for (var i = 0; i < body.errors.length; i++) {
                     var e = body.errors[i];
+                    /* MCE's own text, which reaches the app: masked as an error's text is. */
                     if (typeof e === 'string') {
-                        errors.push(e);
+                        errors.push(maskSecrets(e));
                     } else if (e && typeof e.message === 'string') {
-                        errors.push(e.message);
+                        errors.push(maskSecrets(e.message));
                     } else {
-                        errors.push(Stringify(e));
+                        errors.push(maskSecrets(Stringify(e)));
                     };
                 };
             };
@@ -3403,15 +4485,18 @@
          *              (SQLStudio_<userHash>_yyyyMMdd_HHmmss, from any slot in the pool - a slot
          *              2-QUERY_SLOT_COUNT suffix is stripped before the check). The free reads run as
          *              this Code Resource, not with the user's token, so they are limited to these -
-         *              never another user's hash, whichever slot ran it.
+         *              never another user's hash, whichever slot ran it. Compared without regard to
+         *              case, as Marketing Cloud Engagement matches a CustomerKey, so the answer is the
+         *              same for every spelling of one key. The hash is lowercase hex, so no two users'
+         *              keys differ only in case.
          * @param {Object} authRow
          * @param {string} deKey
          * @returns {boolean}
          */
         function isOwnTempDeKey(authRow, deKey) {
             var userHash = computeUserHash(authRow);
-            var ownKeyPattern = new RegExp('^' + tempPrefix + userHash + '_[0-9]{8}_[0-9]{6}$');
-            return ownKeyPattern.test(stripTempDeKeySlotSuffix(String(deKey || '')));
+            var ownKeyPattern = new RegExp('^' + (tempPrefix + userHash).toLowerCase() + '_[0-9]{8}_[0-9]{6}$');
+            return ownKeyPattern.test(stripTempDeKeySlotSuffix(String(deKey || '')).toLowerCase());
         };
 
         /**
@@ -3438,8 +4523,12 @@
          * @function readRowsFree
          * @description Reads one page of a run's results with LookupOrderedRows, which is not an API call,
          *              or returns null so the caller reads it through REST: past the first 2,000 rows, when
-         *              the row count cannot be read, or when fewer marked rows come back than the count
-         *              promises (the column default was not applied).
+         *              the row count cannot be read, when fewer marked rows come back than the count
+         *              promises (the column default was not applied), or when more come back than the
+         *              count says, also after a second count read (the count is behind the rows). The
+         *              REST rowset then answers the true count. It asks for one row past the page, up to
+         *              FREE_READ_MAX_ROWS, so a count behind at exactly the page's last row shows too. A
+         *              count behind at a value past that row is not seen on this page, only on a later one.
          * @param {string} deKey
          * @param {string[]} columns
          * @param {number} page
@@ -3460,18 +4549,34 @@
             if (orderBy) {
                 orderText = /\s(ASC|DESC)$/.test(orderBy) ? orderBy : orderBy + ' ASC';
             };
+            /* One row past the page, so a count that ends at the page's last row while more rows follow
+            is caught below. LookupOrderedRows returns at most FREE_READ_MAX_ROWS rows. */
+            var lookupCount = Math.min(wanted + 1, FREE_READ_MAX_ROWS);
             var marked = null;
             try {
-                marked = Platform.Function.LookupOrderedRows(deKey, wanted, orderText, ROW_MARK_FIELD, ROW_MARK_VALUE);
+                marked = Platform.Function.LookupOrderedRows(deKey, lookupCount, orderText, ROW_MARK_FIELD, ROW_MARK_VALUE);
             } catch (lookupErr) {
                 return null;
             };
             var markedCount = marked ? marked.length : 0;
+            /* A count lower than the marked rows found is behind them. On the author's org it answered 0
+            for a temporary Data Extension whose rows LookupOrderedRows already returned (2026-10-02: four
+            tabs at once, and a sorted page of a run that had finished 7 minutes before). It is read once
+            more, and a count still lower sends the page to REST. The count is never taken from the marked
+            rows: with a count behind them, nothing shows that the row mark's default reached every row. */
+            if (markedCount > rowCount) {
+                rowCount = readRowCount(deKey);
+                if (rowCount === null || markedCount > rowCount) {
+                    return null;
+                };
+            };
             if (markedCount < Math.min(wanted, rowCount)) {
                 return null;
             };
+            /* The row past the page was only a check: the page ends at wanted. */
+            var lastRow = Math.min(markedCount, wanted);
             var rows = [];
-            for (var i = (page - 1) * pageSize; i < markedCount; i++) {
+            for (var i = (page - 1) * pageSize; i < lastRow; i++) {
                 var rowValues = [];
                 for (var c = 0; c < columns.length; c++) {
                     var value = marked[i][columns[c]];
@@ -3664,12 +4769,25 @@
          *              instead of an unpaged REST list (`Name like 'SQL Studio - '`, $pageSize=100) that
          *              could miss the activity in a Business Unit with more than 100 matches. The SOAP
          *              filter is an exact match, so there is nothing to page and no case folding to do
-         *              (CustomerKey is case-preserving but MCE matches it case-insensitively).
+         *              (CustomerKey is case-preserving but MCE matches it case-insensitively). With
+         *              isBackendBu it asks WSProxy first, a call SQL Studio counts apart from its API calls
+         *              (rules 1 to 4 in section 3.8). A WSProxy answer that finds no activity is not trusted: the token lookup runs.
          * @param {string} token
-         * @param {string} activityKey
+         * @param {string} activityKey - always adHocActivityKey of the caller and a slot
+         * @param {boolean} [isBackendBu] - the session is in this Backend's own Business Unit
          * @returns {string|null} the ObjectID (used as the REST queryDefinitionId), or null when not found.
          */
-        function findActivityIdByKey(token, activityKey) {
+        function findActivityIdByKey(token, activityKey, isBackendBu) {
+            if (isBackendBu) {
+                var proxyRows = wsproxyRetrieve('QueryDefinition', ['ObjectID'], {
+                    Property: 'CustomerKey',
+                    SimpleOperator: 'equals',
+                    Value: activityKey
+                });
+                if (proxyRows !== null && proxyRows.length > 0 && proxyRows[0].ObjectID !== undefined && proxyRows[0].ObjectID !== null && String(proxyRows[0].ObjectID) !== '') {
+                    return String(proxyRows[0].ObjectID);
+                };
+            };
             var bodyXml = '<RetrieveRequestMsg xmlns="http://exacttarget.com/wsdl/partnerAPI">' +
                 '<RetrieveRequest>' +
                 '<ObjectType>QueryDefinition</ObjectType>' +
@@ -3715,15 +4833,29 @@
          *              CustomerKey is the key SQL Studio builds for this user and slot. runQuery
          *              overwrites the activity it reuses (name, key, query text and target), and the
          *              id comes from the browser, so it is never trusted on its own: it could be any
-         *              activity the user's token can change. One REST call. The key is compared without
+         *              activity the user's token can change. One REST call, or with isBackendBu one WSProxy
+         *              retrieve by ObjectID first, counted apart from the API calls. The key is compared without
          *              regard to case, as Marketing Cloud Engagement matches CustomerKey. Anything that
-         *              is not a clear yes (a 404, another status, no key) is a no.
+         *              is not a clear yes (a 404, another status, no key) is a no. WSProxy finding no
+         *              activity or no key falls back to the REST call, and its own answer, a key that
+         *              differs, is final: the REST call would read the same key.
          * @param {string} token
          * @param {string} activityId
          * @param {string} expectedKey - adHocActivityKey of this user and slot
+         * @param {boolean} [isBackendBu] - the session is in this Backend's own Business Unit
          * @returns {boolean}
          */
-        function isOwnActivity(token, activityId, expectedKey) {
+        function isOwnActivity(token, activityId, expectedKey, isBackendBu) {
+            if (isBackendBu) {
+                var proxyRows = wsproxyRetrieve('QueryDefinition', ['CustomerKey'], {
+                    Property: 'ObjectID',
+                    SimpleOperator: 'equals',
+                    Value: activityId
+                });
+                if (proxyRows !== null && proxyRows.length > 0 && proxyRows[0].CustomerKey !== undefined && proxyRows[0].CustomerKey !== null && String(proxyRows[0].CustomerKey) !== '') {
+                    return String(proxyRows[0].CustomerKey).toLowerCase() === String(expectedKey).toLowerCase();
+                };
+            };
             var res = httpJSON('GET', restBase + '/automation/v1/queries/' + urlEncode(activityId), null, token);
             if (res.status < 200 || res.status >= 300 || !res.json || res.json.key === undefined || res.json.key === null) {
                 return false;
@@ -3753,15 +4885,17 @@
          *              Extension for the results, points the activity at it and starts it. On any
          *              failure after the temp DE was created, the DE (never the activity) is deleted
          *              before the error is thrown.
-         * @param {Object} payload - { sql, columns, columnTypes?, deFolderId, queryFolderId, queryId?, slot? }.
+         * @param {Object} payload - { sql, columns, columnTypes?, deFolderId, queryFolderId, queryId?, slot?, inBackendBu? }.
          *        columnTypes is an optional array parallel to columns, each entry { type: 'Date' | 'Number' |
          *        'Decimal' | 'Boolean', precision?, scale? } or null for Text. An invalid, unknown or missing
          *        entry is Text, and never fails the run (validateColumnType).
          * @param {Object} authRow
          * @returns {{runId, deKey, deName, deId, queryId, queryName, queryReused: boolean,
          *           slot: number, startedAt: string, retentionApplied: boolean, columns: string[],
-         *           columnTypes: Array}} columnTypes is what the temporary Data Extension really got, one
-         *           entry per column: null for Text, otherwise { type } or, for a Decimal, { type, precision, scale }.
+         *           columnTypes: Array, taskId: ?string, taskSig: ?string}} columnTypes is what the temporary
+         *           Data Extension really got, one entry per column: null for Text, otherwise { type } or, for a
+         *           Decimal, { type, precision, scale }. taskSig binds taskId to this user (taskSignature),
+         *           and is null whenever taskId is.
          */
         function actionRunQuery(payload, authRow) {
             var sql = payload.sql;
@@ -3796,16 +4930,19 @@
             };
 
             var userHash = computeUserHash(authRow);
+            /* The app's hint that this session is in the Backend's own Business Unit: it only routes the two
+            lookups below through WSProxy, and each falls back to the token (section 3.8, rule 4). */
+            var isBackendBu = (payload.inBackendBu === true);
 
             /* The payload's queryId is only a hint: the run PATCHes the activity it resolves to, so an
             id that is not this user's activity for this slot (a saved Query Activity, or another user's)
             would be overwritten. It is checked against the key SQL Studio builds for this user and
             slot, and one that fails is ignored: the activity is then found by key, as with no id at all. */
-            var isCachedQueryIdOwn = hasCachedQueryId && isOwnActivity(authRow.token, cachedQueryId, adHocActivityKey(userHash, requestedSlot));
+            var isCachedQueryIdOwn = hasCachedQueryId && isOwnActivity(authRow.token, cachedQueryId, adHocActivityKey(userHash, requestedSlot), isBackendBu);
 
             /* Step 1-2 (M2, M6): walk the pool from the requested slot up, stopping at the first slot
             that is not currently running. The frontend's cached id is only good for the requested slot
-            (its own per-slot cache - see docs/ARCHITECTURE.md), and only once it passed the check above;
+            (its own per-slot cache), and only once it passed the check above;
             every other slot this tries is resolved by a SOAP Retrieve of QueryDefinition by exact
             CustomerKey, the same M2 lookup slot 1 always used. A slot with no activity yet (brand-new
             user, or this slot never used) is free by definition - nothing to check, nothing created
@@ -3816,7 +4953,7 @@
             var usedCachedQueryId = false;
             for (var trySlot = requestedSlot; trySlot <= QUERY_SLOT_COUNT; trySlot++) {
                 var isCacheForThisSlot = (trySlot === requestedSlot && isCachedQueryIdOwn);
-                var tryQueryId = isCacheForThisSlot ? cachedQueryId : findActivityIdByKey(authRow.token, adHocActivityKey(userHash, trySlot));
+                var tryQueryId = isCacheForThisSlot ? cachedQueryId : findActivityIdByKey(authRow.token, adHocActivityKey(userHash, trySlot), isBackendBu);
                 if (tryQueryId !== null && isActivityRunning(authRow.token, tryQueryId)) {
                     continue;
                 };
@@ -3876,7 +5013,7 @@
                     collide on the key. Only when the id just PATCHed actually came from the cache - a
                     freshly SOAP-resolved id 404ing means it was deleted a moment ago, and there is nothing
                     left to re-resolve. */
-                    queryId = usedCachedQueryId ? findActivityIdByKey(authRow.token, activityKey) : null;
+                    queryId = usedCachedQueryId ? findActivityIdByKey(authRow.token, activityKey, isBackendBu) : null;
                     if (queryId !== null && queryId !== cachedQueryId) {
                         /* M6 again: the slot loop above checked the stale cached id, not this one, and
                         another browser may be running this activity right now. */
@@ -3917,7 +5054,7 @@
             };
 
             /* Step 5: start the Query Activity. SOAP Perform (Action Start) on the QueryDefinition
-            answers with a Task ID (ORG-VERIFICATION item 28), which getRunOutcome later reads back
+            answers with a Task ID, which getRunOutcome later reads back
             through AsyncActivityStatus to learn whether a 0-row run finished, failed or is still
             queued. The REST start only ever answers "OK", with nothing to ask about later. The REST
             start is the fallback only after a clear refusal: Marketing Cloud Engagement answered the
@@ -3927,6 +5064,7 @@
             deleting only the temp DE, never the activity. */
             var startMethod = 'soap';
             var taskId = null;
+            var taskSig = null;
             var startResponse = '';
 
             var performBody = '<PerformRequestMsg xmlns="http://exacttarget.com/wsdl/partnerAPI">' +
@@ -3974,10 +5112,19 @@
                     throw sfmcErrorFromResponse(startRes);
                 };
                 taskId = null;
-                startResponse = truncate('Perform: ' + (performResultStatusMessage || performRes.overallStatus || 'failed') + '. Fell back to REST start.', 500);
+                startResponse = truncate(maskSecrets('Perform: ' + (performResultStatusMessage || performRes.overallStatus || 'failed') + '. Fell back to REST start.'), 500);
             } else {
-                taskId = performTaskId;
-                startResponse = truncate('Perform: ' + (performResultStatusMessage || 'OK') + '. Task ID: ' + (taskId ? 'yes' : 'no') + '.', 500);
+                /* An ID of another shape is no Task ID the app could send back: getRunStatus would not take it. */
+                taskId = isTaskIdShape(performTaskId) ? performTaskId : null;
+                /* The run has started: a signature the platform cannot compute leaves the status to the token. */
+                if (taskId !== null) {
+                    try {
+                        taskSig = taskSignature(taskId, userHash);
+                    } catch (sigErr) {
+                        taskSig = null;
+                    };
+                };
+                startResponse = truncate(maskSecrets('Perform: ' + (performResultStatusMessage || 'OK') + '. Task ID: ' + (taskId ? 'yes' : 'no') + '.'), 500);
             };
 
             var data = {
@@ -3995,8 +5142,9 @@
                 columns: columns,
                 columnTypes: columnTypes,
                 taskId: taskId,
+                taskSig: taskSig,
                 startMethod: startMethod,
-                /* Diagnostic (ORG-VERIFICATION item 28): which way the run started and what Perform said,
+                /* Diagnostic: which way the run started and what Perform said,
                 to confirm the real Status spellings and never leak the token. At most 500 characters. */
                 startResponse: startResponse
             };
@@ -4004,107 +5152,18 @@
         };
 
         /**
-         * @function getOneRunStatus
-         * @description Polls one run. With deKey, it counts the run's temporary Data Extension for free:
-         *              its rows appear when the query finishes. The Query Activity's status is an API call,
-         *              made when the caller asks for it (checkRunning), when no deKey is given, and when the
-         *              count cannot be read. A query that returns no rows never fills its Data Extension,
-         *              so only the status shows that it finished. Shared by actionGetRunStatus's single-run
-         *              form and its batched `runs` form (docs/TABS-SPEC.md phase 2).
-         * @param {Object} entry - { queryId, deKey?, checkRunning? }
-         * @param {Object} authRow
-         * @returns {{queryId: string, isRunning: ?boolean, rowCount: ?number}} isRunning is null when not asked for.
+         * @function retrieveTaskStatusWithToken
+         * @description SOAP Retrieve of AsyncActivityStatus filtered on TaskID, with the signed-in user's
+         *              token: how a run started through actionRunQuery's SOAP Perform ended, or whether it
+         *              is queued or running. The possible Status values Marketing Cloud Engagement returns
+         *              are not documented, so this hands the raw text straight back and leaves classifying
+         *              it to the caller. 1 API call. Shared by getRunOutcome and readTaskStatus's token path.
+         * @param {string} taskId - already checked with requireTaskId or isTaskIdShape
+         * @param {string} token
+         * @returns {{found: boolean, status: ?string, statusMessage: ?string, errorMsg: ?string, completedDate: ?string, raw: string}}
+         * @throws {Object} apiError MCE_ERROR when the SOAP call fails.
          */
-        function getOneRunStatus(entry, authRow) {
-            var queryId = entry.queryId;
-            requireGuid(queryId, 'queryId');
-
-            var deKey = entry.deKey;
-            var hasDeKey = (deKey !== undefined && deKey !== null && deKey !== '');
-            var rowCount = null;
-            if (hasDeKey) {
-                requireString(deKey, 'deKey', 1, 36);
-                if (!isOwnTempDeKey(authRow, deKey)) {
-                    throw apiError('BAD_REQUEST', 'Only SQL Studio\'s own temporary Data Extensions can be checked.', null);
-                };
-                rowCount = readRowCount(deKey);
-            };
-
-            var isRunning = null;
-            if (!hasDeKey || entry.checkRunning === true || rowCount === null) {
-                var res = httpJSON('GET', restBase + '/automation/v1/queries/' + urlEncode(queryId) + '/actions/isrunning/', null, authRow.token);
-                if (res.status < 200 || res.status >= 300) {
-                    throw sfmcErrorFromResponse(res);
-                };
-                isRunning = !!(res.json && res.json.isRunning);
-            };
-
-            return {
-                queryId: queryId,
-                isRunning: isRunning,
-                rowCount: rowCount
-            };
-        };
-
-        /**
-         * @function actionGetRunStatus
-         * @description Polls a run, or - docs/TABS-SPEC.md phase 2 - several at once, one poll for every
-         *              tab due on the same tick instead of one Backend request per tab. The single-run
-         *              payload/response keep working exactly as before; `payload.runs` (an array of 1 to
-         *              QUERY_SLOT_COUNT single-run payloads) answers with `{ runs: [...] }` in the same
-         *              order instead. A run whose deKey is not the caller's own is refused the same way the
-         *              single form refuses it, and more than QUERY_SLOT_COUNT entries is BAD_REQUEST.
-         * @param {Object} payload - { queryId, deKey?, checkRunning? } or { runs: [ {queryId, deKey?, checkRunning?}, ... ] }
-         * @param {Object} authRow
-         * @returns {Object} the single-run shape, or { runs: [...] } for the batched form
-         */
-        function actionGetRunStatus(payload, authRow) {
-            if (payload.runs !== undefined && payload.runs !== null) {
-                var runsIn = requireArray(payload.runs, 'runs');
-                if (runsIn.length < 1 || runsIn.length > QUERY_SLOT_COUNT) {
-                    throw apiError('BAD_REQUEST', 'Field "runs" must have 1 to ' + QUERY_SLOT_COUNT + ' entries.', null);
-                };
-                var out = [];
-                for (var i = 0; i < runsIn.length; i++) {
-                    var entry = runsIn[i];
-                    if (!entry || typeof entry !== 'object') {
-                        throw apiError('BAD_REQUEST', 'Field "runs[' + i + ']" must be an object.', null);
-                    };
-                    /* One run's failure, such as a deleted activity or an MCE error, is that run's answer
-                    and must not fail the others. A bad request or an ended session still fails the
-                    whole call, as the single form does. */
-                    try {
-                        out.push(getOneRunStatus(entry, authRow));
-                    } catch (entryErr) {
-                        var entryCode = (entryErr && entryErr.code) ? entryErr.code : 'INTERNAL';
-                        if (entryCode === 'BAD_REQUEST' || entryCode === 'SESSION_EXPIRED' || entryCode === 'SESSION_INVALID') {
-                            throw entryErr;
-                        };
-                        out.push({
-                            queryId: entry.queryId,
-                            error: { code: entryCode, message: (entryErr && entryErr.message) ? entryErr.message : ('' + entryErr), details: (entryErr && entryErr.details) ? entryErr.details : null }
-                        });
-                    };
-                };
-                return { runs: out };
-            };
-            return getOneRunStatus(payload, authRow);
-        };
-
-        /**
-         * @function actionGetRunOutcome
-         * @description SOAP Retrieve of AsyncActivityStatus filtered on TaskID (ORG-VERIFICATION item
-         *              28): the outcome of a run started through actionRunQuery's SOAP Perform, asked
-         *              by the App only once its first status check reads 0 rows. The possible Status
-         *              values Marketing Cloud Engagement returns are not documented, so this hands the
-         *              raw text straight back and leaves classifying it to the caller. 1 API call.
-         * @param {Object} payload - { taskId }
-         * @param {Object} authRow
-         * @returns {{found: boolean, status: string|null, statusMessage: string|null, errorMsg: string|null, completedDate: string|null}}
-         */
-        function actionGetRunOutcome(payload, authRow) {
-            var taskId = requireTaskId(payload.taskId, 'taskId');
-
+        function retrieveTaskStatusWithToken(taskId, token) {
             var bodyXml = '<RetrieveRequestMsg xmlns="http://exacttarget.com/wsdl/partnerAPI">' +
                 '<RetrieveRequest>' +
                 '<ObjectType>AsyncActivityStatus</ObjectType>' +
@@ -4121,7 +5180,7 @@
                 '</Filter>' +
                 '</RetrieveRequest>' +
                 '</RetrieveRequestMsg>';
-            var soapRes = soap('Retrieve', bodyXml, authRow.token);
+            var soapRes = soap('Retrieve', bodyXml, token);
             if (!soapRes.ok) {
                 throw sfmcErrorFromSoap(soapRes);
             };
@@ -4149,15 +5208,308 @@
                 };
                 return xmlValue(block, name);
             };
+            /* MCE's messages and the raw block reach the app: masked as an error's text is. */
             var data = {
                 found: true,
                 status: pick('Status'),
-                statusMessage: pick('StatusMessage'),
-                errorMsg: pick('ErrorMsg'),
+                statusMessage: maskNullable(pick('StatusMessage')),
+                errorMsg: maskNullable(pick('ErrorMsg')),
                 completedDate: pick('CompletedDate'),
-                raw: truncate(block, 1500)
+                raw: truncate(maskSecrets(block), 1500)
             };
             return data;
+        };
+
+        /**
+         * @function readTaskStatus
+         * @description Reads a run's AsyncActivityStatus by its Task ID, which says Queued, then Complete or
+         *              FatalError, where REST isrunning answers false for a queued query. With isBackendBu it
+         *              asks WSProxy first (counted apart from the API calls, rules 1 to 4 in section 3.8),
+         *              and the answer's values sit in Results[0].Properties. When WSProxy answers without an
+         *              error and finds no row, as for a task Marketing Cloud Engagement has not picked up from
+         *              its queue yet, the token's SOAP Retrieve is left out: it reads the same table, so it
+         *              would find no row either, for 1 API call. Without isBackendBu, or when WSProxy throws,
+         *              answers an error or finds a row without a Status, it runs the token SOAP Retrieve
+         *              instead. A failed or faulted SOAP Retrieve is no answer either: the caller then asks
+         *              isrunning, as it did before the Task ID was read, so a status read never fails a run
+         *              on its own. A SOAP Retrieve that answers and finds no row says so, as WSProxy's does.
+         * @param {string} taskId - already checked with isTaskIdShape
+         * @param {Object} authRow
+         * @param {boolean} isBackendBu - the session is in this Backend's own Business Unit, and the Task ID is
+         *        one its user started (isTaskSignatureOk)
+         * @returns {{taskStatus: ?Object, noRowVia: ?string}} taskStatus is { status, statusMessage, errorMsg,
+         *          completedDate, via }, with via 'wsproxy' or 'soap', or null when no read finds a row for the
+         *          Task ID or the SOAP Retrieve failed. noRowVia names the read that answered and found no row:
+         *          'wsproxy', which leaves the SOAP Retrieve out, or 'soap'. It is null when a row was found and
+         *          when the SOAP Retrieve failed.
+         * @throws {Object} apiError SESSION_EXPIRED or SESSION_INVALID, which a failed read never hides.
+         */
+        function readTaskStatus(taskId, authRow, isBackendBu) {
+            if (isBackendBu) {
+                var proxyRows = wsproxyRetrieve('AsyncActivityStatus', ['Status', 'StatusMessage', 'ErrorMsg', 'CompletedDate'], {
+                    Property: 'TaskID',
+                    SimpleOperator: 'equals',
+                    Value: taskId
+                });
+                if (proxyRows !== null && proxyRows.length === 0) {
+                    return {
+                        taskStatus: null,
+                        noRowVia: 'wsproxy'
+                    };
+                };
+                if (proxyRows !== null) {
+                    var values = wsproxyPropertyValues(proxyRows[0]);
+                    if (values.hasOwnProperty('Status') && values.Status !== null) {
+                        return {
+                            taskStatus: {
+                                status: values.Status,
+                                statusMessage: values.hasOwnProperty('StatusMessage') ? maskNullable(values.StatusMessage) : null,
+                                errorMsg: values.hasOwnProperty('ErrorMsg') ? maskNullable(values.ErrorMsg) : null,
+                                completedDate: values.hasOwnProperty('CompletedDate') ? values.CompletedDate : null,
+                                via: 'wsproxy'
+                            },
+                            noRowVia: null
+                        };
+                    };
+                };
+            };
+            var outcome = null;
+            try {
+                outcome = retrieveTaskStatusWithToken(taskId, authRow.token);
+            } catch (soapErr) {
+                if (soapErr && (soapErr.code === 'SESSION_EXPIRED' || soapErr.code === 'SESSION_INVALID')) {
+                    throw soapErr;
+                };
+                return {
+                    taskStatus: null,
+                    noRowVia: null
+                };
+            };
+            if (!outcome.found) {
+                return {
+                    taskStatus: null,
+                    noRowVia: 'soap'
+                };
+            };
+            return {
+                taskStatus: {
+                    status: outcome.status,
+                    statusMessage: outcome.statusMessage,
+                    errorMsg: outcome.errorMsg,
+                    completedDate: outcome.completedDate,
+                    via: 'soap'
+                },
+                noRowVia: null
+            };
+        };
+
+        /**
+         * @function readRunStatus
+         * @description Reads one run's status for getOneRunStatus. With a taskId it is the run's
+         *              AsyncActivityStatus (readTaskStatus), which tells a queued run from a finished one,
+         *              and isRunning stays null. It is read through WSProxy only with isBackendBu and the
+         *              entry's taskSig of this user. Without a taskId, or when no AsyncActivityStatus row is
+         *              found, it is the Query Activity's REST isrunning call, an API call. With isTaskOnly, a
+         *              task that the read answered no row for is pending instead, with no isrunning call: the
+         *              app asks so while it waits for Marketing Cloud Engagement to pick a queued run up, as
+         *              isrunning answers false both for a queued run and for a finished one. That holds for
+         *              WSProxy's read, at no API call, and for the token's SOAP Retrieve, at 1 API call, as in
+         *              a child Business Unit. A SOAP Retrieve that failed is no answer, so isrunning follows it.
+         * @param {string} queryId - already checked with requireGuid
+         * @param {?string} taskId - already checked with isTaskIdShape, or null
+         * @param {*} taskSig - the entry's taskSig, checked by isTaskSignatureOk
+         * @param {Object} authRow
+         * @param {boolean} [isBackendBu] - the session is in this Backend's own Business Unit
+         * @param {boolean} [isTaskOnly] - the entry's taskOnly flag
+         * @returns {{isRunning: ?boolean, taskStatus: ?Object, isPending: boolean, pendingVia: ?string}} isRunning
+         *          is null when taskStatus answers, and when isPending says the read found no row for the task
+         *          yet. pendingVia is then the read that found none, 'wsproxy' or 'soap', and null otherwise.
+         */
+        function readRunStatus(queryId, taskId, taskSig, authRow, isBackendBu, isTaskOnly) {
+            var taskStatus = null;
+            if (taskId !== null) {
+                /* WSProxy reads any task of this Business Unit, so only a Task ID this user started goes
+                that way: without its signature, the token reads it (taskSignature). */
+                var isOwnTask = isBackendBu === true && isTaskSignatureOk(taskId, taskSig, computeUserHash(authRow));
+                var taskRead = readTaskStatus(taskId, authRow, isOwnTask);
+                taskStatus = taskRead.taskStatus;
+                if (taskRead.noRowVia !== null && isTaskOnly === true) {
+                    return {
+                        isRunning: null,
+                        taskStatus: null,
+                        isPending: true,
+                        pendingVia: taskRead.noRowVia
+                    };
+                };
+            };
+            var isRunning = null;
+            if (taskStatus === null) {
+                var res = httpJSON('GET', restBase + '/automation/v1/queries/' + urlEncode(queryId) + '/actions/isrunning/', null, authRow.token);
+                if (res.status < 200 || res.status >= 300) {
+                    throw sfmcErrorFromResponse(res);
+                };
+                isRunning = !!(res.json && res.json.isRunning);
+            };
+            return {
+                isRunning: isRunning,
+                taskStatus: taskStatus,
+                isPending: false,
+                pendingVia: null
+            };
+        };
+
+        /**
+         * @function getOneRunStatus
+         * @description Polls one run. With deKey, it counts the run's temporary Data Extension for free:
+         *              its rows appear when the query finishes. The run's status (readRunStatus) is read when
+         *              the caller asks for it (checkRunning), when no deKey is given, and when the count
+         *              cannot be read. A query that returns no rows never fills its Data Extension, so only
+         *              the status shows that it finished. When checkRunning asks for the status, it is read
+         *              before the count, so a status that says the run finished never goes with a count taken
+         *              before it did. When it is read because the count cannot be, it comes after the count.
+         *              Without a deKey no count is read. taskOnly asks for a pending answer instead of the
+         *              isrunning call when the read of AsyncActivityStatus, through WSProxy or the token's SOAP
+         *              Retrieve, finds no row for the task (readRunStatus).
+         *              Shared by actionGetRunStatus's single-run form and its batched `runs` form.
+         * @param {Object} entry - { queryId, deKey?, checkRunning?, taskId?, taskSig?, taskOnly? }
+         * @param {Object} authRow
+         * @param {boolean} [isBackendBu] - the session is in this Backend's own Business Unit
+         * @returns {{queryId: string, isRunning: ?boolean, rowCount: ?number, taskStatus?: ?Object, pending?: boolean, pendingVia?: string}}
+         *          isRunning is null when not asked for, when taskStatus answers, and when the answer is pending.
+         *          taskStatus is { status, statusMessage, errorMsg, completedDate, via } when an
+         *          AsyncActivityStatus row was read. A pending answer has taskStatus null and pending true:
+         *          the read found no row for the task, and nothing else was asked. Its pendingVia names that
+         *          read, 'wsproxy' for no API call or 'soap' for 1, so the app knows what each such check costs.
+         */
+        function getOneRunStatus(entry, authRow, isBackendBu) {
+            var queryId = entry.queryId;
+            requireGuid(queryId, 'queryId');
+
+            /* A taskId of another shape is read as none, so this run is asked isrunning, as one without a
+            Task ID is: it is only a hint for the status read, and must not fail the other runs of a batch. */
+            var taskId = isTaskIdShape(entry.taskId) ? entry.taskId : null;
+
+            var deKey = entry.deKey;
+            var hasDeKey = (deKey !== undefined && deKey !== null && deKey !== '');
+            if (hasDeKey) {
+                requireString(deKey, 'deKey', 1, 36);
+                if (!isOwnTempDeKey(authRow, deKey)) {
+                    throw apiError('BAD_REQUEST', 'Only SQL Studio\'s own temporary Data Extensions can be checked.', null);
+                };
+            };
+
+            /* The status first, then the count. A count read before the status can predate the rows of a
+            query that finished in between, and the answer would pair Complete with that count. */
+            var isStatusDue = !hasDeKey || entry.checkRunning === true;
+            var isTaskOnly = entry.taskOnly === true;
+            var status = null;
+            if (isStatusDue) {
+                status = readRunStatus(queryId, taskId, entry.taskSig, authRow, isBackendBu, isTaskOnly);
+            };
+            var rowCount = hasDeKey ? readRowCount(deKey) : null;
+            if (!isStatusDue && rowCount === null) {
+                status = readRunStatus(queryId, taskId, entry.taskSig, authRow, isBackendBu, isTaskOnly);
+            };
+
+            var answer = {
+                queryId: queryId,
+                isRunning: status !== null ? status.isRunning : null,
+                rowCount: rowCount
+            };
+            if (status !== null && status.taskStatus !== null) {
+                answer.taskStatus = status.taskStatus;
+            };
+            if (status !== null && status.isPending) {
+                answer.taskStatus = null;
+                answer.pending = true;
+                answer.pendingVia = status.pendingVia;
+            };
+            return answer;
+        };
+
+        /**
+         * @function actionGetRunStatus
+         * @description Polls a run, or several at once, one poll for every tab due on the same tick
+         *              instead of one Backend request per tab. The single-run payload/response keep
+         *              working as before; `payload.runs` (an array of 1 to QUERY_SLOT_COUNT single-run
+         *              payloads) answers with `{ runs: [...] }` in the same order instead. A run whose
+         *              deKey is not the caller's own is refused the same way the single form refuses it,
+         *              and more than QUERY_SLOT_COUNT entries is BAD_REQUEST. Each answer carries the
+         *              API calls and the WSProxy calls its own check made (apiCalls, wsproxyCalls), also
+         *              an entry that failed, so the app can count them per run. `payload.inBackendBu`
+         *              is the app's hint that the session is in this Backend's own Business Unit, which
+         *              lets a task's status be read through WSProxy (readTaskStatus), for an entry whose
+         *              taskSig is the one runQuery answered for this user, in any of the user's sessions
+         *              (isTaskSignatureOk). An entry's taskOnly makes a task that the read finds no row for
+         *              answer pending, with no isrunning call (getOneRunStatus).
+         * @param {Object} payload - { queryId, deKey?, checkRunning?, taskId?, taskSig?, taskOnly?, inBackendBu? } or
+         *        { runs: [ {queryId, deKey?, checkRunning?, taskId?, taskSig?, taskOnly?}, ... ], inBackendBu? }
+         * @param {Object} authRow
+         * @returns {Object} the single-run shape, or { runs: [...] } for the batched form
+         */
+        function actionGetRunStatus(payload, authRow) {
+            var isBackendBu = (payload.inBackendBu === true);
+            if (payload.runs !== undefined && payload.runs !== null) {
+                var runsIn = requireArray(payload.runs, 'runs');
+                if (runsIn.length < 1 || runsIn.length > QUERY_SLOT_COUNT) {
+                    throw apiError('BAD_REQUEST', 'Field "runs" must have 1 to ' + QUERY_SLOT_COUNT + ' entries.', null);
+                };
+                var out = [];
+                for (var i = 0; i < runsIn.length; i++) {
+                    var entry = runsIn[i];
+                    if (!entry || typeof entry !== 'object') {
+                        throw apiError('BAD_REQUEST', 'Field "runs[' + i + ']" must be an object.', null);
+                    };
+                    var apiCallsBefore = apiCallCount;
+                    var wsproxyCallsBefore = wsproxyCallCount;
+                    /* One run's failure, such as a deleted activity or an MCE error, is that run's answer
+                    and must not fail the others. A bad request or an ended session still fails the
+                    whole call, as the single form does. */
+                    try {
+                        var oneAnswer = getOneRunStatus(entry, authRow, isBackendBu);
+                        oneAnswer.apiCalls = apiCallCount - apiCallsBefore;
+                        oneAnswer.wsproxyCalls = wsproxyCallCount - wsproxyCallsBefore;
+                        out.push(oneAnswer);
+                    } catch (entryErr) {
+                        var entryCode = (entryErr && entryErr.code) ? entryErr.code : 'INTERNAL';
+                        if (entryCode === 'BAD_REQUEST' || entryCode === 'SESSION_EXPIRED' || entryCode === 'SESSION_INVALID') {
+                            throw entryErr;
+                        };
+                        /* The entry's error is built as a failed request's is (buildErrorResponse): its
+                        message and details masked, and an INTERNAL one written to the ErrorLog. */
+                        out.push({
+                            queryId: entry.queryId,
+                            error: buildErrorResponse(entryErr).error,
+                            apiCalls: apiCallCount - apiCallsBefore,
+                            wsproxyCalls: wsproxyCallCount - wsproxyCallsBefore
+                        });
+                    };
+                };
+                return { runs: out };
+            };
+            var singleApiCallsBefore = apiCallCount;
+            var singleWsproxyCallsBefore = wsproxyCallCount;
+            var singleAnswer = getOneRunStatus(payload, authRow, isBackendBu);
+            singleAnswer.apiCalls = apiCallCount - singleApiCallsBefore;
+            singleAnswer.wsproxyCalls = wsproxyCallCount - singleWsproxyCallsBefore;
+            return singleAnswer;
+        };
+
+        /**
+         * @function actionGetRunOutcome
+         * @description The outcome of a run started through actionRunQuery's SOAP Perform, read with a
+         *              SOAP Retrieve of AsyncActivityStatus on its Task ID (retrieveTaskStatusWithToken).
+         *              The app asks for it only once a run's first status check reads 0 rows and the run
+         *              has no taskStatus coming back from getRunStatus. The possible Status values are not
+         *              documented, so this hands the raw text straight back and leaves classifying it to
+         *              the caller. 1 API call.
+         * @param {Object} payload - { taskId }
+         * @param {Object} authRow
+         * @returns {{found: boolean, status: string|null, statusMessage: string|null, errorMsg: string|null, completedDate: string|null}}
+         */
+        function actionGetRunOutcome(payload, authRow) {
+            var taskId = requireTaskId(payload.taskId, 'taskId');
+            return retrieveTaskStatusWithToken(taskId, authRow.token);
         };
 
         /**
@@ -4167,12 +5519,16 @@
          *              the first returned row's own keys instead (case-insensitively matched back to
          *              the requested columns when columns is given, since the rowset endpoint's casing
          *              does not always match what was requested).
-         * @param {Object} payload - { deKey, page, pageSize, columns, orderBy, filter, hasRowMark, restOnly }.
+         * @param {Object} payload - { deKey, page, pageSize, columns, orderBy, filter, hasRowMark, restOnly, freeOnly }.
          *        restOnly true skips the free read, so the page comes from the REST rowset endpoint in its
          *        one order. The Frontend sets it for every chunk it reads, for a grid page larger than a
-         *        chunk and for every Export page, so all of them share that order.
+         *        chunk and for every REST Export page, so all of them share that order. freeOnly true never
+         *        reads through REST: when the free read cannot answer, so does not run or does not trust its
+         *        count, the answer has readPath 'none', no rows and a count of null, and costs no API call.
+         *        The Frontend's Export of up to 1,999 rows asks this way, so a free read that fails costs
+         *        the calls its confirmation stated and no more.
          * @param {Object} authRow
-         * @returns {{count: number, page: number, pageSize: number, columns: string[], rows: Array<Array>}}
+         * @returns {{count: ?number, page: number, pageSize: number, columns: string[], rows: Array<Array>, readPath: string}}
          */
         function actionGetResults(payload, authRow) {
             var deKey = payload.deKey;
@@ -4224,6 +5580,19 @@
                 var freePage = readRowsFree(deKey, columns, page, pageSize, orderBy);
                 if (freePage !== null) {
                     return freePage;
+                };
+            };
+
+            /* A freeOnly request ends here: whatever stopped the free read, REST would cost an API call the
+            caller did not plan for. Only the boolean true counts, as with restOnly. */
+            if (payload.freeOnly === true) {
+                return {
+                    count: null,
+                    page: page,
+                    pageSize: pageSize,
+                    columns: columns === null ? [] : columns,
+                    rows: [],
+                    readPath: 'none'
                 };
             };
 
@@ -4281,14 +5650,139 @@
         };
 
         /**
+         * @function actionExportRows
+         * @description One batch of a run's rows for Export CSV, read through WSProxy in this Code
+         *              Resource's own Business Unit. SQL Studio counts WSProxy calls apart from its API
+         *              calls. It needs the app's inBackendBu hint and one of the caller's own temporary
+         *              Data Extension keys (isOwnTempDeKey), or it answers BAD_REQUEST and the app reads
+         *              through REST. Without payload.requestId it starts the read: retrieve(type,
+         *              columns), with no filter and no options object (section 3.8). With one it
+         *              continues that read with getNextBatch(type, requestId), which a later request
+         *              may do. getNextBatch continues whichever read a RequestID belongs to, so a
+         *              continuation must also carry the requestSig this action answered with that
+         *              RequestID, for this user and this key (exportSignature), or it is BAD_REQUEST
+         *              before any WSProxy call. A batch holds up to 2,500 rows, WSProxy's own size.
+         *              Each row's Properties become values in the order of payload.columns, matched
+         *              without regard to case as actionGetResults matches the REST rowset. Dates and
+         *              numbers come as the text WSProxy gives, which the app reads as it reads the REST
+         *              rowset's. A call that throws, answers any Status but OK and MoreDataAvailable
+         *              (isSoapError), or answers no Results is WSPROXY_FAILED, and the app then reads
+         *              the whole result through REST. The calls count in wsproxyCallCount, never in
+         *              apiCallCount.
+         * @param {Object} payload - { deKey, columns, requestId?, requestSig?, inBackendBu }
+         * @param {Object} authRow
+         * @returns {{rows: Array<Array>, requestId: ?string, requestSig: ?string, hasMore: boolean, readPath: string}}
+         *          requestId is the GUID to continue with when hasMore is true, else null, and requestSig
+         *          its signature, else null. readPath is 'wsproxy'.
+         * @throws {Object} apiError BAD_REQUEST, or WSPROXY_FAILED when WSProxy does not answer rows
+         */
+        function actionExportRows(payload, authRow) {
+            var deKey = payload.deKey;
+            requireString(deKey, 'deKey', 1, 36);
+
+            if (payload.inBackendBu !== true) {
+                throw apiError('BAD_REQUEST', 'Export through WSProxy is for a session in the Backend\'s own Business Unit.', null);
+            };
+            if (!isOwnTempDeKey(authRow, deKey)) {
+                throw apiError('BAD_REQUEST', 'Only SQL Studio\'s own temporary Data Extensions can be exported.', null);
+            };
+
+            var columns = payload.columns;
+            requireArray(columns, 'columns');
+            if (columns.length < 1 || columns.length > 500) {
+                throw apiError('BAD_REQUEST', 'Field "columns" must contain 1 to 500 items.', null);
+            };
+            var lowerColumns = [];
+            for (var ci = 0; ci < columns.length; ci++) {
+                requireString(columns[ci], 'columns[' + ci + ']', 1, 128);
+                lowerColumns.push(columns[ci].toLowerCase());
+            };
+
+            /* A continuation carries the signature of its RequestID, checked before WSProxy is called:
+            getNextBatch would continue any read, another user's included. */
+            var userHash = computeUserHash(authRow);
+            var requestId = null;
+            if (payload.requestId !== undefined && payload.requestId !== null) {
+                requestId = requireGuid(payload.requestId, 'requestId');
+                if (!isExportSignatureOk(requestId, payload.requestSig, userHash, deKey)) {
+                    throw apiError('BAD_REQUEST', 'Field "requestSig" is not the one this export\'s read was given.', null);
+                };
+            };
+
+            var objectType = 'DataExtensionObject[' + deKey + ']';
+            var answer = null;
+            wsproxyCallCount++;
+            try {
+                var proxy = new Script.Util.WSProxy();
+                answer = (requestId === null) ? proxy.retrieve(objectType, columns) : proxy.getNextBatch(objectType, requestId);
+            } catch (readErr) {
+                throw apiError('WSPROXY_FAILED', 'WSProxy could not read the rows: ' + truncate(maskSecrets((readErr && readErr.message) ? readErr.message : String(readErr)), 300), null);
+            };
+            var failure = '';
+            if (!answer) {
+                failure = 'no answer';
+            } else if (isSoapError(String(answer.Status))) {
+                failure = String(answer.Status);
+            } else if (!answer.Results) {
+                failure = 'no results';
+            };
+            if (failure !== '') {
+                throw apiError('WSPROXY_FAILED', 'WSProxy did not return the rows: ' + truncate(maskSecrets(failure), 300), null);
+            };
+
+            /* More rows follow when WSProxy says so, and only a GUID RequestID continues the read. */
+            var hasMore = String(answer.HasMoreRows).toLowerCase() === 'true' || String(answer.Status) === 'MoreDataAvailable';
+            var nextRequestId = null;
+            if (hasMore) {
+                nextRequestId = String(answer.RequestID);
+                if (!/^[0-9a-fA-F-]{36}$/.test(nextRequestId)) {
+                    throw apiError('WSPROXY_FAILED', 'WSProxy has more rows but gave no RequestID to continue with.', null);
+                };
+            };
+
+            var rows = [];
+            var lowerNames = {};
+            for (var ri = 0; ri < answer.Results.length; ri++) {
+                var values = wsproxyPropertyValues(answer.Results[ri]);
+                var lowerValues = {};
+                for (var propertyName in values) {
+                    if (values.hasOwnProperty(propertyName)) {
+                        /* Each property name is lowered once, not once per row. */
+                        if (!lowerNames.hasOwnProperty(propertyName)) {
+                            lowerNames[propertyName] = propertyName.toLowerCase();
+                        };
+                        lowerValues[lowerNames[propertyName]] = values[propertyName];
+                    };
+                };
+                var rowValues = [];
+                for (var oc = 0; oc < lowerColumns.length; oc++) {
+                    rowValues.push(lowerValues.hasOwnProperty(lowerColumns[oc]) ? lowerValues[lowerColumns[oc]] : null);
+                };
+                rows.push(rowValues);
+            };
+
+            var exported = {
+                rows: rows,
+                requestId: nextRequestId,
+                requestSig: (nextRequestId === null) ? null : exportSignature(nextRequestId, userHash, deKey),
+                hasMore: hasMore,
+                readPath: 'wsproxy'
+            };
+            return exported;
+        };
+
+        /**
          * @function actionDeleteRun
          * @description M5: deletes only a temporary Data Extension that SQL Studio itself created for
          *              the calling user - never a Query Activity (the per-user ad-hoc activity is reused,
          *              not deleted by this action) and never a Data Extension key belonging to anyone
          *              else or to anything outside SQL Studio's own naming scheme. Without this check,
          *              a frontend bug or a stolen session would turn deleteRun into a general-purpose
-         *              delete-any-Data-Extension-the-user-can-see tool.
-         * @param {Object} payload - { deKey }
+         *              delete-any-Data-Extension-the-user-can-see tool. With `inBackendBu`, and only
+         *              after that check, it deletes through WSProxy, which SQL Studio counts apart from its
+         *              API calls (section 3.8). When
+         *              WSProxy does not delete it, the token's SOAP delete runs, as without the hint.
+         * @param {Object} payload - { deKey, inBackendBu? }
          * @param {Object} authRow
          * @returns {{deletedDE:boolean, warnings:string[]}}
          */
@@ -4300,10 +5794,17 @@
                 throw apiError('BAD_REQUEST', 'Only SQL Studio\'s own temporary Data Extensions can be deleted.', null);
             };
 
+            if (payload.inBackendBu === true && isWsproxyDeleteOk('DataExtension', { CustomerKey: deKey })) {
+                return {
+                    deletedDE: true,
+                    warnings: []
+                };
+            };
+
             var warnings = [];
             var deResult = deleteDataExtensionByKey(authRow.token, deKey);
             if (!deResult.ok) {
-                warnings.push(truncate(deResult.raw, 2000));
+                warnings.push(truncate(maskSecrets(deResult.raw), 2000));
             };
 
             var data = {
@@ -4317,8 +5818,12 @@
          * @function actionListRuns
          * @description Lists this user's own leftover temporary Data Extensions (never anyone else's,
          *              and never Query Activities, since the per-user ad-hoc activity is reused rather
-         *              than cleaned up), for the "clean up leftover runs" dialog.
-         * @param {Object} payload - {}
+         *              than cleaned up), for the "clean up leftover runs" dialog. With `inBackendBu` it
+         *              reads them through WSProxy, which SQL Studio counts apart from its API calls (section
+         *              3.8), and falls back to the
+         *              token's SOAP Retrieve when WSProxy throws or answers an error. Both paths keep
+         *              only the exact prefix matches and report each one's age from the server clock.
+         * @param {Object} payload - { inBackendBu? }
          * @param {Object} authRow
          * @returns {{userHash: string, dataExtensions: Object[]}}
          */
@@ -4332,46 +5837,74 @@
                 Query Activities are never listed here: the per-user ad-hoc activity is reused, not cleaned up. */
                 var userHash = computeUserHash(authRow);
                 var userPrefix = tempPrefix + userHash + '_';
-                listRunStage = 'request';
-                var bodyXml = '<RetrieveRequestMsg xmlns="http://exacttarget.com/wsdl/partnerAPI">' +
-                    '<RetrieveRequest>' +
-                    '<ObjectType>DataExtension</ObjectType>' +
-                    '<Properties>ObjectID</Properties>' +
-                    '<Properties>CustomerKey</Properties>' +
-                    '<Properties>Name</Properties>' +
-                    '<Properties>CreatedDate</Properties>' +
-                    '<Properties>ModifiedDate</Properties>' +
-                    '<Filter xsi:type="SimpleFilterPart">' +
-                    '<Property>Name</Property>' +
-                    '<SimpleOperator>like</SimpleOperator>' +
-                    '<Value>' + xmlEscape(userPrefix) + '</Value>' +
-                    '</Filter>' +
-                    '</RetrieveRequest>' +
-                    '</RetrieveRequestMsg>';
-                listRunStage = 'SOAP call';
-                var soapRes = soap('Retrieve', bodyXml, authRow.token);
-                if (!soapRes.ok) {
-                    throw sfmcErrorFromSoap(soapRes);
+                var candidates = null;
+                if (payload.inBackendBu === true) {
+                    listRunStage = 'WSProxy call';
+                    var proxyRows = wsproxyRetrieve('DataExtension', ['ObjectID', 'CustomerKey', 'Name', 'CreatedDate', 'ModifiedDate'], {
+                        Property: 'Name',
+                        SimpleOperator: 'like',
+                        Value: userPrefix + '%'
+                    });
+                    /* No row is a real answer here (nothing left over), so only a failed call falls back. */
+                    if (proxyRows !== null) {
+                        candidates = [];
+                        for (var p = 0; p < proxyRows.length; p++) {
+                            listRunStage = 'WSProxy result ' + (p + 1) + ' of ' + proxyRows.length;
+                            candidates.push({
+                                objectId: (proxyRows[p].ObjectID === undefined || proxyRows[p].ObjectID === null) ? null : String(proxyRows[p].ObjectID),
+                                key: (proxyRows[p].CustomerKey === undefined || proxyRows[p].CustomerKey === null) ? null : String(proxyRows[p].CustomerKey),
+                                name: (proxyRows[p].Name === undefined || proxyRows[p].Name === null) ? null : String(proxyRows[p].Name),
+                                createdDate: (proxyRows[p].CreatedDate === undefined || proxyRows[p].CreatedDate === null) ? null : String(proxyRows[p].CreatedDate),
+                                modifiedDate: (proxyRows[p].ModifiedDate === undefined || proxyRows[p].ModifiedDate === null) ? null : String(proxyRows[p].ModifiedDate)
+                            });
+                        };
+                    };
+                };
+                if (candidates === null) {
+                    listRunStage = 'request';
+                    var bodyXml = '<RetrieveRequestMsg xmlns="http://exacttarget.com/wsdl/partnerAPI">' +
+                        '<RetrieveRequest>' +
+                        '<ObjectType>DataExtension</ObjectType>' +
+                        '<Properties>ObjectID</Properties>' +
+                        '<Properties>CustomerKey</Properties>' +
+                        '<Properties>Name</Properties>' +
+                        '<Properties>CreatedDate</Properties>' +
+                        '<Properties>ModifiedDate</Properties>' +
+                        '<Filter xsi:type="SimpleFilterPart">' +
+                        '<Property>Name</Property>' +
+                        '<SimpleOperator>like</SimpleOperator>' +
+                        '<Value>' + xmlEscape(userPrefix) + '</Value>' +
+                        '</Filter>' +
+                        '</RetrieveRequest>' +
+                        '</RetrieveRequestMsg>';
+                    listRunStage = 'SOAP call';
+                    var soapRes = soap('Retrieve', bodyXml, authRow.token);
+                    if (!soapRes.ok) {
+                        throw sfmcErrorFromSoap(soapRes);
+                    };
+                    candidates = [];
+                    for (var s = 0; s < soapRes.results.length; s++) {
+                        var block = soapRes.results[s];
+                        listRunStage = 'result ' + (s + 1) + ' of ' + soapRes.results.length + ', fields';
+                        candidates.push({
+                            objectId: xmlValue(block, 'ObjectID'),
+                            key: xmlValue(block, 'CustomerKey'),
+                            name: xmlValue(block, 'Name'),
+                            createdDate: xmlValue(block, 'CreatedDate'),
+                            modifiedDate: xmlValue(block, 'ModifiedDate')
+                        });
+                    };
                 };
                 var dataExtensions = [];
                 var nowDate = Platform.Function.Now();
-                for (var i = 0; i < soapRes.results.length; i++) {
-                    var block = soapRes.results[i];
-                    listRunStage = 'result ' + (i + 1) + ' of ' + soapRes.results.length + ', CustomerKey';
-                    var key = xmlValue(block, 'CustomerKey');
-                    /* The SOAP like filter is a substring match; keep only exact prefix matches. */
+                for (var i = 0; i < candidates.length; i++) {
+                    var key = candidates[i].key;
+                    /* The like filter is a substring match; keep only exact prefix matches. */
                     if (!key || String(key).indexOf(userPrefix) !== 0) {
                         continue;
                     };
-                    listRunStage = 'result ' + (i + 1) + ', other fields';
-                    var dataExtension = {
-                        objectId: xmlValue(block, 'ObjectID'),
-                        key: key,
-                        name: xmlValue(block, 'Name'),
-                        createdDate: xmlValue(block, 'CreatedDate'),
-                        modifiedDate: xmlValue(block, 'ModifiedDate')
-                    };
                     listRunStage = 'result ' + (i + 1) + ', age';
+                    var dataExtension = candidates[i];
                     dataExtension.ageSeconds = tempDeKeyAgeSeconds(key, nowDate);
                     dataExtensions.push(dataExtension);
                 };
@@ -4701,11 +6234,14 @@
             if (plainToken === '') {
                 throw apiError('SESSION_INVALID', 'No session found. Please sign in again.', null);
             };
+            /* From here on, any error text this request writes is masked of the token too. */
+            currentAccessToken = plainToken;
             var authRow = {
                 token: plainToken,
                 userName: lookupSessionText('userName', sessionKey),
                 userEmail: lookupSessionText('userEmail', sessionKey),
                 userId: sessionUserId,
+                sessionKey: sessionKey,
                 tokenExpire: null
             };
             var expiryReadError = null;
@@ -4742,12 +6278,14 @@
                 getWorkspace: actionGetWorkspace,
                 listFolders: actionListFolders,
                 listDataExtensions: actionListDataExtensions,
+                listParentDataExtensions: actionListParentDataExtensions,
                 getDataExtensionFields: actionGetDataExtensionFields,
                 validateQuery: actionValidateQuery,
                 runQuery: actionRunQuery,
                 getRunStatus: actionGetRunStatus,
                 getRunOutcome: actionGetRunOutcome,
                 getResults: actionGetResults,
+                exportRows: actionExportRows,
                 deleteRun: actionDeleteRun,
                 listRuns: actionListRuns,
                 saveQueryActivity: actionSaveQueryActivity,
@@ -4766,13 +6304,13 @@
             response = {
                 ok: true,
                 data: data,
-                meta: { apiCalls: apiCallCount }
+                meta: callMeta()
             };
 
             /* ---------------------- 5.5. Backend error handling ----------------- */
         } catch (err) {
             response = buildErrorResponse(err);
-            response.meta = { apiCalls: apiCallCount };
+            response.meta = callMeta();
         };
 
         Platform.Response.SetResponseHeader('Content-Type', 'application/json; charset=utf-8');

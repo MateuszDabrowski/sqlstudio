@@ -129,7 +129,7 @@
 
     /* The user key the app scopes its browser stores by, computed exactly as the Backend's
     computeUserHash does (fnvMultiply32, toHex8 and fnv1aHex are copies of its own, and
-    tools/test-backend.js checks that both give the same key), so the stores are this user's from the
+    a test checks that both give the same key), so the stores are this user's from the
     page's first moment, before the app's first call. */
 
     /**
@@ -474,12 +474,28 @@
             Write('    userName: \'' + userName + '\',');
             Write('    userEmail: \'' + userEmail + '\',');
             Write('    userKey: \'' + (/^[0-9a-f]{8}$/.test(authRow.userKey) ? authRow.userKey : '') + '\',');
-            Write('    version: \'1.0.0\',');
+            Write('    version: \'1.1.0\',');
             Write('    mock: false,');
             Write('    setupPending: ' + (isSetupPending ? 'true' : 'false') + ',');
             Write('    monacoBase: \'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs\',');
             Write('    docsBase: \'https://mateuszdabrowski.pl/docs/category/salesforce/marketing-cloud-engagement/sql/\'');
             Write('};');
+            Write('<\/script>');
+
+            /* The hidden frame a background renewal signs in through ends on this page, and needs none of the
+            app: it only has to tell the app it has arrived. The Frontend does that too, in boot(), but only
+            after the Monaco loader and the 1.6 MB bundle have downloaded and parsed, on the app's own thread, as
+            this frame is the same origin (a renewal took 24.4 s on the author's org, 2026-10-04). So the frame
+            says so here and then stops, before the page runs either script, and boot() stays as the fallback for
+            a Cloud Page that lacks this. The browser may have started downloading the two scripts already, as it
+            reads ahead of a running script, and the stop cancels that. The app reads the frame's address while
+            it answers frameArrived, so the stop comes after it, and nothing reads the frame once it has stopped.
+            The name is the Frontend's RENEW_FRAME_NAME, and the build's tests check that the two match. */
+            Write('<script>');
+            Write('if (window.name === \'sqlstudio-renew\') {');
+            Write('    try { window.parent.SQLStudio.silentRenew.frameArrived(); } catch (e) {}');
+            Write('    try { window.stop(); } catch (e) {}');
+            Write('}');
             Write('<\/script>');
 
             /* L3: the loader is pinned to an exact version and verified with Subresource Integrity;
