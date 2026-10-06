@@ -3881,6 +3881,64 @@
         };
 
         /**
+         * @function readFlatResultBlock
+         * @description Reads one Results block in a single pass, with indexOf and substring only: each leaf's
+         *              decoded text by its name, or 'Parent.Name' one level down (e.g. 'Template.CustomerKey').
+         *              Self-closing (nil) elements are left out, so they read as missing, as with xmlValue. The
+         *              first value of a path wins. Rescanning each block per property ran the Data Extension
+         *              list past MCE's time limit (HTTP 408) at ~1,300 Data Extensions.
+         * @param {string} block - one Results block
+         * @returns {Object} value by path
+         */
+        function readFlatResultBlock(block) {
+            var values = {};
+            var parent = '';
+            var at = 0;
+            while (true) {
+                var openAt = block.indexOf('<', at);
+                if (openAt === -1) {
+                    break;
+                };
+                var closeAt = block.indexOf('>', openAt);
+                if (closeAt === -1) {
+                    break;
+                };
+                var tagText = block.substring(openAt + 1, closeAt);
+                at = closeAt + 1;
+                var isClosing = tagText.charAt(0) === '/';
+                if (!isClosing && tagText.charAt(tagText.length - 1) === '/') {
+                    continue;
+                };
+                var spaceAt = tagText.indexOf(' ');
+                var name = isClosing ? tagText.substring(1) : ((spaceAt === -1) ? tagText : tagText.substring(0, spaceAt));
+                var colonAt = name.lastIndexOf(':');
+                if (colonAt !== -1) {
+                    name = name.substring(colonAt + 1);
+                };
+                if (isClosing) {
+                    if (name === parent) {
+                        parent = '';
+                    };
+                    continue;
+                };
+                var nextAt = block.indexOf('<', at);
+                if (nextAt === -1) {
+                    break;
+                };
+                if (block.charAt(nextAt + 1) === '/') {
+                    var path = (parent === '') ? name : (parent + '.' + name);
+                    if (!values.hasOwnProperty(path)) {
+                        values[path] = xmlDecode(block.substring(at, nextAt));
+                    };
+                    at = nextAt;
+                } else if (parent === '') {
+                    parent = name;
+                };
+            };
+            return values;
+        };
+
+        /**
          * @function actionListDataExtensions
          * @description Lists Data Extensions over SOAP, one page at a time (a payload.requestId
          *              continues a previous MoreDataAvailable page instead of starting a fresh
@@ -3989,27 +4047,25 @@
             };
 
             var items = [];
+            var pick = function (values, path) {
+                return values.hasOwnProperty(path) ? values[path] : null;
+            };
             for (var i = 0; i < soapRes.results.length; i++) {
-                /* The nested objects first, so no value of theirs is taken for the Data Extension's own: a Template block
-                holds a CustomerKey, and the send relationship's fields hold a Name. */
-                var sendableFieldBlock = xmlRaw(soapRes.results[i], 'SendableDataExtensionField');
-                var sendableSubscriberBlock = xmlRaw(soapRes.results[i], 'SendableSubscriberField');
-                var templateBlock = xmlRaw(soapRes.results[i], 'Template');
-                var block = xmlWithout(xmlWithout(xmlWithout(soapRes.results[i], 'SendableDataExtensionField'), 'SendableSubscriberField'), 'Template');
-                var key = xmlValue(block, 'CustomerKey');
+                var values = readFlatResultBlock(soapRes.results[i]);
+                var key = pick(values, 'CustomerKey');
                 if (isTempDeKey(key)) {
                     continue;
                 };
                 items.push({
-                    objectId: xmlValue(block, 'ObjectID'),
+                    objectId: pick(values, 'ObjectID'),
                     key: key,
-                    name: xmlValue(block, 'Name'),
-                    categoryId: toNullableInt(xmlValue(block, 'CategoryID')),
-                    isSendable: xmlValue(block, 'IsSendable') === 'true',
-                    sendableField: emptyToNull(sendableFieldBlock === null ? null : xmlValue(sendableFieldBlock, 'Name')),
-                    sendableSubscriberField: emptyToNull(sendableSubscriberBlock === null ? null : xmlValue(sendableSubscriberBlock, 'Name')),
-                    templateKey: emptyToNull(templateBlock === null ? null : xmlValue(templateBlock, 'CustomerKey')),
-                    description: emptyToNull(xmlValue(block, 'Description'), DE_LIST_DESCRIPTION_MAX)
+                    name: pick(values, 'Name'),
+                    categoryId: toNullableInt(pick(values, 'CategoryID')),
+                    isSendable: pick(values, 'IsSendable') === 'true',
+                    sendableField: emptyToNull(pick(values, 'SendableDataExtensionField.Name')),
+                    sendableSubscriberField: emptyToNull(pick(values, 'SendableSubscriberField.Name')),
+                    templateKey: emptyToNull(pick(values, 'Template.CustomerKey')),
+                    description: emptyToNull(pick(values, 'Description'), DE_LIST_DESCRIPTION_MAX)
                 });
             };
 
