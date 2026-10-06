@@ -2,6 +2,25 @@
 
 All notable changes to SQL Studio are documented in this file.
 
+## 1.1.1 - 2026-10-06
+
+A Business Unit with thousands of Data Extensions loads its Data Extension list again, up to four times faster, page by page. Updating means replacing the code of SQL Studio Frontend and SQL Studio Backend: the settings stay as they are, and the Cloud Page changed only its version line, so it can stay too.
+
+### Highlights
+
+- A Business Unit with thousands of Data Extensions loads its Data Extension list again.
+- The Data Extension list loads up to four times faster.
+- The sidebar fills page by page while a large list loads.
+- Replace SQL Studio Frontend and SQL Studio Backend: the Cloud Page stays as it is.
+
+### What is in it
+
+- **Large Business Units:** in 1.1.0 the list's first page asked for each Data Extension's description, send relationship and template. On a parent Business Unit with about 4,500 Data Extensions, Marketing Cloud Engagement stopped that page at its time limit (HTTP 408), and the sidebar said "Could not load Data Extensions". The list now asks for names, keys and folders alone, as 1.0 did. A list of up to 500 Data Extensions then reads all their details in one more call. In a larger one, a Data Extension reads its details with its fields, when it is used: in a query, opened in the sidebar or in a join. They are cached with the list for the day, and Reload keeps them. Until then its hover shows no description, send relationship or template, and JOIN completion offers it only once its fields have loaded.
+- **Page by page:** a first load shows each page of up to 2,500 Data Extensions as it comes, with "Loading the list: 5,000 so far..." under them, so the sidebar, its search and completion work before the last page. MCE073 waits for the whole list.
+- **The cache:** the browser keeps the list in half the space, so a Business Unit with 15,000 Data Extensions still fits. A list that is still too large is cached without its descriptions, which load again on use.
+- **A faster Backend:** the Backend reads Marketing Cloud Engagement's answers in far fewer steps. On the author's account, the details of a list of 254 Data Extensions came in 3.0 seconds, where the same call took 13.0, and the list's plain page in under 5 seconds, where it took 9.8. Of those 9.8 seconds, 8.3 went to the Backend's own reading of the answer and 0.2 to waiting for it: a slow call's console line now gives that split.
+- **API calls:** a list of up to 500 Data Extensions costs 1 call more per load, for its details. A larger one costs 1 call for each batch of up to 50 Data Extensions used for the first time that day.
+
 ## 1.1.0 - 2026-10-05
 
 SQL Studio opens twice as fast, child Business Units see the parent's shared and synchronized Data Extensions, JOIN autocomplete writes whole joins, runs spend fewer API calls, and lint flags a mistyped table before Run. Updating means replacing the code of all three pieces: the settings stay as they are.

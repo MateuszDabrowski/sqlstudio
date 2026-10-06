@@ -135,7 +135,7 @@
     /* ----------------------------------------------------------------------- */
 
     var appName        = 'SQLStudio';
-    var appVersion      = '1.1.0';
+    var appVersion      = '1.1.1';
     // No refresh tokens: see docs/EXTENDING.md ("Refresh tokens (optional, not shipped)") for why
     // and what it would take to add one back. Sessions last about 20 minutes; the frontend's
     // expiry modal re-authenticates with one click.
@@ -155,6 +155,9 @@
     var method = Platform.Request.Method();
     var apiCallCount = 0;                              // SOAP + REST calls made while serving this request; returned as meta.apiCalls
     var wsproxyCallCount = 0;                          // WSProxy calls made while serving this request, inside Marketing Cloud Engagement and counted apart from API calls; returned as meta.wsproxyCalls
+    var requestStartedAt = (new Date()).getTime();     // when this script started serving the request; meta.backendMs counts from it
+    var soapMs = 0;                                    // time spent waiting for SOAP answers in this request; returned as meta.soapMs
+    var restMs = 0;                                    // time spent waiting for REST answers in this request; returned as meta.restMs
     var currentAccessToken = '';                       // the access token this request works with, for maskSecrets: set where the POST flow loads a session's token and where sign-in receives one
 
     /* ----------------------------------------------------------------------- */
@@ -196,14 +199,20 @@
     /**
      * @function callMeta
      * @description The `meta` every POST answer carries: the API calls (SOAP and REST) and the WSProxy
-     *              calls made while serving the request. WSProxy runs inside Marketing Cloud Engagement,
-     *              and SQL Studio counts its calls apart from its API calls.
-     * @returns {{apiCalls: number, wsproxyCalls: number}}
+     *              calls made while serving the request, and its times in milliseconds: backendMs from the
+     *              script's start, and soapMs and restMs, the parts of it spent waiting for SOAP and REST
+     *              answers. WSProxy runs inside Marketing Cloud Engagement, and SQL Studio counts its calls apart
+     *              from its API calls. The times say where a slow request spent them (1.1.1: a Data Extension
+     *              list page took 9.7 s on the author's org for 254 Data Extensions).
+     * @returns {{apiCalls: number, wsproxyCalls: number, backendMs: number, soapMs: number, restMs: number}}
      */
     function callMeta() {
         var meta = {
             apiCalls: apiCallCount,
-            wsproxyCalls: wsproxyCallCount
+            wsproxyCalls: wsproxyCallCount,
+            backendMs: (new Date()).getTime() - requestStartedAt,
+            soapMs: soapMs,
+            restMs: restMs
         };
         return meta;
     };
@@ -521,6 +530,13 @@
      *              at the first matching closing tag. Only indexOf and substring are used: on the first org
      *              deployment, the regular expressions this replaced misread OverallStatus in an OK answer,
      *              and a global exec() loop over <Results> ran until MCE stopped the call at 30 seconds.
+     *              It jumps with indexOf to each place the name is written, and checks only those: the
+     *              opening tag of an element is the name, or a prefix and the name, right after "<", with no
+     *              name character after it. Walking every tag and reading each name a character at a time,
+     *              as it did until 1.1.1, took the Backend 8 of the 9.8 seconds of a list page of 254 Data
+     *              Extensions on the author's org (2026-10-06), as MCE's script engine runs each character's
+     *              step slowly, while indexOf runs in the engine's own code. It finds the element the walk
+     *              found, the first one at or after fromIndex whose local name is tag.
      * @param {string} source
      * @param {string} tag - the element name without a prefix, e.g. 'OverallStatus'.
      * @param {number} fromIndex
@@ -529,36 +545,49 @@
     function findXmlElement(source, tag, fromIndex) {
         var searchFrom = fromIndex;
         while (searchFrom < source.length) {
-            var openAt = source.indexOf('<', searchFrom);
-            if (openAt === -1) {
+            var nameAt = source.indexOf(tag, searchFrom);
+            if (nameAt === -1) {
                 return null;
             };
-            var nameEnd = openAt + 1;
-            while (nameEnd < source.length && isXmlNameChar(source.charAt(nameEnd))) {
-                nameEnd++;
+            var nameEnd = nameAt + tag.length;
+            searchFrom = nameEnd;
+            /* The name ends here: a longer name, such as NameX for Name, is another element. */
+            if (nameEnd < source.length && isXmlNameChar(source.charAt(nameEnd))) {
+                continue;
+            };
+            /* Back over a prefix to the "<": a closing tag, text or an attribute value has none right there. */
+            var openAt = nameAt - 1;
+            while (openAt >= fromIndex && isXmlNameChar(source.charAt(openAt))) {
+                openAt--;
+            };
+            if (openAt < fromIndex || source.charAt(openAt) !== '<') {
+                continue;
+            };
+            var name = source.substring(openAt + 1, nameEnd);
+            var colonAt = name.lastIndexOf(':');
+            var localName = (colonAt === -1) ? name : name.substring(colonAt + 1);
+            if (localName !== tag) {
+                continue;
             };
             var tagEnd = source.indexOf('>', nameEnd);
             if (tagEnd === -1) {
                 return null;
             };
-            var name = source.substring(openAt + 1, nameEnd);
-            var colonAt = name.lastIndexOf(':');
-            var localName = (colonAt === -1) ? name : name.substring(colonAt + 1);
-            if (name !== '' && localName === tag && source.charAt(tagEnd - 1) !== '/') {
-                var closeTag = '</' + name + '>';
-                var closeAt = source.indexOf(closeTag, tagEnd + 1);
-                if (closeAt === -1) {
-                    return null;
-                };
-                var element = {
-                    start: openAt,
-                    contentStart: tagEnd + 1,
-                    contentEnd: closeAt,
-                    end: closeAt + closeTag.length
-                };
-                return element;
+            if (source.charAt(tagEnd - 1) === '/') {
+                continue;
             };
-            searchFrom = tagEnd + 1;
+            var closeTag = '</' + name + '>';
+            var closeAt = source.indexOf(closeTag, tagEnd + 1);
+            if (closeAt === -1) {
+                return null;
+            };
+            var element = {
+                start: openAt,
+                contentStart: tagEnd + 1,
+                contentEnd: closeAt,
+                end: closeAt + closeTag.length
+            };
+            return element;
         };
         return null;
     };
@@ -717,7 +746,9 @@
         apiCallCount++;
         var res = null;
         try {
+            var sentAt = (new Date()).getTime();
             res = req.send();
+            restMs += (new Date()).getTime() - sentAt;
         } catch (sendErr) {
             /* The contract is "never throws": a request that fails outright comes back as status 0
             with the error text, so every caller's non-2xx path handles it. */
@@ -776,7 +807,9 @@
         apiCallCount++;
         var res = null;
         try {
+            var sentAt = (new Date()).getTime();
             res = req.send();
+            soapMs += (new Date()).getTime() - sentAt;
         } catch (sendErr) {
             var failedSoap = {
                 status: 0,
@@ -2381,7 +2414,11 @@
     one continued only for the user and the key it was started for (its requestSig, see exportSignature),
     the user's ad-hoc Query Activities (compared with adHocActivityKey), AsyncActivityStatus for a Task ID
     the user started (its taskSig, see taskSignature), and the metadata of this Business Unit's own
-    shared and synchronized Data Extensions, never their rows.
+    shared and synchronized Data Extensions, never their rows. That metadata is their fields, once
+    isSharedOrSynchronizedKey has confirmed the key, and the description, template key and send
+    relationship that readDetailsWithWsProxy reads for a whole request in one retrieve: it keeps a result
+    only when its CategoryID is the ID of a shared or synchronized folder, so the extras of any other
+    Data Extension of this Business Unit are dropped inside the Backend and never leave it.
     3. Reads, and SQL Studio's own clean-up. Nothing here creates, updates or starts anything for a user.
     4. The token path is the fallback. The app's inBackendBu hint only routes a request and never grants
     anything. Without it, or when a WSProxy call throws, answers an error or finds nothing where an
@@ -3881,6 +3918,112 @@
         };
 
         /**
+         * @function extrasToAsk
+         * @description The extras a request asks for: the four of DE_LIST_EXTRA_PROPERTIES, except those a skipExtras
+         *              list names. The list is read by extraNamesOf, so a value that is not an array of strings is
+         *              BAD_REQUEST, and a name it does not know is ignored. Shared by the Data Extension list's first
+         *              page and actionGetDataExtensionDetails.
+         * @param {*} skipValue - payload.skipExtras
+         * @returns {string[]} The extras to ask for, in the order of DE_LIST_EXTRA_PROPERTIES.
+         */
+        function extrasToAsk(skipValue) {
+            var skipList = extraNamesOf(skipValue, 'skipExtras');
+            var extras = [];
+            for (var e = 0; e < DE_LIST_EXTRA_PROPERTIES.length; e++) {
+                if (!containsText(skipList, DE_LIST_EXTRA_PROPERTIES[e])) {
+                    extras.push(DE_LIST_EXTRA_PROPERTIES[e]);
+                };
+            };
+            return extras;
+        };
+
+        /**
+         * @function retrieveWithExtrasRetry
+         * @description Sends a DataExtension Retrieve that asks for extras, and asks again when Marketing Cloud
+         *              Engagement refuses it (isSoapRefusal): once without the extras the error names
+         *              (namedExtras), or with none when it names none, and once more with none when that fails the
+         *              same way. So a refusal costs one or two more calls. A failure that is no refusal is
+         *              returned as it is, for the caller to throw. Shared by the Data Extension list's first page
+         *              and actionGetDataExtensionDetails.
+         * @param {function(string[]): string} buildBody - Builds the RetrieveRequestMsg XML for the extras it is given.
+         * @param {string[]} extras - The extras to ask for first, from DE_LIST_EXTRA_PROPERTIES.
+         * @param {string} token
+         * @returns {{soapRes: Object, extrasUnavailable: ?string[], extrasUnnamed: string[], extrasError: ?string}}
+         *          soapRes is the last answer. extrasUnavailable is null unless the Retrieve had to be asked again,
+         *          and then lists the extras left out. extrasUnnamed lists those of them that no error named, and
+         *          extrasError is the text of the refusal, with the second one after " | " when there were two.
+         */
+        function retrieveWithExtrasRetry(buildBody, extras, token) {
+            var soapRes = soap('Retrieve', buildBody(extras), token);
+            var extrasUnavailable = null;
+            var extrasUnnamed = [];
+            var extrasError = null;
+            if (!soapRes.ok && extras.length > 0 && isSoapRefusal(soapRes)) {
+                var named = namedExtras(soapRes, extras);
+                var remaining = [];
+                if (named.length > 0) {
+                    for (var r = 0; r < extras.length; r++) {
+                        if (!containsText(named, extras[r])) {
+                            remaining.push(extras[r]);
+                        };
+                    };
+                };
+                extrasUnavailable = (named.length > 0) ? named : extras;
+                extrasUnnamed = (named.length > 0) ? [] : extras;
+                extrasError = refusalText(soapRes);
+                soapRes = soap('Retrieve', buildBody(remaining), token);
+                if (!soapRes.ok && remaining.length > 0 && isSoapRefusal(soapRes)) {
+                    /* The others were refused as well: the five properties alone. Those this error does not name
+                    were left out without a name. */
+                    var namedAgain = namedExtras(soapRes, remaining);
+                    for (var u = 0; u < remaining.length; u++) {
+                        if (!containsText(namedAgain, remaining[u])) {
+                            extrasUnnamed.push(remaining[u]);
+                        };
+                    };
+                    extrasUnavailable = extras;
+                    extrasError = extrasError + ' | ' + refusalText(soapRes);
+                    soapRes = soap('Retrieve', buildBody([]), token);
+                };
+            };
+            var retry = {
+                soapRes: soapRes,
+                extrasUnavailable: extrasUnavailable,
+                extrasUnnamed: extrasUnnamed,
+                extrasError: extrasError
+            };
+            return retry;
+        };
+
+        /**
+         * @function splitDataExtensionBlock
+         * @description Reads one DataExtension Results block that asked for the extras: the nested send relationship
+         *              and template blocks first, so no value of theirs is taken for the Data Extension's own (a
+         *              Template block holds a CustomerKey, and the send relationship's fields hold a Name), and the
+         *              Data Extension's own XML is what is left. Each extra is null when empty, nil, blank or missing,
+         *              and the description is cut at DE_LIST_DESCRIPTION_MAX characters. Shared by
+         *              actionListDataExtensions and actionGetDataExtensionDetails.
+         * @param {string} resultXml - One raw <Results> block.
+         * @returns {{own: string, sendableField: ?string, sendableSubscriberField: ?string, templateKey: ?string,
+         *          description: ?string}} own is the block without the three nested ones, for the caller to read
+         *          the Data Extension's own properties from.
+         */
+        function splitDataExtensionBlock(resultXml) {
+            var sendableFieldBlock = xmlRaw(resultXml, 'SendableDataExtensionField');
+            var sendableSubscriberBlock = xmlRaw(resultXml, 'SendableSubscriberField');
+            var templateBlock = xmlRaw(resultXml, 'Template');
+            var own = xmlWithout(xmlWithout(xmlWithout(resultXml, 'SendableDataExtensionField'), 'SendableSubscriberField'), 'Template');
+            var parts = {
+                own: own,
+                sendableField: emptyToNull(sendableFieldBlock === null ? null : xmlValue(sendableFieldBlock, 'Name')),
+                sendableSubscriberField: emptyToNull(sendableSubscriberBlock === null ? null : xmlValue(sendableSubscriberBlock, 'Name')),
+                templateKey: emptyToNull(templateBlock === null ? null : xmlValue(templateBlock, 'CustomerKey')),
+                description: emptyToNull(xmlValue(own, 'Description'), DE_LIST_DESCRIPTION_MAX)
+            };
+            return parts;
+        };
+
+        /**
          * @function actionListDataExtensions
          * @description Lists Data Extensions over SOAP, one page at a time (a payload.requestId
          *              continues a previous MoreDataAvailable page instead of starting a fresh
@@ -3947,42 +4090,11 @@
                     soapRes = soap('Retrieve', dataExtensionListBody([]), authRow.token);
                 };
             } else {
-                var skipList = extraNamesOf(payload.skipExtras, 'skipExtras');
-                var extras = [];
-                for (var e = 0; e < DE_LIST_EXTRA_PROPERTIES.length; e++) {
-                    if (!containsText(skipList, DE_LIST_EXTRA_PROPERTIES[e])) {
-                        extras.push(DE_LIST_EXTRA_PROPERTIES[e]);
-                    };
-                };
-                soapRes = soap('Retrieve', dataExtensionListBody(extras), authRow.token);
-                if (!soapRes.ok && extras.length > 0 && isSoapRefusal(soapRes)) {
-                    var named = namedExtras(soapRes, extras);
-                    var remaining = [];
-                    if (named.length > 0) {
-                        for (var r = 0; r < extras.length; r++) {
-                            if (!containsText(named, extras[r])) {
-                                remaining.push(extras[r]);
-                            };
-                        };
-                    };
-                    extrasUnavailable = (named.length > 0) ? named : extras;
-                    extrasUnnamed = (named.length > 0) ? [] : extras;
-                    extrasError = refusalText(soapRes);
-                    soapRes = soap('Retrieve', dataExtensionListBody(remaining), authRow.token);
-                    if (!soapRes.ok && remaining.length > 0 && isSoapRefusal(soapRes)) {
-                        /* The others were refused as well: the five properties alone. Those this error does not name
-                        were left out without a name. */
-                        var namedAgain = namedExtras(soapRes, remaining);
-                        for (var u = 0; u < remaining.length; u++) {
-                            if (!containsText(namedAgain, remaining[u])) {
-                                extrasUnnamed.push(remaining[u]);
-                            };
-                        };
-                        extrasUnavailable = extras;
-                        extrasError = extrasError + ' | ' + refusalText(soapRes);
-                        soapRes = soap('Retrieve', dataExtensionListBody([]), authRow.token);
-                    };
-                };
+                var attempt = retrieveWithExtrasRetry(dataExtensionListBody, extrasToAsk(payload.skipExtras), authRow.token);
+                soapRes = attempt.soapRes;
+                extrasUnavailable = attempt.extrasUnavailable;
+                extrasUnnamed = attempt.extrasUnnamed;
+                extrasError = attempt.extrasError;
             };
             if (!soapRes.ok) {
                 throw sfmcErrorFromSoap(soapRes);
@@ -3990,12 +4102,8 @@
 
             var items = [];
             for (var i = 0; i < soapRes.results.length; i++) {
-                /* The nested objects first, so no value of theirs is taken for the Data Extension's own: a Template block
-                holds a CustomerKey, and the send relationship's fields hold a Name. */
-                var sendableFieldBlock = xmlRaw(soapRes.results[i], 'SendableDataExtensionField');
-                var sendableSubscriberBlock = xmlRaw(soapRes.results[i], 'SendableSubscriberField');
-                var templateBlock = xmlRaw(soapRes.results[i], 'Template');
-                var block = xmlWithout(xmlWithout(xmlWithout(soapRes.results[i], 'SendableDataExtensionField'), 'SendableSubscriberField'), 'Template');
+                var parts = splitDataExtensionBlock(soapRes.results[i]);
+                var block = parts.own;
                 var key = xmlValue(block, 'CustomerKey');
                 if (isTempDeKey(key)) {
                     continue;
@@ -4006,10 +4114,10 @@
                     name: xmlValue(block, 'Name'),
                     categoryId: toNullableInt(xmlValue(block, 'CategoryID')),
                     isSendable: xmlValue(block, 'IsSendable') === 'true',
-                    sendableField: emptyToNull(sendableFieldBlock === null ? null : xmlValue(sendableFieldBlock, 'Name')),
-                    sendableSubscriberField: emptyToNull(sendableSubscriberBlock === null ? null : xmlValue(sendableSubscriberBlock, 'Name')),
-                    templateKey: emptyToNull(templateBlock === null ? null : xmlValue(templateBlock, 'CustomerKey')),
-                    description: emptyToNull(xmlValue(block, 'Description'), DE_LIST_DESCRIPTION_MAX)
+                    sendableField: parts.sendableField,
+                    sendableSubscriberField: parts.sendableSubscriberField,
+                    templateKey: parts.templateKey,
+                    description: parts.description
                 });
             };
 
@@ -4413,6 +4521,319 @@
             var data = {
                 key: key,
                 fields: fields
+            };
+            return data;
+        };
+
+        /* The most keys one getDataExtensionDetails call takes: the app asks for a few Data Extensions at a time. */
+        var DE_DETAILS_MAX_KEYS = 50;
+        /* The longest key a details call takes at all: a longer CustomerKey than 36 is answered as missing, and one past this is no key. */
+        var DE_DETAILS_KEY_MAX = 200;
+
+        /**
+         * @function dataExtensionDetailsBody
+         * @description Builds the Retrieve of the details of some Data Extensions by CustomerKey: the key itself and
+         *              the extras it was given, with an equals filter for one key and an IN filter, one Value per key,
+         *              for several.
+         * @param {string[]} keys - The CustomerKeys to read, without any ENT. prefix, 1 or more.
+         * @param {string[]} extras - Extra properties to ask for, from DE_LIST_EXTRA_PROPERTIES.
+         * @returns {string} The RetrieveRequestMsg XML.
+         */
+        function dataExtensionDetailsBody(keys, extras) {
+            var propertiesXml = '<Properties>CustomerKey</Properties>';
+            var i;
+            for (i = 0; i < extras.length; i++) {
+                propertiesXml += '<Properties>' + extras[i] + '</Properties>';
+            };
+            var valuesXml = '';
+            for (i = 0; i < keys.length; i++) {
+                valuesXml += '<Value>' + xmlEscape(keys[i]) + '</Value>';
+            };
+            var bodyXml = '<RetrieveRequestMsg xmlns="http://exacttarget.com/wsdl/partnerAPI">' +
+                '<RetrieveRequest>' +
+                '<ObjectType>DataExtension</ObjectType>' +
+                propertiesXml +
+                '<Filter xsi:type="SimpleFilterPart">' +
+                '<Property>CustomerKey</Property>' +
+                '<SimpleOperator>' + (keys.length === 1 ? 'equals' : 'IN') + '</SimpleOperator>' +
+                valuesXml +
+                '</Filter>' +
+                '</RetrieveRequest>' +
+                '</RetrieveRequestMsg>';
+            return bodyXml;
+        };
+
+        /**
+         * @function wsproxyText
+         * @description Reads a WSProxy value as text: null when it is missing or nil, otherwise String(), as WSProxy's
+         *              values can be CLR objects that only String() reads.
+         * @param {*} value
+         * @returns {?string}
+         */
+        function wsproxyText(value) {
+            return (value === null || value === undefined) ? null : String(value);
+        };
+
+        /**
+         * @function wsproxyNestedText
+         * @description Reads a nested property of a WSProxy row as text, as WSProxy answers one: 'Template.CustomerKey'
+         *              as a Template object with a CustomerKey, or, as a fallback, under its dotted name.
+         * @param {Object} row - One WSProxy Results entry.
+         * @param {string} objectName - 'Template', 'SendableDataExtensionField' or 'SendableSubscriberField'.
+         * @param {string} propertyName - 'CustomerKey' or 'Name'.
+         * @returns {?string}
+         */
+        function wsproxyNestedText(row, objectName, propertyName) {
+            var nested = row[objectName];
+            if (nested !== null && nested !== undefined && typeof nested === 'object') {
+                return wsproxyText(nested[propertyName]);
+            };
+            return wsproxyText(row[objectName + '.' + propertyName]);
+        };
+
+        /**
+         * @function readParentFolderIds
+         * @description Reads the IDs of this Business Unit's shared and synchronized folders (PARENT_FOLDER_TYPES) through
+         *              WSProxy in this Code Resource's own Business Unit, as actionListParentDataExtensions reads its
+         *              folders: one retrieve of DataFolder by ContentType IN, and, when that throws, answers an error or
+         *              finds none, one of every folder, kept to those content types in code. Called once for a whole
+         *              request. It follows getNextBatch for up to PARENT_LIST_MAX_BATCHES batches and stops at
+         *              PARENT_LIST_TIME_BUDGET_MS, and a read cut short gives fewer folders, so fewer keys are confirmed
+         *              and the caller reads the rest with the token. Every call counts in wsproxyCallCount. It never
+         *              throws.
+         * @returns {?{ids: Object, count: number}} ids has a key 'f:' + the folder ID, each true, and count says how many
+         *          folders there are, or null when WSProxy failed.
+         */
+        function readParentFolderIds() {
+            var deadlineMs = (new Date()).getTime() + PARENT_LIST_TIME_BUDGET_MS;
+            var folderProperties = ['ID', 'ContentType'];
+            var folderIds = {};
+            var count = 0;
+            try {
+                var proxy = new Script.Util.WSProxy();
+                var folderRead = null;
+                try {
+                    folderRead = readWsProxyBatches(proxy, 'DataFolder', folderProperties, {
+                        Property: 'ContentType',
+                        SimpleOperator: 'IN',
+                        Value: PARENT_FOLDER_TYPES
+                    }, PARENT_LIST_MAX_BATCHES, deadlineMs);
+                } catch (inFilterErr) {
+                    folderRead = null;
+                };
+                if (folderRead === null || (folderRead.results.length === 0 && !folderRead.isCapped)) {
+                    folderRead = readWsProxyBatches(proxy, 'DataFolder', folderProperties, null, PARENT_LIST_MAX_BATCHES, deadlineMs);
+                };
+                for (var i = 0; i < folderRead.results.length; i++) {
+                    var folder = folderRead.results[i];
+                    if (PARENT_FOLDER_KINDS.hasOwnProperty(String(folder.ContentType)) && !folderIds.hasOwnProperty('f:' + String(folder.ID))) {
+                        folderIds['f:' + String(folder.ID)] = true;
+                        count++;
+                    };
+                };
+            } catch (folderErr) {
+                return null;
+            };
+            var read = {
+                ids: folderIds,
+                count: count
+            };
+            return read;
+        };
+
+        /**
+         * @function readDetailsWithWsProxy
+         * @description Reads the extras of Data Extensions through WSProxy in this Code Resource's own Business Unit, in
+         *              the shape splitDataExtensionBlock gives, for a parent's shared or synchronized Data Extensions,
+         *              which the user's token in a child Business Unit may not read but this context can. The cost
+         *              is the same for 1 key or 50: the shared and synchronized folders once (readParentFolderIds),
+         *              then one retrieve of DataExtension for all the keys, with the extras and the CategoryID, by an
+         *              equals filter on the CustomerKey for one key and an IN filter for several. Only a result whose
+         *              CategoryID is the ID of one of those folders is kept, so the extras of any other Data
+         *              Extension of this Business Unit, which a key may also name, are dropped here and never leave
+         *              the Backend (rule 2 in section 3.8). A temporary key is not kept either. No folder, a failed
+         *              read or no result keeps nothing, and the caller reads those keys with the token. Counted in
+         *              wsproxyCallCount, and it never throws.
+         * @param {string[]} customerKeys - The Data Extensions' keys, without the ENT. prefix, 1 or more, none a
+         *          temporary key.
+         * @param {string[]} extras - Extra properties to ask for, from DE_LIST_EXTRA_PROPERTIES.
+         * @returns {Object} The extras of each Data Extension kept, by the key 'k:' + its CustomerKey in lower case, each
+         *          { sendableField, sendableSubscriberField, templateKey, description }, null when empty or not asked for.
+         */
+        function readDetailsWithWsProxy(customerKeys, extras) {
+            var kept = {};
+            var folders = readParentFolderIds();
+            if (folders === null || folders.count < 1) {
+                return kept;
+            };
+            var filter = {
+                Property: 'CustomerKey',
+                SimpleOperator: (customerKeys.length === 1) ? 'equals' : 'IN',
+                Value: (customerKeys.length === 1) ? customerKeys[0] : customerKeys
+            };
+            var rows = wsproxyRetrieve('DataExtension', ['CustomerKey', 'CategoryID'].concat(extras), filter);
+            if (rows === null) {
+                return kept;
+            };
+            for (var i = 0; i < rows.length; i++) {
+                var row = rows[i];
+                if (row === null || row === undefined || row.CustomerKey === null || row.CustomerKey === undefined || row.CategoryID === null || row.CategoryID === undefined) {
+                    continue;
+                };
+                var rowKey = String(row.CustomerKey);
+                if (isTempDeKey(rowKey) || !folders.ids.hasOwnProperty('f:' + String(row.CategoryID))) {
+                    continue;
+                };
+                kept['k:' + rowKey.toLowerCase()] = {
+                    sendableField: emptyToNull(wsproxyNestedText(row, 'SendableDataExtensionField', 'Name')),
+                    sendableSubscriberField: emptyToNull(wsproxyNestedText(row, 'SendableSubscriberField', 'Name')),
+                    templateKey: emptyToNull(wsproxyNestedText(row, 'Template', 'CustomerKey')),
+                    description: emptyToNull(wsproxyText(row.Description), DE_LIST_DESCRIPTION_MAX)
+                };
+            };
+            return kept;
+        };
+
+        /**
+         * @function actionGetDataExtensionDetails
+         * @description Reads the four extras of DE_LIST_EXTRA_PROPERTIES (the send relationship, the template key and the
+         *              description) of some Data Extensions by CustomerKey, for the app to read on use instead of
+         *              asking for them in the Data Extension list. Every key is checked before anything is read: a
+         *              string of 1 to DE_DETAILS_KEY_MAX characters, else BAD_REQUEST. An ENT. key may be up to 40
+         *              characters, the prefix is stripped before the read, and the rest is 1 to 36: a longer key, and a
+         *              key of SQL Studio's own temporary run Data Extensions (isTempDeKey), is never read and is listed
+         *              in missing, so it fails none of the others. A plain key is read with the user's token in one SOAP Retrieve, with
+         *              an equals filter on the CustomerKey for one key and an IN filter for several. The ENT. keys are
+         *              read through WSProxy first, in this Code Resource's own Business Unit, all in one go
+         *              (readDetailsWithWsProxy): the shared and synchronized folders once, then one retrieve for every
+         *              ENT. key, keeping only the Data Extensions that sit in one of those folders (rule 2 in section
+         *              3.8), so a call costs the same WSProxy calls for 1 ENT. key or 50. The ENT. keys WSProxy does not
+         *              confirm (no folder, a failed read, no result, or a Data Extension in another folder) are read
+         *              with the user's token, as actionGetDataExtensionFields reads one, by the key without the prefix.
+         *              The keys left for the token share one Retrieve. When Marketing Cloud Engagement refuses it for
+         *              an extra, it is asked again as the Data Extension list's first page is (retrieveWithExtrasRetry),
+         *              and the answer says what was left out. A key asked twice is answered once.
+         * @param {Object} payload - { keys, skipExtras }: keys is 1 to 50 CustomerKeys, plain or with the ENT. prefix,
+         *          and skipExtras, as for listDataExtensions, extras not to ask for.
+         * @param {Object} authRow
+         * @returns {{items: Object[], missing: string[], extrasUnavailable: ?string[], extrasUnnamed: ?string[],
+         *          extrasError: ?string}} Each item is { key, sendableField, sendableSubscriberField, templateKey,
+         *          description }: key as it was asked, ENT. prefix kept, and each of the others null when empty or
+         *          not asked for. missing lists the asked keys that came back with nothing, such as a deleted Data
+         *          Extension, in the order asked. extrasUnavailable, extrasUnnamed and extrasError are set only when
+         *          the Retrieve had to be asked again, in the shapes actionListDataExtensions gives.
+         */
+        function actionGetDataExtensionDetails(payload, authRow) {
+            var keys = requireArray(payload.keys, 'keys');
+            if (keys.length < 1 || keys.length > DE_DETAILS_MAX_KEYS) {
+                throw apiError('BAD_REQUEST', 'Field "keys" must hold 1 to ' + DE_DETAILS_MAX_KEYS + ' keys.', null);
+            };
+            var entries = [];
+            var seenKeys = {};
+            var i;
+            for (i = 0; i < keys.length; i++) {
+                var key = keys[i];
+                requireString(key, 'keys[' + i + ']', 1, DE_DETAILS_KEY_MAX);
+                var isEntKey = key.indexOf('ENT.') === 0;
+                var readKey = isEntKey ? key.substring(4) : key;
+                /* A key longer than a CustomerKey the list and the field read take (36, or 40 with ENT.) is answered as missing, so one
+                such Data Extension does not fail the details of the others in the call. */
+                var isReadable = key.length <= (isEntKey ? 40 : 36) && trimString(readKey).length >= 1 && readKey.length <= 36;
+                /* A prefix on every name, so no key can be taken for a property of the map itself. */
+                if (!seenKeys.hasOwnProperty('k:' + key)) {
+                    seenKeys['k:' + key] = true;
+                    entries.push({
+                        key: key,
+                        readKey: readKey,
+                        isEntKey: isEntKey,
+                        isSkipped: !isReadable,
+                        details: null
+                    });
+                };
+            };
+            var extras = extrasToAsk(payload.skipExtras);
+
+            /* MCE matches a CustomerKey without regard to case, so one read key is asked for once. */
+            var wsproxyKeys = [];
+            var seenWsproxyKeys = {};
+            var entry;
+            for (i = 0; i < entries.length; i++) {
+                entry = entries[i];
+                if (entry.isSkipped || isTempDeKey(entry.readKey)) {
+                    entry.isSkipped = true;
+                    continue;
+                };
+                if (entry.isEntKey && !seenWsproxyKeys.hasOwnProperty('k:' + entry.readKey.toLowerCase())) {
+                    seenWsproxyKeys['k:' + entry.readKey.toLowerCase()] = true;
+                    wsproxyKeys.push(entry.readKey);
+                };
+            };
+            var wsproxyDetails = (wsproxyKeys.length > 0) ? readDetailsWithWsProxy(wsproxyKeys, extras) : {};
+
+            var tokenKeys = [];
+            var seenTokenKeys = {};
+            for (i = 0; i < entries.length; i++) {
+                entry = entries[i];
+                if (entry.isSkipped) {
+                    continue;
+                };
+                if (entry.isEntKey && wsproxyDetails.hasOwnProperty('k:' + entry.readKey.toLowerCase())) {
+                    entry.details = wsproxyDetails['k:' + entry.readKey.toLowerCase()];
+                    continue;
+                };
+                if (!seenTokenKeys.hasOwnProperty('k:' + entry.readKey.toLowerCase())) {
+                    seenTokenKeys['k:' + entry.readKey.toLowerCase()] = true;
+                    tokenKeys.push(entry.readKey);
+                };
+            };
+
+            var attempt = null;
+            var tokenDetails = {};
+            if (tokenKeys.length > 0) {
+                attempt = retrieveWithExtrasRetry(function (askedExtras) {
+                    return dataExtensionDetailsBody(tokenKeys, askedExtras);
+                }, extras, authRow.token);
+                if (!attempt.soapRes.ok) {
+                    throw sfmcErrorFromSoap(attempt.soapRes);
+                };
+                for (i = 0; i < attempt.soapRes.results.length; i++) {
+                    var parts = splitDataExtensionBlock(attempt.soapRes.results[i]);
+                    var ownKey = xmlValue(parts.own, 'CustomerKey');
+                    if (ownKey !== null && ownKey !== '') {
+                        tokenDetails['k:' + ownKey.toLowerCase()] = parts;
+                    };
+                };
+            };
+
+            var items = [];
+            var missing = [];
+            for (i = 0; i < entries.length; i++) {
+                entry = entries[i];
+                var found = entry.details;
+                if (found === null && !entry.isSkipped && tokenDetails.hasOwnProperty('k:' + entry.readKey.toLowerCase())) {
+                    found = tokenDetails['k:' + entry.readKey.toLowerCase()];
+                };
+                if (found === null) {
+                    missing.push(entry.key);
+                } else {
+                    items.push({
+                        key: entry.key,
+                        sendableField: found.sendableField,
+                        sendableSubscriberField: found.sendableSubscriberField,
+                        templateKey: found.templateKey,
+                        description: found.description
+                    });
+                };
+            };
+
+            var data = {
+                items: items,
+                missing: missing
+            };
+            if (attempt !== null && attempt.extrasUnavailable !== null) {
+                data.extrasUnavailable = attempt.extrasUnavailable;
+                data.extrasUnnamed = attempt.extrasUnnamed;
+                data.extrasError = attempt.extrasError;
             };
             return data;
         };
@@ -6280,6 +6701,7 @@
                 listDataExtensions: actionListDataExtensions,
                 listParentDataExtensions: actionListParentDataExtensions,
                 getDataExtensionFields: actionGetDataExtensionFields,
+                getDataExtensionDetails: actionGetDataExtensionDetails,
                 validateQuery: actionValidateQuery,
                 runQuery: actionRunQuery,
                 getRunStatus: actionGetRunStatus,

@@ -1,4 +1,4 @@
-/* SQL Studio 1.1.0 - SQL Studio Frontend, the readable copy with its comments. Paste sql-studio-frontend.min.js instead: it is the same code, and Marketing Cloud Engagement served it in 2 s, against 18 s for this file, on the author's org. */
+/* SQL Studio 1.1.1 - SQL Studio Frontend, the readable copy with its comments. Paste sql-studio-frontend.min.js instead: it is the same code, and Marketing Cloud Engagement served it in 2 s, against 18 s for this file, on the author's org. */
 /* Copyright (c) 2026 Mateusz Dąbrowski. Free to use, change and share, commercial use included, as long as this notice stays. Licensed under the EUPL 1.2: https://github.com/MateuszDabrowski/sqlstudio/blob/main/LICENSE */
 /* Includes Salesforce Lightning Design System icons, unchanged: © Salesforce, Inc., CC BY-ND 4.0, https://creativecommons.org/licenses/by-nd/4.0/ */
 /* Contents (line numbers are where each part starts in this finished file):
@@ -12840,7 +12840,16 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
      * holds depends on what the user may see.
      * @returns {string} the per-user localStorage key
      */
-    function deListKey() { return userKeyFor('ss.deList'); }
+    function deListKey() { return userKeyFor('ss.deList2'); }
+
+    /**
+     * @function legacyDeListKey
+     * @description Returns the key 1.1.0 kept the list's cache under, with its entries as items. Since 1.1.1 the cache holds them as
+     * columns and rows (packDeEntries) under deListKey: a 1.1.0 Frontend that read the new form under its own key would take it for
+     * an empty list, as after a rollback. The old record is read once and removed when the new one is written.
+     * @returns {string} the per-user localStorage key
+     */
+    function legacyDeListKey() { return userKeyFor('ss.deList'); }
 
     /**
      * @function sidebarKey
@@ -12984,6 +12993,18 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
     /* The extras the Backend's list call asks for besides its five properties (its DE_LIST_EXTRA_PROPERTIES), the only names the
     list sends as skipExtras or askedExtras and keeps in ss.deExtras: the Backend refuses an empty name or one over 64 characters. */
     var DE_LIST_EXTRAS = ['SendableDataExtensionField.Name', 'SendableSubscriberField.Name', 'Template.CustomerKey', 'Description'];
+    /* The list's pages ask for the five properties alone, and the extras come later (1.1.1): a page of 2,500 Data Extensions with
+    them ran past Marketing Cloud Engagement's time limit of about 30 seconds on a parent Business Unit with about 4,500 (a user's
+    report, 2026-10-06). A Business Unit's own list of one page and at most DE_LIST_DETAILS_MAX Data Extensions reads them all in
+    one more call (Schema._loadListDetails), as 1.1.0's first page did. A larger one reads a Data Extension's when its fields load,
+    that is when it is used (Schema._queueDetails). The number errs low, as what the extras cost a Data Extension is not known. */
+    var DE_LIST_DETAILS_MAX = 500;
+    /* The most Data Extensions one getDataExtensionDetails call asks for (the Backend takes 50), and how long the field loads of one
+    moment gather before it goes, so the tables of one query come in one call. */
+    var DE_DETAILS_BATCH_MAX = 50;
+    var DE_DETAILS_GATHER_MS = 50;
+    /* How long details that came on use wait before the list's cache is written again, so a query's tables cost one write. */
+    var DE_LIST_SAVE_DELAY_MS = 1000;
     /* The folder content types a Business Unit's own Data Extensions sit in. A Data Extension's
     categoryId is one of these folders, and the sidebar's folder tree (Schema.deTree) is built from
     them. The shared ones are those the Backend's parent list counts as shared (PARENT_FOLDER_TYPES):
@@ -13041,7 +13062,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
     run's rows end it as soon as they appear. After it the run asks isrunning, as a run without a task ID does. */
     var TASK_ROW_WAIT_MS = 5 * 60 * 1000;
     /* The app's own version: a build test keeps it equal to the Backend's appVersion. */
-    var APP_VERSION = '1.1.0';
+    var APP_VERSION = '1.1.1';
     /* The public repository's release manifest, written at each release. Checked once a day. */
     var UPDATE_CHECK_URL = 'https://raw.githubusercontent.com/MateuszDabrowski/sqlstudio/main/latest.json';
     var UPDATE_CHECK_EVERY_MS = 24 * 60 * 60 * 1000;
@@ -14025,21 +14046,22 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
      * ==================================================================== */
     var IDEMPOTENT_ACTIONS = {
         whoami: true, getWorkspace: true, listFolders: true, listDataExtensions: true, listParentDataExtensions: true, getDataExtensionFields: true,
-        validateQuery: true, getRunStatus: true, getRunOutcome: true, getResults: true, listRuns: true, listQueryActivities: true, getQueryActivity: true,
+        getDataExtensionDetails: true, validateQuery: true, getRunStatus: true, getRunOutcome: true, getResults: true, listRuns: true, listQueryActivities: true, getQueryActivity: true,
         listHistory: true, clearHistory: true
     };
-    /* The schema reads: the Data Extension list and its folders, the parent's list, and a Data Extension's fields. The sidebar,
+    /* The schema reads: the Data Extension list and its folders, the parent's list, and a Data Extension's fields and details. The sidebar,
      * completion, hover, lint and Save As ask for them, often from a click or a keystroke that is hard to repeat, and nothing
      * else depends on how the user then waits. One that meets an ended session waits for the background renewal and goes out
      * again with the new session (Api._send). All of them are in IDEMPOTENT_ACTIONS. */
     var SCHEMA_READ_ACTIONS = {
-        listFolders: true, listDataExtensions: true, listParentDataExtensions: true, getDataExtensionFields: true
+        listFolders: true, listDataExtensions: true, listParentDataExtensions: true, getDataExtensionFields: true,
+        getDataExtensionDetails: true
     };
     /* The actions that come through an ended session without the user asking again: the schema reads, sent again once the renewal
      * is done (above), and a run's start and status checks, which QueryRunner holds until it is (_isWaitingForRenewal, _create). */
     var SELF_RECOVERING_ACTIONS = {
         listFolders: true, listDataExtensions: true, listParentDataExtensions: true, getDataExtensionFields: true,
-        runQuery: true, getRunStatus: true, getRunOutcome: true
+        getDataExtensionDetails: true, runQuery: true, getRunStatus: true, getRunOutcome: true
     };
     /* Backend calls slower than this are logged to the console with their time. */
     var SLOW_CALL_LOG_MS = 5000;
@@ -14055,12 +14077,17 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
     function logBackendCall(action, startedAt, err) {
         if (typeof console === 'undefined') return;
         var took = fmtDuration(Date.now() - startedAt);
+        /* Where a slow answer's time went, from the Backend's own meta (1.1.1): what is left of it besides the SOAP and REST waits is
+         * the Backend's script, and what the Backend did not count is Marketing Cloud Engagement's way to and from it. */
+        var timings = Api._lastTimings[action];
+        var split = (timings && timings.at >= startedAt) ? ': the Backend worked ' + fmtSeconds(timings.backendMs) + ', of which ' + fmtSeconds(timings.soapMs) +
+            ' waiting for SOAP and ' + fmtSeconds(timings.restMs) + ' for REST' : '';
         if (err) {
             /* A runtime error in the Backend carries its script details: they say where it broke. */
             var detailText = (err.code === 'INTERNAL' && err.details) ? ' | ' + String(err.details).substring(0, 500) : '';
             console.warn('[SQL Studio] ' + action + ' failed after ' + took + ': ' + (err.code ? err.code + ' - ' : '') + err.message + detailText);
         } else if (Date.now() - startedAt >= SLOW_CALL_LOG_MS) {
-            console.info('[SQL Studio] ' + action + ' took ' + took + '.');
+            console.info('[SQL Studio] ' + action + ' took ' + took + split + '.');
         };
     };
 
@@ -14142,6 +14169,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
 
         /* Every backend answer, in order, for the run summary's breakdown of where the API calls went. */
         callLog: [],
+        _lastTimings: {},   /* action -> the times of its latest answer (recordCall), for logBackendCall */
 
         /**
          * @method recordCall
@@ -14164,6 +14192,16 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             };
             this.callLog.push(entry);
             if (this.callLog.length > 500) this.callLog.splice(0, this.callLog.length - 500);
+            /* The times of the action's latest answer, for logBackendCall's line. An older Backend sends none. */
+            var meta = json.meta || {};
+            if (typeof meta.backendMs === 'number') {
+                this._lastTimings[action] = {
+                    at: Date.now(),
+                    backendMs: meta.backendMs,
+                    soapMs: typeof meta.soapMs === 'number' ? meta.soapMs : 0,
+                    restMs: typeof meta.restMs === 'number' ? meta.restMs : 0
+                };
+            };
             /* A run's own list, for its summary: with four tabs running, the shared log mixes their calls. */
             if (owner && owner._calls) owner._calls.push(entry);
         },
@@ -14275,6 +14313,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                     return Promise.reject(self.makeError('NETWORK', 'Mock backend is not loaded.'));
                 };
                 var mockPromise;
+                var mockStartedAt = Date.now();
                 try {
                     /* The session goes along for a caller of the mock that logs it. The mock itself ignores it. */
                     mockPromise = mockFn(action, payload, sent.session);
@@ -14289,6 +14328,10 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                     return self._handleResponse(json, sent);
                 }, function (err) {
                     throw self.makeError('NETWORK', 'Mock backend rejected: ' + (err && err.message ? err.message : err));
+                }).then(function (data) {
+                    /* A slow answer gets its console line in the dev page too, as it does from the Backend. */
+                    logBackendCall(action, mockStartedAt, null);
+                    return data;
                 }).catch(function (err) {
                     var mockWaited = self._afterRateLimit(err, action, payload, owner, isRetry, sessionOverride, isResent, rateTries);
                     if (mockWaited) return mockWaited;
@@ -15281,6 +15324,11 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         _tableList: [],
         _fieldPromises: {},
         _fieldFailures: {},   /* tableKey -> the error of its failed field load, for the session, until Reload (see autoFields) */
+        _detailQueue: {},     /* tableKey -> table, waiting for the next getDataExtensionDetails call (_queueDetails) */
+        _detailTimer: null,
+        _detailFailures: {},  /* tableKey -> true for a details read that failed, for the session, until Reload */
+        _isDetailsUnsupported: false, /* an older Backend has no getDataExtensionDetails: on-use details stop for the session */
+        _deListSaveTimer: null,
         _deListPromise: null,
         _deListLoading: false,
         _deListError: null,
@@ -15438,6 +15486,13 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
          * @returns {boolean}
          */
         isDeListLoading: function () { return this._deListLoading; },
+
+        /**
+         * @method isListDetailsLoading
+         * @description Whether a small list's details call (_loadListDetails) is on its way.
+         * @returns {boolean}
+         */
+        isListDetailsLoading: function () { return this._isListDetailsLoading === true; },
 
         /**
          * @method deListError
@@ -15659,6 +15714,161 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         },
 
         /**
+         * @method _showPartialList
+         * @description Shows the list's pages so far on a first load, so the sidebar, its search and completion work before the last
+         * page: a list of 15,000 takes six pages in a row. The list stays loading (isDeListLoading), so MCE073 waits for all of it. A
+         * Reload, or a load that a newer one replaced, keeps the list it has.
+         * @param {number} loadNumber - the load the pages belong to
+         * @param {Object[]} entries - the list's entries so far (ownListEntry), which the whole list keeps
+         */
+        _showPartialList: function (loadNumber, entries) {
+            if (loadNumber !== this._deLoadNumber || this._deListSavedAt) return;
+            this.deList = entries.slice();
+            this._rebuildIndex();
+            UI.renderSidebarTree();
+        },
+
+        /**
+         * @method _loadListDetails
+         * @description Reads the extras of a small list's Data Extensions in one call, the first page of the list with them, and
+         * gives each its details (applyDeDetails). It runs after the list has come, so it holds nothing up. The extras refused before
+         * are left out, and a refusal now is remembered as a list page's was (_rememberExtrasUnavailable): with all four refused there
+         * is no call. A Data Extension the answer
+         * misses, or a failed call, leaves the details to its use (_queueDetails). One console line gives the time and the count.
+         * @param {number} loadNumber - the load the list belongs to
+         * @param {number} count - how many Data Extensions the list has
+         */
+        _loadListDetails: function (loadNumber, count) {
+            var self = this;
+            var skipped = self._readExtrasUnavailable();
+            /* All four refused: there is nothing to ask for. */
+            if (skipped.length >= DE_LIST_EXTRAS.length) return Promise.resolve();
+            var payload = skipped.length ? { skipExtras: skipped.slice() } : {};
+            var startedAt = Date.now();
+            self._isListDetailsLoading = true;
+            self._listDetailsLoadNumber = loadNumber;
+            /* The tables used while it runs wait for it (_queueDetails), and are asked for on their own if it misses them or fails. */
+            var queueWaiting = function () {
+                var waiting = self._detailsWaiting || [];
+                self._detailsWaiting = [];
+                waiting.forEach(function (t) { if (t.hasDetails !== true) self._queueDetails(t); });
+            };
+            return Api.call('listDataExtensions', payload).then(function (res) {
+                if (self._listDetailsLoadNumber === loadNumber) self._isListDetailsLoading = false;
+                var left = Array.isArray(res.extrasUnavailable) ? res.extrasUnavailable.map(String) : [];
+                if (left.length) self._rememberExtrasUnavailable(left, res.extrasError, res.extrasUnnamed, false);
+                if (loadNumber !== self._deLoadNumber) {
+                    queueWaiting();
+                    return;
+                };
+                var byKey = {};
+                (res.items || []).forEach(function (item) { byKey[String(item.key).toLowerCase()] = item; });
+                self.deList.forEach(function (t) {
+                    var item = (t && !t.isShared) ? byKey[String(t.key).toLowerCase()] : null;
+                    if (item) applyDeDetails(t, item);
+                });
+                self._saveDeList();
+                UI.renderSidebarTree();
+                queueWaiting();
+                if (typeof console !== 'undefined') console.info('[SQL Studio] The details of the list\'s ' + count + ' Data Extensions came in ' + fmtSeconds(Date.now() - startedAt) + '.');
+            }, function (err) {
+                if (self._listDetailsLoadNumber === loadNumber) self._isListDetailsLoading = false;
+                queueWaiting();
+                if (typeof console !== 'undefined') console.info('[SQL Studio] The details of the list\'s ' + count + ' Data Extensions did not come, after ' + fmtSeconds(Date.now() - startedAt) + ' (' + (err && err.message ? err.message : String(err)) + '). Each Data Extension reads its own when it is used.');
+            });
+        },
+
+        /**
+         * @method _queueDetails
+         * @description Asks for a table's details when its fields start to load, that is when it is used: in a query, open in the
+         * sidebar, in a hover or a join. The field loads of one moment go in one getDataExtensionDetails call
+         * (DE_DETAILS_GATHER_MS, at most DE_DETAILS_BATCH_MAX tables). A table that has its details or failed to read them this session
+         * is not asked for, nor is any once the Backend turned out to have no such action or all four extras were refused. While a small
+         * list's details call runs, its own tables wait for it (_loadListDetails).
+         * @param {Object} table - a schema table entry
+         */
+        _queueDetails: function (table) {
+            var self = this;
+            if (!table || table.kind !== 'de' || table.hasDetails === true || self._isDetailsUnsupported) return;
+            if (self._readExtrasUnavailable().length >= DE_LIST_EXTRAS.length) return;
+            /* A small list's details call covers its own tables: one used meanwhile waits for it. */
+            if (self._isListDetailsLoading && !table.isShared) {
+                if (!self._detailsWaiting) self._detailsWaiting = [];
+                if (self._detailsWaiting.indexOf(table) === -1) self._detailsWaiting.push(table);
+                return;
+            };
+            var lookupKey = self.tableKey(table);
+            if (self._detailFailures[lookupKey]) return;
+            self._detailQueue[lookupKey] = table;
+            if (self._detailTimer === null) self._detailTimer = setTimeout(function () { self._flushDetails(); }, DE_DETAILS_GATHER_MS);
+        },
+
+        /**
+         * @method _flushDetails
+         * @description Sends the queued tables' getDataExtensionDetails call, up to DE_DETAILS_BATCH_MAX at a time, and gives each table
+         * its details (applyDeDetails). A table the answer lists as missing gets none and is not asked for again. A Backend without
+         * the action (UNKNOWN_ACTION, a 1.1.0 one) stops them for the session. Any other failure marks the tables failed for the
+         * session, until Reload. The list's cache is written once a moment later (_scheduleDeListSave). One console line gives the
+         * time and the count of each call.
+         * @returns {Promise} settles once the call has
+         */
+        _flushDetails: function () {
+            var self = this;
+            self._detailTimer = null;
+            var keys = Object.keys(self._detailQueue).slice(0, DE_DETAILS_BATCH_MAX);
+            if (!keys.length) return Promise.resolve();
+            var tables = {};
+            keys.forEach(function (key) {
+                tables[key] = self._detailQueue[key];
+                delete self._detailQueue[key];
+            });
+            if (Object.keys(self._detailQueue).length) self._detailTimer = setTimeout(function () { self._flushDetails(); }, 0);
+            var skipped = self._readExtrasUnavailable();
+            var payload = { keys: keys };
+            if (skipped.length) payload.skipExtras = skipped.slice();
+            var startedAt = Date.now();
+            return Api.call('getDataExtensionDetails', payload).then(function (res) {
+                var left = Array.isArray(res.extrasUnavailable) ? res.extrasUnavailable.map(String) : [];
+                if (left.length) self._rememberExtrasUnavailable(left, res.extrasError, res.extrasUnnamed, false);
+                (res.items || []).forEach(function (item) {
+                    var table = tables[String(item.key)];
+                    if (table) applyDeDetails(table, item);
+                });
+                (res.missing || []).forEach(function (key) {
+                    if (tables[String(key)]) tables[String(key)].hasDetails = true;
+                });
+                self._scheduleDeListSave();
+                if (typeof console !== 'undefined') console.info('[SQL Studio] The details of ' + keys.length + ' Data Extension' + (keys.length === 1 ? '' : 's') + ' came in ' + fmtSeconds(Date.now() - startedAt) + '.');
+            }, function (err) {
+                if (err && err.code === 'UNKNOWN_ACTION') {
+                    self._isDetailsUnsupported = true;
+                    self._detailQueue = {};
+                    return;
+                };
+                /* An ended session is not a failure of the read, as for fields: a renewal that works sends this call again by itself
+                 * (SCHEMA_READ_ACTIONS), and one that fails ends in the sign-in page, whose new page load reads the details on use. */
+                if (err && (err.code === 'SESSION_EXPIRED' || err.code === 'SESSION_INVALID')) return;
+                keys.forEach(function (key) { self._detailFailures[key] = true; });
+            });
+        },
+
+        /**
+         * @method _scheduleDeListSave
+         * @description Writes the list's cache DE_LIST_SAVE_DELAY_MS from now, once for the details of a moment, while a list is held.
+         */
+        _scheduleDeListSave: function () {
+            var self = this;
+            if (self._deListSaveTimer !== null) return;
+            self._deListSaveTimer = setTimeout(function () {
+                self._deListSaveTimer = null;
+                if (self._deListSavedAt && !self._deListLoading) {
+                    self._saveDeList();
+                    UI.renderSidebarTree();
+                };
+            }, DE_LIST_SAVE_DELAY_MS);
+        },
+
+        /**
          * @method _saveDeList
          * @description Caches the loaded Data Extension list for the day (DE_LIST_CACHE_MS), with what is
          * known of its folders and, in a child session, its parent part. hasFolders says the cache holds the
@@ -15670,9 +15880,10 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
          */
         _saveDeList: function () {
             var isFolderAnswerKnown = this._deFolderState === 'loaded' || this._deFolderState === 'failed';
-            writeJSON(deListKey(), {
+            var record = {
                 savedAt: this._deListSavedAt,
-                items: this.deList.map(function (t) { return (t && t.fields) ? Object.assign({}, t, { fields: null }) : t; }),
+                /* Columns and rows (packDeEntries), which a 1.1.0 cache's items are read alongside. */
+                list: packDeEntries(this.deList),
                 folders: this._deFolderState === 'loaded' ? this._deFolders : null,
                 hasFolders: isFolderAnswerKnown,
                 /* The list came from a call that asked for the extras: a list cached before that has none of them, and is loaded again. */
@@ -15681,7 +15892,21 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 isParentCapped: this._isParentListCapped,
                 /* Whether the parent's list was read: hasParentList is also true for an older Backend with no such action. */
                 isParentRead: this._isParentListRead
-            });
+            };
+            /* 1.1.0's record goes: it is read only until this one is written, and a large list's would take room for nothing. */
+            safeRemove(legacyDeListKey());
+            if (writeJSON(deListKey(), record)) return;
+            /* Too large for the browser's storage, which other stores share: the descriptions are the bulk, so the cache keeps the
+             * list without them, and a Data Extension reads its details again on use. The older record goes first, so a write that
+             * fails again leaves no stale list behind. */
+            safeRemove(deListKey());
+            record.list = packDeEntries(this.deList.map(function (t) {
+                return (t && t.description) ? Object.assign({}, t, { description: '', hasDetails: false }) : t;
+            }));
+            var isKept = writeJSON(deListKey(), record);
+            if (this._isCacheSizeLogged || typeof console === 'undefined') return;
+            this._isCacheSizeLogged = true;
+            console.info('[SQL Studio] The Data Extension list of ' + this.deList.length + ' is too large for the browser\'s storage, so ' + (isKept ? 'its cache leaves out the descriptions, which load again on use.' : 'it loads again on each page load.'));
         },
 
         /**
@@ -15779,7 +16004,10 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             var self = this;
             if (!isForced && self._deListPromise) return self._deListPromise;
             /* Reload asks for the fields of a table whose field load failed once more, the next time the lint or completion needs them. */
-            if (isForced) self._fieldFailures = {};
+            if (isForced) {
+                self._fieldFailures = {};
+                self._detailFailures = {};
+            };
             /* The sidebar search and completion can ask before whoami has answered. Until then the MIDs are
              * null, so a session in the Backend's own Business Unit would count as a child and list its own
              * shared Data Extensions again as the parent's, and the cache key has no user yet: the load
@@ -15813,7 +16041,15 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             var loadNumber = self._deLoadNumber;
 
             if (!isForced) {
-                var cached = readJSON(deListKey(), null);
+                var cached = readJSON(deListKey(), null) || readJSON(legacyDeListKey(), null);
+                if (cached && cached.list) {
+                    cached.items = unpackDeEntries(cached.list);
+                } else if (cached && Array.isArray(cached.items)) {
+                    /* A 1.1.0 cache: its first page asked for the extras, so its own Data Extensions have their details. */
+                    cached.items.forEach(function (t) {
+                        if (t && t.kind === 'de' && !t.isShared && t.hasDetails === undefined) t.hasDetails = true;
+                    });
+                };
                 var isCacheFresh = !!cached && !!cached.savedAt && cached.hasExtras === true && Date.now() - cached.savedAt < DE_LIST_CACHE_MS;
                 var isCacheUsable = isCacheFresh && (!isChild || !!cached.hasParentList);
                 if (isCacheFresh && !isCacheUsable) ownCache = cached;
@@ -15846,36 +16082,20 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             UI.syncProblemActions();
 
             var pages = 0;
+            /* The entries of the pages so far: each page adds its own, so an entry a first load showed, with the fields it loaded or a
+             * sidebar row it opened, is the one the list keeps. */
             var listed = [];
-            /* The extras the request of the pages so far asked for. A later page names them (askedExtras), so that when it is
-             * refused the Backend starts the list again without them, once: that new first page asks for none. */
-            var askedExtras = [];
             var loadPage = function (requestId) {
                 pages += 1;
-                var payload = {};
-                var skipped = [];
-                if (requestId) {
-                    payload.requestId = requestId;
-                    if (askedExtras.length) payload.askedExtras = askedExtras.slice();
-                } else {
-                    /* A first page leaves out what the Backend reported refused. A later page continues the first one's request. */
-                    skipped = self._readExtrasUnavailable();
-                    if (skipped.length) payload.skipExtras = skipped.slice();
-                };
+                /* The pages ask for the five properties alone, with all four extras in skipExtras, which a 1.1.0 Backend reads too: the
+                 * extras come later (DE_LIST_DETAILS_MAX). A later page continues the first one's request. */
+                var payload = requestId ? { requestId: requestId } : { skipExtras: DE_LIST_EXTRAS.slice() };
                 return Api.call('listDataExtensions', payload).then(function (res) {
-                    var left = Array.isArray(res.extrasUnavailable) ? res.extrasUnavailable.map(String) : [];
-                    if (left.length) self._rememberExtrasUnavailable(left, res.extrasError, res.extrasUnnamed, res.isRestarted === true);
-                    if (res.isRestarted === true) {
-                        /* A later page was refused, and the Backend answered with a new first page that asked for no extras: the
-                         * pages so far belong to the refused request. */
-                        listed = [];
-                        pages = 1;
-                        askedExtras = [];
-                    } else if (!requestId) {
-                        askedExtras = DE_LIST_EXTRAS.filter(function (name) { return skipped.indexOf(name) === -1 && left.indexOf(name) === -1; });
+                    listed = listed.concat((res.items || []).map(ownListEntry));
+                    if (res.nextRequestId && pages < 40) {
+                        self._showPartialList(loadNumber, listed);
+                        return loadPage(res.nextRequestId);
                     };
-                    listed = listed.concat(res.items || []);
-                    if (res.nextRequestId && pages < 40) return loadPage(res.nextRequestId);
                     return listed;
                 });
             };
@@ -15938,17 +16158,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 if (ownCache) {
                     return Promise.resolve((ownCache.items || []).filter(function (t) { return !!t && !t.isShared; }));
                 };
-                return loadPage(null).then(function (items) {
-                    return items.map(function (item) {
-                        return {
-                            name: item.name, key: item.key, kind: 'de', objectId: item.objectId || null,
-                            categoryId: item.categoryId || null, isSendable: !!item.isSendable,
-                            sendableField: item.sendableField || null, sendableSubscriberField: item.sendableSubscriberField || null,
-                            templateKey: item.templateKey || null, description: cacheDescription(item.description),
-                            isShared: false, fields: null
-                        };
-                    });
-                });
+                return loadPage(null);
             };
 
             self._deListPromise = loadOwnList().then(function (ownItems) {
@@ -15959,6 +16169,15 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                     };
                 });
             }).then(function (loaded) {
+                /* A Reload keeps the details the list it replaces had, by key, so the Data Extensions used today do not read them again. */
+                var previous = {};
+                (self.deList || []).forEach(function (t) {
+                    if (t && t.hasDetails === true) previous[(t.isShared ? 'ENT.' : '') + String(t.key).toLowerCase()] = t;
+                });
+                loaded.ownItems.concat(loaded.parent.entries).forEach(function (t) {
+                    var before = (t && t.hasDetails !== true) ? previous[(t.isShared ? 'ENT.' : '') + String(t.key).toLowerCase()] : null;
+                    if (before) applyDeDetails(t, before);
+                });
                 self.deList = loaded.ownItems.concat(loaded.parent.entries);
                 self._hasParentList = loaded.parent.hasParentList;
                 self._isParentListCapped = loaded.parent.isCapped;
@@ -15972,6 +16191,10 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                  * way are cached when they come (_loadDeFolders). */
                 self._saveDeList();
                 self._rebuildIndex();
+                /* A small list reads all its details now, in one call, before the lint's field loads could ask for some of them on their
+                 * own (_queueDetails waits for it). A cached own list has them, or reads them on use. */
+                var ownCount = loaded.ownItems.length;
+                if (!ownCache && pages === 1 && ownCount > 0 && ownCount <= DE_LIST_DETAILS_MAX) self._loadListDetails(loadNumber, ownCount);
                 UI.renderSidebarTree();
                 self._relintForList();
                 return self.deList;
@@ -16023,6 +16246,9 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             if (table.fields) return Promise.resolve(table.fields);
             var lookupKey = self.tableKey(table);
             if (self._fieldPromises[lookupKey]) return self._fieldPromises[lookupKey];
+            /* A table whose fields load is in use: its details come too, unless the list gave them. Asked for as the field load
+             * starts, the tables of one query, whose field loads start together and end apart, share one details call. */
+            self._queueDetails(table);
             var p = Api.call('getDataExtensionFields', { key: lookupKey }).then(function (res) {
                 table.fields = res.fields || [];
                 delete self._fieldPromises[lookupKey];
@@ -17385,6 +17611,80 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             supportThemeIcons: true
         };
     };
+    /**
+     * @function ownListEntry
+     * @description The schema table entry of one of the Business Unit's own Data Extensions, from a listDataExtensions item. The
+     * list's pages ask for the five properties alone since 1.1.1, so hasDetails is false until the extras come (applyDeDetails).
+     * @param {Object} item - the Backend's item
+     * @returns {Object}
+     */
+    function ownListEntry(item) {
+        return {
+            name: item.name, key: item.key, kind: 'de', objectId: item.objectId || null,
+            categoryId: item.categoryId || null, isSendable: !!item.isSendable,
+            sendableField: item.sendableField || null, sendableSubscriberField: item.sendableSubscriberField || null,
+            templateKey: item.templateKey || null, description: cacheDescription(item.description),
+            hasDetails: false, isShared: false, fields: null
+        };
+    };
+
+    /**
+     * @function applyDeDetails
+     * @description Gives a table the extras a details read answered: the send relationship's two fields, the template key and the
+     * description, each null or empty when the Data Extension has none or the read left it out, and marks the table as having them.
+     * @param {Object} table - a schema table entry
+     * @param {Object} item - an item of getDataExtensionDetails, or of a listDataExtensions page that asked for the extras
+     */
+    function applyDeDetails(table, item) {
+        table.sendableField = item.sendableField || null;
+        table.sendableSubscriberField = item.sendableSubscriberField || null;
+        table.templateKey = item.templateKey || null;
+        table.description = cacheDescription(item.description);
+        table.hasDetails = true;
+    };
+
+    /**
+     * @function packDeEntries
+     * @description The list's entries as columns and rows for its cache: each property's name once, in cols, and not in every
+     * entry, which takes 15,000 Data Extensions from about 4 million characters of the browser's storage to under half that. An
+     * entry's fields stay out, and a property it lacks is null.
+     * @param {Object[]} entries
+     * @returns {{cols: string[], rows: Array[]}}
+     */
+    function packDeEntries(entries) {
+        var cols = [];
+        entries.forEach(function (t) {
+            Object.keys(t || {}).forEach(function (name) {
+                if (name !== 'fields' && cols.indexOf(name) === -1) cols.push(name);
+            });
+        });
+        var rows = entries.map(function (t) {
+            return cols.map(function (name) { return (t && t[name] !== undefined) ? t[name] : null; });
+        });
+        return {
+            cols: cols,
+            rows: rows
+        };
+    };
+
+    /**
+     * @function unpackDeEntries
+     * @description Turns a cached list's columns and rows (packDeEntries) back into entries, each with fields null.
+     * @param {Object} packed - { cols, rows }
+     * @returns {Object[]}
+     */
+    function unpackDeEntries(packed) {
+        var cols = (packed && Array.isArray(packed.cols)) ? packed.cols.map(String) : [];
+        var rows = (packed && Array.isArray(packed.rows)) ? packed.rows : [];
+        return rows.filter(Array.isArray).map(function (row) {
+            var entry = { fields: null };
+            cols.forEach(function (name, i) {
+                if (name !== 'fields') entry[name] = (row[i] === undefined) ? null : row[i];
+            });
+            return entry;
+        });
+    };
+
     /**
      * @function cacheDescription
      * @description Trims a Data Extension's description and keeps the first DE_DESCRIPTION_MAX characters of it, trimmed again where it
@@ -23800,8 +24100,9 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         var isLoading = Schema.isDeListLoading();
         /* A reload keeps the list it replaces until the new one comes, so the tree and the search stay on screen meanwhile, with
          * "Reloading the list..." in the footer: the whole tree gave way to a loading row for the 12 s a reload took on the
-         * author's org (2026-10-04). Only the first load, with no list yet, shows the loading row. */
-        var isFirstLoad = isLoading && !(Schema.deListSavedAt() && Schema.deList && Schema.deList.length);
+         * author's org (2026-10-04). Only the first load, with no list yet, shows the loading row: the pages of a first load show as
+         * they come (Schema._showPartialList), with how many so far in the footer. */
+        var isFirstLoad = isLoading && !(Schema.deList && Schema.deList.length);
         var loadError = Schema.deListError();
         var deMatches = (raw && !isFirstLoad && !loadError) ? matchLocalTables(Schema.searchableList(), normalizeForSearch(raw)).sort(compareTableNames) : null;
         container.appendChild(self._renderSectionTitle('dataExtensions', 'Data Extensions', deMatches ? deMatches.length : null));
@@ -23856,6 +24157,8 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         var savedAt = Schema.deListSavedAt();
         if (savedAt && isLoading) {
             body.appendChild(h('div', { class: 'ss-tree__list-footer', role: 'status' }, [spinner(), ' Reloading the list...']));
+        } else if (isLoading) {
+            body.appendChild(h('div', { class: 'ss-tree__list-footer', role: 'status' }, [spinner(), ' Loading the list: ' + Schema.deList.length.toLocaleString('en-US') + ' so far...']));
         } else if (savedAt) {
             body.appendChild(h('div', { class: 'ss-tree__list-footer' }, [
                 minutesAgoLabel(savedAt) + ' · ',

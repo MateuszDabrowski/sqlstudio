@@ -74,6 +74,8 @@ var backendURL = 'https://pages.example.com/sql-studio-backend';
 
 Setup > Platform Tools > Apps > Installed Packages > New. It needs SQL Studio Backend's URL from step 2, and it gives you the three values the Backend's settings still need.
 
+A new package can take a couple of minutes to show up in the Installed Packages list. If it is not there right after you save it, wait and refresh the list rather than create it again, or you end up with two.
+
 ### Marketing Cloud App component
 
 - Login endpoint: SQL Studio Backend's URL.
