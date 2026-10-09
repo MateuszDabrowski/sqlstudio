@@ -110,7 +110,7 @@ The Backend and the Cloud Page each start with a section called `1. CONFIGURATIO
 /* =================== APP CODE - replace from here on update =================== */
 ```
 
-Steps 2 and 3 filled in the settings every deployment needs. The tables below list every setting. Leave the others as they are. The one choice to make is `historyDE`: whether query history stays in each browser, or is also kept in MCE, where other users can read it. The Frontend has no settings at all.
+Steps 2 and 3 filled in the settings every deployment needs. The tables below list every setting. Leave the others as they are. The one choice to make is `historyDE`: whether query history stays in each browser, or is also kept in MCE, where other users can read it. A second setting, `snippetsDE`, is not in the file: snippets are on by default, and the line that turns them off or renames their Data Extension is in step 7. The Frontend has no settings at all.
 
 ### Backend (`sql-studio-backend.html`)
 
@@ -187,7 +187,7 @@ SQL Studio does not read a child BU's temporary Data Extensions from the parent.
 
 ## 7. Data Extensions
 
-SQL Studio uses two Data Extensions, plus an optional third for history. It follows the Cloud Page App pattern described at [mateuszdabrowski.pl](https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/ssjs/snippets/sfmc-cloud-page-apps/).
+SQL Studio uses two Data Extensions, plus one for shared snippets, which it makes on the first save, and an optional one for history. It follows the Cloud Page App pattern described at [mateuszdabrowski.pl](https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/ssjs/snippets/sfmc-cloud-page-apps/).
 
 ### Created for you
 
@@ -256,11 +256,52 @@ Server-side history keeps each user's runs in a Data Extension as well as in the
 
 Leave the `sql` field length blank if you create it yourself, so long queries fit. Prefix `historyDE` with `ENT.` when it lives in a shared folder. Each user's rows are found by `userId`. `userEmail` is stored beside it for anyone reading the Data Extension.
 
+### SQLStudioSnippets (on by default)
+
+The Snippets section of the sidebar keeps named pieces of SQL, such as a set of joins around a sales table, that everyone who uses SQL Studio in a Business Unit can insert into a query. They are shared on purpose: a user saves a snippet, and every other user of that Business Unit sees it. You do nothing to turn this on. SQL Studio creates the Data Extension `SQLStudioSnippets` in the `SQL Studio` folder the first time someone saves a snippet, with no retention, so a snippet stays until its author deletes it. Until then the Data Extension does not exist, and the section is simply empty.
+
+Each row is one snippet: its id, the Business Unit it was saved in (`mid`), its author's Marketing Cloud Engagement user id and e-mail, its name, its SQL, and when it was created and last changed. The two dates are the time on Marketing Cloud Engagement's servers, as it writes them, and SQL Studio shows each user the day in their own time zone. Only the author renames or deletes a snippet: the Backend checks that against the signed-in user, whatever the page sends. In SQL Studio a user sees and saves only the snippets of the Business Unit they are signed in to: the Backend checks that against the sign-in too, whatever the page sends. MCE has no folder-level restrictions for Data Extensions, so anyone with Data Extension access in the Business Unit that holds the Backend can read every snippet of every Business Unit that uses it, and can change or delete rows there directly, in Contact Builder or with a query. The author check protects users from each other inside SQL Studio, not from someone with that access. The rows hold SQL text, which can reveal Data Extension and field names, business logic, or values written into a `WHERE` clause.
+
+A snippet has a name of 1 to 100 characters, unique in its Business Unit without regard to case, and SQL of 1 to 20,000 characters. A Business Unit keeps at most 500 snippets, and SQL Studio says so when a save would pass that. Reading and saving snippets uses the Backend's data functions, so it costs no API call. Users of a child Business Unit see the snippets saved in their own Business Unit, although the Data Extension is in the Backend's.
+
+| Name | Data type | Length | Nullable |
+|--|--|--|--|
+| id (Primary key) | Text | 36 | No |
+| mid | Text | 20 | No |
+| userId | Text | 100 | No |
+| userEmail | Text | 254 | Yes |
+| name | Text | 100 | Yes |
+| sql | Text | (none) | Yes |
+| createdDate | Date | | Yes |
+| modifiedDate | Date | | Yes |
+
+To turn snippets off, or to keep them in a Data Extension of another name, you add one line to the Backend's settings. Without that line, snippets are on under the default name, so an update never asks you to copy a new settings section. To add it:
+
+1. Open "SQL Studio Backend" in Web Studio, the Code Resource you pasted the Backend into.
+2. Find the line that starts `var debugging = false;`, the last line of the settings, above the `APP CODE` line. Click at its end and press Enter to start a new line.
+3. Type or paste one of the two lines below, with straight quotes `'`, and a `;` at the end.
+4. Publish the Backend again, wait about five minutes, and do a hard refresh of SQL Studio.
+
+To turn snippets off, add this line. The Snippets section then does not show for any user. The snippets already saved stay in the Data Extension, and show again when you remove the line:
+
+```js
+var snippetsDE = '';
+```
+
+To keep them in a Data Extension of your own name, add this line with your name. Prefix it with `ENT.` when the Data Extension lives in a shared folder, which SQL Studio never creates itself:
+
+```js
+var snippetsDE = 'TeamSnippets';
+```
+
+Leave the `sql` length blank if you create the Data Extension yourself, so long snippets fit. If a Data Extension of that name exists with a field missing, SQL Studio says which field and does not create another: add the field as Text in Contact Builder, or delete the Data Extension, and SQL Studio creates it again with the next save.
+
 ### What SQL Studio stores and who can read it
 
 - **AuthLog**: the SHA256 of each session id, an access token valid for about 20 minutes and stored encrypted, and the signed-in user's id, name and e-mail. Any user with Data Extension access in the Business Unit can read it, but not use it: the hash does not open a session, and the token is unreadable without the client secret. Keep the 1-day retention anyway, which limits how long the row exists.
 - **ErrorLog**: backend error messages and descriptions, cut to 2000 characters each. They can include fragments of Marketing Cloud Engagement API error responses, but never a token, a session id or the client secret.
 - **The parent's shared Data Extensions, for child BU users**: with SQL Studio installed in the parent, a user who opens it from a child BU sees the names, keys, folders and fields of all the parent's shared and synchronized Data Extensions, whether or not that BU has access to them. They never see the rows. The Backend reads this with its own access, not the user's. To keep it from a child BU's users, install SQL Studio in that BU instead (step 6).
+- **SQLStudioSnippets**: the snippets users save, with their authors' user ids and e-mails, unless snippets are turned off. Any user with Data Extension access can read and change every snippet, of every Business Unit that uses this Backend. A snippet is SQL text, so it can reveal Data Extension and field names or business logic, and a value written into a `WHERE` clause is kept with it.
 - **SQLStudioHistory**: every user's own SQL text, when history is on. Any user with Data Extension access can read every other user's history. Query text does not include results, but it can reveal Data Extension and field names, business logic, or values written into a `WHERE` clause.
 
 ## 8. Updating
@@ -272,6 +313,15 @@ Update the Code Resources first and the Cloud Page last, for the same reason as 
 3. **Cloud Page**: do the same as for the Backend, when the release changed it.
 
 A release that needs new settings raises `configVersion`, and the CHANGELOG says so. Until you update the settings, the Backend and the Cloud Page each show a message that their `1. CONFIGURATION` section is from an older release. Copy the new settings section from the release file, fill in your values again, and publish.
+
+If you added a `snippetsDE` line to the Backend's settings in step 7, carry it over when you copy a new settings section. The release file never has that line, so the new section comes without it. Without it, snippets come back on under the default name: the Snippets section shows again where you had turned it off, and where you had named your own Data Extension, SQL Studio starts a new, empty `SQLStudioSnippets` instead. To carry it over:
+
+1. Before you paste anything, open "SQL Studio Backend" in Web Studio.
+2. Find the line that starts `var snippetsDE`. Step 7 put it right below `var debugging = false;`, the last setting, just above the `APP CODE` line.
+3. Select the whole line, from `var` to the `;` at its end, for example `var snippetsDE = '';`, copy it, and paste it into a text file to keep it.
+4. Replace the settings section with the new one from the release file and fill in your values again, as above.
+5. Find `var debugging` in the new section. Click at the end of that line, press Enter, and paste the `snippetsDE` line you kept on the new line.
+6. Publish the Backend, wait about five minutes, and do a hard refresh of SQL Studio. Check that the Snippets section is gone again, or shows the snippets of your own Data Extension.
 
 SQL Studio tells its users about a new release itself. Once a day per browser it reads `latest.json` from the public repository on GitHub, sending no cookies and no page address, and shows an Update badge in the toolbar when a newer version is out. The badge opens the release's key changes and a link to this section. A browser that cannot reach GitHub simply never shows it.
 
@@ -290,6 +340,10 @@ Code Resources and Cloud Pages take a few minutes to go live after publishing. U
 | "SQL Studio could not sign you in" instead of the editor | Marketing Cloud Engagement refused the sign-in or the token exchange | Read the error text on the page, and the `ErrorLog` row, which carries Marketing Cloud Engagement's own error code (for example `invalid_client` for a wrong Client ID or Client Secret). It is usually a mismatched Redirect URI or a misconfigured Installed Package. Fix the cause, then use the page's "Try again" link. |
 | "SQL Studio could not sign you in", saying it could not save your sign-in because of its AuthLog Data Extension | SQL Studio could not create or write AuthLog: `authDE` has the `ENT.` prefix and does not exist, or the name is taken by a Data Extension with other fields | Create the Data Extension yourself from the tables in step 7, or point `authDE` at one that matches them. |
 | "SQL Studio Auth Log is from an older release: delete it in Contact Builder, and SQL Studio creates it again on the next sign-in" | The Auth Log has the layout of a release before 1.0: no `userId` field, a 50-character `session`, a 520-character `token`. The Backend cannot write a hashed session and an encrypted token into it | Delete `SQL Studio Auth Log` in Contact Builder and sign in again. Do the same for the history Data Extension if `historyDE` is set and a call answers `HISTORY_OLD_LAYOUT`. |
+| "The snippets Data Extension "SQLStudioSnippets" has no field ..." when saving a snippet | The Data Extension exists, but it was made by hand or under a name another Data Extension had, and a field of the table in step 7 is missing from it | Add the field as Text in Contact Builder, or delete the Data Extension and save a snippet again: SQL Studio creates it with every field. Deleting it deletes every snippet in it. |
+| The Snippets section is missing from the sidebar | The Backend's settings have `var snippetsDE = '';`, or the Backend was not updated, or the page was not refreshed after the update | Remove that line (step 7), publish the Backend, wait about five minutes, and do a hard refresh. |
+| The Snippets section is back after you turned it off, or it is empty after you named your own Data Extension, right after an update | The settings section was replaced with a new one, and the `var snippetsDE` line you had added was not carried over | Add the line again, as step 8 says, and publish the Backend. |
+| "Could not load the snippets: Field "midSig" must be the one whoami answered for this Business Unit." | The page was opened before the Backend was updated or its `clientSecret` changed | Reload SQL Studio. |
 | "Marketing Cloud Engagement did not tell SQL Studio which user you are" | `/v2/userinfo` returned neither `user.sub` nor `user.preferred_username` (or one over 100 characters) for that user, so SQL Studio has nothing to tell users apart by. It refuses the sign-in instead of sharing one user's objects | Read the `ErrorLog` row, which names the HTTP status but never the value. Report it in [GitHub issues](https://github.com/MateuszDabrowski/sqlstudio/issues) with the org type. |
 | "SQL Studio cannot find your sign-in", after a few quick automatic retries | The Backend stored the session, but the Cloud Page cannot find it: the two `authDE` settings name different Data Extensions | Make both `authDE` settings match, publish both, and open SQL Studio from the AppExchange menu again. |
 | "SQL Studio cannot read its sign-in log" | AuthLog was deleted or renamed, or the Cloud Page's `authDE` does not match the Backend's | Open SQL Studio from the AppExchange menu, which signs in through the Backend and recreates a missing AuthLog. Otherwise make both `authDE` settings match. An AuthLog from an older release also lands here: delete it once and sign in again. |

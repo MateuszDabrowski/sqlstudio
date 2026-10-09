@@ -135,7 +135,7 @@
     /* ----------------------------------------------------------------------- */
 
     var appName        = 'SQLStudio';
-    var appVersion      = '1.1.1';
+    var appVersion      = '1.2.0';
     // No refresh tokens: see docs/EXTENDING.md ("Refresh tokens (optional, not shipped)") for why
     // and what it would take to add one back. Sessions last about 20 minutes; the frontend's
     // expiry modal re-authenticates with one click.
@@ -157,6 +157,9 @@
     var wsproxyCallCount = 0;                          // WSProxy calls made while serving this request, inside Marketing Cloud Engagement and counted apart from API calls; returned as meta.wsproxyCalls
     var requestStartedAt = (new Date()).getTime();     // when this script started serving the request; meta.backendMs counts from it
     var soapMs = 0;                                    // time spent waiting for SOAP answers in this request; returned as meta.soapMs
+    /* How far the last soap() call got, for an error of the platform in it: createDataExtension names it (the author's RC3
+    test, 2026-10-08, saw one that named no line). */
+    var soapStage = '';
     var restMs = 0;                                    // time spent waiting for REST answers in this request; returned as meta.restMs
     var currentAccessToken = '';                       // the access token this request works with, for maskSecrets: set where the POST flow loads a session's token and where sign-in receives one
 
@@ -182,7 +185,7 @@
     /**
      * @function apiError
      * @description Builds a plain error object carrying one of the documented error codes.
-     * @param {string} code - One of BAD_REQUEST, SESSION_INVALID, SESSION_EXPIRED, UNKNOWN_ACTION, MCE_ERROR, WSPROXY_FAILED, NOT_FOUND, RUN_IN_PROGRESS, HISTORY_OLD_LAYOUT, INTERNAL.
+     * @param {string} code - One of BAD_REQUEST, SESSION_INVALID, SESSION_EXPIRED, UNKNOWN_ACTION, MCE_ERROR, WSPROXY_FAILED, NOT_FOUND, RUN_IN_PROGRESS, START_UNCONFIRMED, CREATE_UNCONFIRMED, CREATED_NO_KEY, HISTORY_OLD_LAYOUT, SNIPPETS_BAD_LAYOUT, INTERNAL.
      * @param {string} message - Human readable message.
      * @param {string} [details] - Optional raw detail text.
      * @returns {Object} error object with code, message, details.
@@ -312,6 +315,39 @@
             return false;
         };
         return text.indexOf('expired') !== -1 || text.indexOf('invalid') !== -1 || text.indexOf('authoriz') !== -1;
+    };
+
+    /**
+     * @function isSoapClearRefusal
+     * @description Tells whether a failed SOAP call that makes or starts something (a Create, a Perform) was refused
+     *              clearly, so that it did nothing: Marketing Cloud Engagement answered the request itself with an
+     *              error OverallStatus, a Result whose own StatusCode is Error, or a SOAP fault whose faultcode names
+     *              the client. Anything else that is no success is unclear, and the call may have done its work all
+     *              the same: no answer, a send that threw, a gateway's page (an HTTP 502 or 504) or a SOAP server fault.
+     * @param {Object} soapRes - Result of soap().
+     * @param {?string} resultStatusCode - the StatusCode of the first Result itself, or null when there is none
+     * @returns {boolean}
+     */
+    function isSoapClearRefusal(soapRes, resultStatusCode) {
+        if (soapRes.status === 0) {
+            return false;
+        };
+        var faultCode = xmlValue(soapRes.raw, 'faultcode');
+        return (soapRes.overallStatus !== null && soapRes.overallStatus !== '' && isSoapError(soapRes.overallStatus)) ||
+            (soapRes.ok && resultStatusCode === 'Error') ||
+            (faultCode !== null && faultCode.toLowerCase().indexOf('client') !== -1);
+    };
+
+    /**
+     * @function isRestClearRefusal
+     * @description Tells whether a failed REST call that starts something was refused clearly, so that it did nothing:
+     *              an HTTP 4xx answer other than a 408. No answer, a 408 or 504 cut off at a time limit, a server error
+     *              (500, 502, 503) or any other status is unclear, and the call may have done its work all the same.
+     * @param {Object} res - Result of httpJSON.
+     * @returns {boolean}
+     */
+    function isRestClearRefusal(res) {
+        return res.status >= 400 && res.status < 500 && res.status !== 408;
     };
 
     /**
@@ -786,6 +822,7 @@
      * @returns {{status:number,httpStatus:string,ok:boolean,overallStatus:string|null,requestId:string|null,results:string[],raw:string}}
      */
     function soap(action, bodyXml, token) {
+        soapStage = 'building the request';
         var envelope = '<?xml version="1.0" encoding="UTF-8"?>' +
             '<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">' +
             '<s:Header><fueloauth xmlns="http://exacttarget.com">' + token + '</fueloauth></s:Header>' +
@@ -806,6 +843,7 @@
         req.postData = envelope;
         apiCallCount++;
         var res = null;
+        soapStage = 'sending';
         try {
             var sentAt = (new Date()).getTime();
             res = req.send();
@@ -822,18 +860,28 @@
             };
             return failedSoap;
         };
+        soapStage = 'reading the answer\'s content';
         var raw = (res.content === null || res.content === undefined) ? '' : String(res.content);
+        soapStage = 'reading OverallStatus';
         var overallStatus = xmlValue(raw, 'OverallStatus');
 
         /* The envelope decides success: OverallStatus says whether the request worked, and a SOAP
         fault has none. The HTTP status goes into the error details. */
+        soapStage = 'reading the status code';
+        var statusNumber = toStatusNumber(res.statusCode);
+        var httpStatus = String(res.statusCode);
+        soapStage = 'reading RequestID';
+        var requestId = xmlValue(raw, 'RequestID');
+        soapStage = 'reading the Results';
+        var results = xmlBlocks(raw, 'Results');
+        soapStage = 'done';
         var result = {
-            status: toStatusNumber(res.statusCode),
-            httpStatus: String(res.statusCode),
+            status: statusNumber,
+            httpStatus: httpStatus,
             ok: !isSoapError(overallStatus),
             overallStatus: overallStatus,
-            requestId: xmlValue(raw, 'RequestID'),
-            results: xmlBlocks(raw, 'Results'),
+            requestId: requestId,
+            results: results,
             raw: raw
         };
         return result;
@@ -919,6 +967,13 @@
         };
         while (end > start && ' \t\n\r\f\v\u00a0'.indexOf(text.charAt(end - 1)) !== -1) {
             end--;
+        };
+        /* Nothing left, as for an empty setting such as historyDE = '': no substring of it. MCE's script engine stopped
+        ''.substring(0, 0) with "StartIndex cannot be less than zero" (the author's RC3 test, 2026-10-08, in createDataExtension's
+        check of the app's own names), [Likely] as it puts the start at the last character, -1 there, and for a text of
+        blanks it would give the last blank, not ''. */
+        if (start >= end) {
+            return '';
         };
         return text.substring(start, end);
     };
@@ -1640,6 +1695,51 @@
         };
     };
 
+    /* A move's target is bound to the user who created it. moveToDataExtension writes a Query Activity with
+    Overwrite into its target, with the user's token, so without a check a crafted payload could empty any Data
+    Extension the token can write: the Auth Log, the Error Log or a user's own. createDataExtension answers each key
+    it made with its signature, and a move needs the one for its targetKey and this user. It is bound to the user
+    hash, not the session key, as a task's is (taskSignature), so a save goes on when the session renews itself and
+    after a reload. The key is lowercased, as Marketing Cloud Engagement matches a CustomerKey without regard to case.
+    The signature is keyed with the token key's password, which never leaves the Backend. */
+    var SAVE_TARGET_SIG_LABEL = 'SQLStudio.saveTarget.v1';
+    var SAVE_TARGET_SIG_LENGTH = 32;
+
+    /**
+     * @function saveTargetSignature
+     * @description The signature that binds a Data Extension createDataExtension made to the user who made it: the
+     *              first SAVE_TARGET_SIG_LENGTH hex characters of SHA256(token key password + '|' +
+     *              SAVE_TARGET_SIG_LABEL + '|' + user hash + '|' + the key lowercased).
+     * @param {string} deKey - the CustomerKey of the Data Extension
+     * @param {string} userHash - computeUserHash of the session's row
+     * @returns {string} SAVE_TARGET_SIG_LENGTH lowercase hex characters
+     * @throws {Object} apiError INTERNAL when the platform cannot compute the hash (sha256Hex).
+     */
+    function saveTargetSignature(deKey, userHash) {
+        return sha256Hex(tokenKey().password + '|' + SAVE_TARGET_SIG_LABEL + '|' + userHash + '|' + String(deKey).toLowerCase()).substring(0, SAVE_TARGET_SIG_LENGTH);
+    };
+
+    /**
+     * @function isSaveTargetSignatureOk
+     * @description Tells whether a moveToDataExtension payload's targetSig is the one saveTargetSignature gives for its
+     *              targetKey and this user. A missing value, one of another shape, a signature for another key or
+     *              another user and a hash the platform cannot compute are all a no. It never throws.
+     * @param {string} deKey - the payload's targetKey, already checked with requireLabel
+     * @param {*} targetSig - the payload's targetSig, as the app sent it
+     * @param {string} userHash
+     * @returns {boolean}
+     */
+    function isSaveTargetSignatureOk(deKey, targetSig, userHash) {
+        if (typeof targetSig !== 'string' || targetSig.length !== SAVE_TARGET_SIG_LENGTH || !userHash) {
+            return false;
+        };
+        try {
+            return saveTargetSignature(deKey, userHash) === targetSig;
+        } catch (sigErr) {
+            return false;
+        };
+    };
+
     /**
      * @function slotSuffix
      * @description The suffix every per-user pool name/key carries for a slot: '' for slot 1 (so slot
@@ -1989,9 +2089,22 @@
     var AUTH_LOG_DESCRIPTION = 'SQL Studio sign-in sessions. Each row maps the SHA256 of a session id to its Marketing Cloud Engagement access token, stored encrypted and valid for about 20 minutes. Keep the 1-day retention: rows are useless afterwards.';
     var ERROR_LOG_DESCRIPTION = 'SQL Studio backend errors, for troubleshooting. Rows are kept for 180 days.';
     var HISTORY_DESCRIPTION = 'SQL Studio query history: each user\'s runs, when server-side history is on. Rows are kept for 90 days.';
+    var SNIPPETS_DESCRIPTION = 'SQL Studio snippets: named pieces of SQL that everyone who uses SQL Studio in a Business Unit shares. Rows stay until their author deletes them.';
     var AUTH_LOG_RETENTION_DAYS = 1;
     var ERROR_LOG_RETENTION_DAYS = 180;
     var HISTORY_RETENTION_DAYS = 90;
+    /* The history's name as the settings' own comment gives it, for an admin who turns the history on. Save to Data
+    Extension never makes a Data Extension of this name, whatever historyDE says (isAppDataExtension). */
+    var HISTORY_DEFAULT_DE = 'SQLStudioHistory';
+
+    /* What a snippet may hold: a Business Unit keeps at most SNIPPET_MAX_COUNT of them, each with a name of
+    1 to SNIPPET_NAME_MAX_LENGTH characters and SQL of 1 to SNIPPET_SQL_MAX_LENGTH. The default name of the Data
+    Extension they are kept in, when no snippetsDE line is in the settings. */
+    var SNIPPET_MAX_COUNT = 500;
+    var SNIPPET_NAME_MAX_LENGTH = 100;
+    var SNIPPET_SQL_MAX_LENGTH = 20000;
+    var SNIPPET_MID_MAX_LENGTH = 20;
+    var SNIPPETS_DEFAULT_DE = 'SQLStudioSnippets';
 
     /**
      * @function authLogFields
@@ -2047,6 +2160,26 @@
             dataExtensionNumberField('durationMs'),
             dataExtensionTextField('status', 20),
             dataExtensionTextField('deKey', 36)
+        ];
+    };
+
+    /**
+     * @function snippetsLogFields
+     * @description Field definitions for an auto-created snippets Data Extension, matching
+     *              docs/DEPLOYMENT.md "SQLStudioSnippets". The "sql" column carries no MaxLength, as the
+     *              history's does, so a long snippet fits.
+     * @returns {Object[]}
+     */
+    function snippetsLogFields() {
+        return [
+            dataExtensionTextField('id', 36, true, true),
+            dataExtensionTextField('mid', SNIPPET_MID_MAX_LENGTH, false, true),
+            dataExtensionTextField('userId', USER_ID_MAX_LENGTH, false, true),
+            dataExtensionTextField('userEmail', 254),
+            dataExtensionTextField('name', SNIPPET_NAME_MAX_LENGTH),
+            dataExtensionTextField('sql', null),
+            dataExtensionDateField('createdDate'),
+            dataExtensionDateField('modifiedDate')
         ];
     };
 
@@ -2149,7 +2282,7 @@
                     var created = proxy.createItem('DataFolder', {
                         Name: tempFolderName,
                         CustomerKey: tempPrefix + 'Folder',
-                        Description: 'SQL Studio: its sign-in, error and history Data Extensions, and the temporary results of each run.',
+                        Description: 'SQL Studio: its sign-in, error, history and snippets Data Extensions, and the temporary results of each run.',
                         ContentType: 'dataextension',
                         IsActive: true,
                         IsEditable: true,
@@ -2177,7 +2310,7 @@
      *              first cost a call per Data Extension on a sign-in that already ran out of time.
      * @param {string} deName
      * @param {Object[]} fields - WSProxy Field definitions, in column order.
-     * @param {number} retentionDays
+     * @param {?number} retentionDays - null for a Data Extension that keeps its rows: no retention is set.
      * @param {string} description
      * @param {?string} token - the signed-in user's access token, for the retention retry.
      * @returns {string} 'created', 'created-no-retention' or 'failed'.
@@ -2186,6 +2319,10 @@
         var folderId = findOrCreateSetupFolderId();
         if (!isWsProxyCreateOk(deName, fields, null, description, folderId)) {
             return 'failed';
+        };
+        /* A Data Extension that keeps its rows (the snippets') has no retention to set. */
+        if (retentionDays === null) {
+            return 'created';
         };
         if (token && isRetentionSetWithToken(deName, retentionDays, token)) {
             return 'created';
@@ -2940,9 +3077,29 @@
         };
 
         /**
+         * @function readSnippetsDE
+         * @description The name of the Data Extension that holds the shared snippets. The settings need no
+         *              line for it: without one the name is SNIPPETS_DEFAULT_DE, so an installation that was
+         *              set up before snippets existed has snippets on after an update, with no new settings
+         *              section and no configVersion change. An admin adds a snippetsDE line only to name the
+         *              Data Extension otherwise, or to turn snippets off with an empty one. A value that is
+         *              not text turns them off as well, as there is no Data Extension it could name.
+         * @returns {string} the name, or '' when snippets are off
+         */
+        function readSnippetsDE() {
+            if (typeof snippetsDE === 'undefined') {
+                return SNIPPETS_DEFAULT_DE;
+            };
+            if (typeof snippetsDE !== 'string') {
+                return '';
+            };
+            return trimString(snippetsDE);
+        };
+
+        /**
          * @function actionWhoami
          * @description Returns who is signed in, the Business Unit, the session's remaining seconds,
-         *              whether server-side history is on, and which of SQL Studio's own Data Extensions
+         *              whether server-side history and snippets are on, and which of SQL Studio's own Data Extensions
          *              are missing: the app's first call after it loads. `userKey` is the user hash, an
          *              opaque 8-character key the app scopes its browser storage by, and never the user
          *              id itself. `identitySource` says where the user id came from, 'sub' or
@@ -2951,7 +3108,8 @@
          *              `backendMid` is the MID of the Business Unit this Backend is installed in, as text.
          *              `stackKey` is the account's stack from the same call (organization.stack_key, such as
          *              'S1'), or null when it is not of the shape S and digits: the app builds its Contact
-         *              Builder link from it and never from a guess.
+         *              Builder link from it and never from a guess. `midSig` is the signature of `mid` for this
+         *              user (readSnippetMidSignature), which the snippet actions need with it.
          * @param {Object} payload - {}
          * @param {Object} authRow
          * @returns {Object}
@@ -2995,18 +3153,21 @@
                 missingDataExtensions.push('errorLog');
             };
 
+            var userKey = computeUserHash(authRow);
             var data = {
                 userName: userName,
                 userEmail: userEmail,
-                userKey: computeUserHash(authRow),
+                userKey: userKey,
                 identitySource: identitySource,
                 mid: mid,
+                midSig: readSnippetMidSignature(mid, userKey),
                 backendMid: readBackendMid(),
                 enterpriseId: enterpriseId,
                 stackKey: stackKey,
                 tokenSecondsLeft: secondsUntil(authRow.tokenExpire),
                 backendVersion: appVersion,
                 historyEnabled: (historyDE !== ''),
+                snippetsEnabled: (readSnippetsDE() !== ''),
                 missingDataExtensions: missingDataExtensions
             };
             return data;
@@ -3239,6 +3400,482 @@
             return data;
         };
 
+        /* ---------------------- Shared snippets (snippetsDE) ---------------------- */
+
+        /* The snippets live in one Data Extension in the Backend's own Business Unit, read and written with
+        the data functions, as the history is, so no action here makes an API call. The rows of every Business
+        Unit are in it, told apart by their mid, and the data functions see every row whatever the session's own
+        Business Unit is. Each action takes its mid with whoami's signature for it (midSig, below), and the author
+        is checked from the session, not from the request: only the user whose user id is on a row renames,
+        changes or deletes it. */
+
+        /* A snippet action's Business Unit is bound to the user it was read for. Reading the session's own MID
+        would cost an API call per action, so whoami, which reads it from /v2/userinfo with the user's token,
+        answers it with its signature (midSig), and each snippet action needs the one for its mid and this user.
+        Without it a user of one child Business Unit could send another's MID, read its snippets and their
+        authors, and fill its slots with snippets its users cannot delete. It is bound to the user hash, not the
+        session key, as a task's is (taskSignature), so the snippets keep working when the session renews itself,
+        and a request the app sends again with the renewed session still carries a signature that holds. The
+        signature is keyed with the token key's password, which never leaves the Backend. */
+        var SNIPPET_MID_SIG_LABEL = 'SQLStudio.snippetMid.v1';
+        var SNIPPET_MID_SIG_LENGTH = 32;
+
+        /* The fields of a snippet row, in the order the probe of a Data Extension's layout looks for them. */
+        var SNIPPET_FIELD_NAMES = ['id', 'mid', 'userId', 'userEmail', 'name', 'sql', 'createdDate', 'modifiedDate'];
+        /* The other Text fields of a snippet with a length, which a Lookup filters on as it filters on the key: one that
+        reads shows the Data Extension is there when neither the key nor the mid does (findMissingSnippetField). */
+        var SNIPPET_PRESENCE_FIELDS = ['name', 'userId', 'userEmail'];
+
+        /* The time zone of Platform.Function.Now(), which writes a snippet's dates: Marketing Cloud Engagement's
+        system time, taken as US Central Standard Time all year, with no daylight saving time, as AsyncActivityStatus
+        wrote a CompletedDate on the author's org and as GETDATE() answers in SQL. The list gives each date with it, so
+        the app shows the day in the viewer's own time zone. */
+        var MCE_SYSTEM_TIME_OFFSET = '-06:00';
+
+        /**
+         * @function snippetMidSignature
+         * @description The signature that binds a Business Unit's MID to a user who has a session in it: the first
+         *              SNIPPET_MID_SIG_LENGTH hex characters of SHA256(token key password + '|' +
+         *              SNIPPET_MID_SIG_LABEL + '|' + user hash + '|' + the MID as text).
+         * @param {string} mid - the MID, as text
+         * @param {string} userHash - computeUserHash of the session's row
+         * @returns {string} SNIPPET_MID_SIG_LENGTH lowercase hex characters
+         * @throws {Object} apiError INTERNAL when the platform cannot compute the hash (sha256Hex).
+         */
+        function snippetMidSignature(mid, userHash) {
+            return sha256Hex(tokenKey().password + '|' + SNIPPET_MID_SIG_LABEL + '|' + userHash + '|' + mid).substring(0, SNIPPET_MID_SIG_LENGTH);
+        };
+
+        /**
+         * @function readSnippetMidSignature
+         * @description whoami's midSig: the signature of the session's MID for this user, or null when there is no
+         *              MID (the /v2/userinfo call failed) or the platform cannot compute the hash, so whoami never
+         *              fails for it. Without one, the snippet actions refuse the Business Unit.
+         * @param {*} mid - organization.member_id, as /v2/userinfo gave it, or null
+         * @param {string} userHash
+         * @returns {?string}
+         */
+        function readSnippetMidSignature(mid, userHash) {
+            if (mid === null || mid === undefined || mid === '') {
+                return null;
+            };
+            try {
+                return snippetMidSignature(String(mid), userHash);
+            } catch (sigErr) {
+                return null;
+            };
+        };
+
+        /**
+         * @function isSnippetMidSignatureOk
+         * @description Tells whether a snippet action's midSig is the one snippetMidSignature gives for its mid and
+         *              this user, in whichever of the user's sessions whoami gave it. A missing value, one of another
+         *              shape, a signature for another MID or another user and a hash the platform cannot compute are
+         *              all a no. It never throws.
+         * @param {string} mid - the payload's mid, already checked as digits
+         * @param {*} midSig - the payload's midSig, as the app sent it
+         * @param {string} userHash
+         * @returns {boolean}
+         */
+        function isSnippetMidSignatureOk(mid, midSig, userHash) {
+            if (typeof midSig !== 'string' || midSig.length !== SNIPPET_MID_SIG_LENGTH || !userHash) {
+                return false;
+            };
+            try {
+                return snippetMidSignature(mid, userHash) === midSig;
+            } catch (sigErr) {
+                return false;
+            };
+        };
+
+        /**
+         * @function requireSnippetsEnabled
+         * @description Throws BAD_REQUEST when snippets are off (snippetsDE is an empty line).
+         * @returns {string} the name of the snippets Data Extension
+         */
+        function requireSnippetsEnabled() {
+            var deName = readSnippetsDE();
+            if (deName === '') {
+                throw apiError('BAD_REQUEST', 'Snippets are not enabled.', null);
+            };
+            return deName;
+        };
+
+        /**
+         * @function requireSnippetUser
+         * @description Returns the user id that a snippet's author is told by, or throws BAD_REQUEST when the
+         *              session has none (see requireHistoryUser: a blank id would match every other blank-id
+         *              author's snippets).
+         * @param {Object} authRow
+         * @returns {string}
+         */
+        function requireSnippetUser(authRow) {
+            var userId = trimString(authRow.userId || '');
+            if (userId === '') {
+                throw apiError('BAD_REQUEST', 'Snippets need your user id, and this session has none. Sign in again.', null);
+            };
+            return userId;
+        };
+
+        /**
+         * @function requireSnippetMid
+         * @description Checks the Business Unit id the app sends, before anything is read or written: digits, as
+         *              text or as a number, with the midSig whoami gave this user for it (isSnippetMidSignatureOk).
+         *              So a user reads and writes only the snippets of a Business Unit they have a session in.
+         * @param {Object} payload - { mid, midSig }
+         * @param {Object} authRow
+         * @returns {string} the mid, as text
+         */
+        function requireSnippetMid(payload, authRow) {
+            var text = (typeof payload.mid === 'number') ? String(payload.mid) : payload.mid;
+            if (typeof text !== 'string' || !/^[0-9]+$/.test(text) || text.length > SNIPPET_MID_MAX_LENGTH) {
+                throw apiError('BAD_REQUEST', 'Field "mid" must be the id of the session\'s Business Unit.', null);
+            };
+            if (!isSnippetMidSignatureOk(text, payload.midSig, computeUserHash(authRow))) {
+                throw apiError('BAD_REQUEST', 'Field "midSig" must be the one whoami answered for this Business Unit. Reload SQL Studio and try again.', null);
+            };
+            return text;
+        };
+
+        /**
+         * @function requireSnippetName
+         * @description Checks a snippet's name: 1 to SNIPPET_NAME_MAX_LENGTH characters once its ends are trimmed.
+         * @param {*} value
+         * @returns {string} the trimmed name
+         */
+        function requireSnippetName(value) {
+            var name = (typeof value === 'string') ? trimString(value) : '';
+            if (name === '') {
+                throw apiError('BAD_REQUEST', 'A snippet needs a name.', null);
+            };
+            if (name.length > SNIPPET_NAME_MAX_LENGTH) {
+                throw apiError('BAD_REQUEST', 'A snippet\'s name can have at most ' + SNIPPET_NAME_MAX_LENGTH + ' characters. This one has ' + name.length + '.', null);
+            };
+            return name;
+        };
+
+        /**
+         * @function requireSnippetSql
+         * @description Checks a snippet's SQL: something other than blanks, and at most SNIPPET_SQL_MAX_LENGTH
+         *              characters. It is kept as it was sent, with its own line breaks and indentation.
+         * @param {*} value
+         * @returns {string}
+         */
+        function requireSnippetSql(value) {
+            if (typeof value !== 'string' || trimString(value) === '') {
+                throw apiError('BAD_REQUEST', 'A snippet needs some SQL.', null);
+            };
+            if (value.length > SNIPPET_SQL_MAX_LENGTH) {
+                throw apiError('BAD_REQUEST', 'A snippet can hold at most ' + SNIPPET_SQL_MAX_LENGTH + ' characters of SQL. This one has ' + value.length + '.', null);
+            };
+            return value;
+        };
+
+        /**
+         * @function findMissingSnippetField
+         * @description Looks for a field the snippets Data Extension lacks, with local Lookups only (no API or
+         *              WSProxy call). A text field must read first, the key, else the mid, else one of the other Text
+         *              fields (SNIPPET_PRESENCE_FIELDS): a Lookup that fails for any reason, a missing Data Extension
+         *              included, says nothing about the layout, and only a field that reads shows the Data Extension is
+         *              there. When the key does not read and another field does, the Data Extension is there without its
+         *              key. The other fields are then read by the key. Only the probe decides, as isOldLayoutError does,
+         *              never an error's text: the platform's text for a missing field is not documented, and the one
+         *              for a missing Data Extension ("does not exist") may say the same of a field. A Data Extension
+         *              with none of the key, the mid and those fields looks like one that is not there.
+         * @param {string} deName
+         * @returns {string} the name of the first missing field, or '' when the layout is whole or the Data Extension is not there
+         */
+        function findMissingSnippetField(deName) {
+            try {
+                Platform.Function.Lookup(deName, 'id', 'id', 'sqlstudio-layout-check');
+            } catch (keyErr) {
+                var presenceFields = ['mid'].concat(SNIPPET_PRESENCE_FIELDS);
+                for (var p = 0; p < presenceFields.length; p++) {
+                    try {
+                        Platform.Function.Lookup(deName, presenceFields[p], presenceFields[p], 'sqlstudio-layout-check');
+                        return 'id';
+                    } catch (presenceErr) {
+                        /* not this one: try the next */
+                    };
+                };
+                return '';
+            };
+            for (var i = 1; i < SNIPPET_FIELD_NAMES.length; i++) {
+                try {
+                    Platform.Function.Lookup(deName, SNIPPET_FIELD_NAMES[i], 'id', 'sqlstudio-layout-check');
+                } catch (probeErr) {
+                    return SNIPPET_FIELD_NAMES[i];
+                };
+            };
+            return '';
+        };
+
+        /**
+         * @function hasEverySnippetField
+         * @description Tells whether each row a read gave has every field of a snippet. A Data Extension without
+         *              one reads without an error when the read does not filter on it (a list by mid of one
+         *              without its key), and gives rows that lack it.
+         * @param {Object[]} rows
+         * @returns {boolean}
+         */
+        function hasEverySnippetField(rows) {
+            for (var i = 0; i < rows.length; i++) {
+                for (var f = 0; f < SNIPPET_FIELD_NAMES.length; f++) {
+                    if (rows[i][SNIPPET_FIELD_NAMES[f]] === undefined) {
+                        return false;
+                    };
+                };
+            };
+            return true;
+        };
+
+        /**
+         * @function throwIfSnippetsLayoutWrong
+         * @description Called after a read or a write of the snippets Data Extension failed, or a read gave rows
+         *              that lack a field: when it exists but has no field SQL Studio needs (an admin made it by
+         *              hand, or under a name another Data Extension already had), throws SNIPPETS_BAD_LAYOUT with
+         *              the way out, and it is never re-created while it exists. Otherwise it returns and the
+         *              caller's own error stands.
+         * @param {string} deName
+         */
+        function throwIfSnippetsLayoutWrong(deName) {
+            var missing = findMissingSnippetField(deName);
+            if (missing !== '') {
+                throw apiError('SNIPPETS_BAD_LAYOUT', 'The snippets Data Extension "' + deName + '" has no field "' + missing + '". Add it in Contact Builder as Text, or delete the Data Extension, and SQL Studio creates it again the next time a snippet is saved.', null);
+            };
+        };
+
+        /**
+         * @function readSnippetRows
+         * @description Reads the snippet rows with one value in a column (their mid, or their id). A snippets
+         *              Data Extension that is not there yet has no rows: the first save creates it. One that is
+         *              there without a field answers SNIPPETS_BAD_LAYOUT, whether the read failed on it or gave
+         *              rows that lack it. An empty read shows no field missing, and the save after it says so.
+         * @param {string} deName
+         * @param {string} column - 'mid' or 'id'
+         * @param {string} value
+         * @returns {Object[]}
+         */
+        function readSnippetRows(deName, column, value) {
+            var rows = null;
+            try {
+                rows = Platform.Function.LookupRows(deName, [column], [value]);
+            } catch (lookupErr) {
+                /* The layout first: a Lookup of a field that is not there can fail as a Data Extension that is
+                not there does. */
+                throwIfSnippetsLayoutWrong(deName);
+                if (isDataExtensionMissing(deName, 'id')) {
+                    return [];
+                };
+                throw lookupErr;
+            };
+            rows = rows ? rows : [];
+            if (!hasEverySnippetField(rows)) {
+                throwIfSnippetsLayoutWrong(deName);
+            };
+            return rows;
+        };
+
+        /**
+         * @function compareSnippetNames
+         * @description Sort comparator for snippet rows: by name without regard to case, then by createdDate.
+         * @param {Object} a
+         * @param {Object} b
+         * @returns {number}
+         */
+        function compareSnippetNames(a, b) {
+            var an = String(a.name).toLowerCase();
+            var bn = String(b.name).toLowerCase();
+            if (an < bn) {
+                return -1;
+            };
+            if (an > bn) {
+                return 1;
+            };
+            return compareHistoryCreatedDateDescending(b, a);
+        };
+
+        /**
+         * @function snippetItem
+         * @description One snippet as the app reads it. The author is shown by the e-mail the row holds, and
+         *              `isOwn` says whether the session's user is the one on the row, which is what lets the
+         *              app offer rename and delete. The user id itself never leaves the Backend.
+         * @param {Object} row
+         * @param {string} userId - the session's user id
+         * @returns {Object}
+         */
+        function snippetItem(row, userId) {
+            var item = {
+                id: String(row.id),
+                name: String(row.name),
+                sql: (row.sql === undefined || row.sql === null) ? '' : String(row.sql),
+                author: (row.userEmail === undefined || row.userEmail === null) ? '' : String(row.userEmail),
+                isOwn: String(row.userId) === userId,
+                createdDate: formatSnippetDate(row.createdDate),
+                modifiedDate: formatSnippetDate(row.modifiedDate)
+            };
+            return item;
+        };
+
+        /**
+         * @function formatSnippetDate
+         * @description A snippet's date as the app reads it: yyyy-MM-ddTHH:mm:ss as the history's (formatHistoryCreatedDate),
+         *              with the offset of the time it was written in, MCE_SYSTEM_TIME_OFFSET, so the app can show it in
+         *              the viewer's time zone. Each row of every release was written with Platform.Function.Now(), so
+         *              the offset holds for them all. A value that does not read as a date passes through unchanged.
+         * @param {*} value
+         * @returns {string|*}
+         */
+        function formatSnippetDate(value) {
+            var text = formatHistoryCreatedDate(value);
+            if (typeof text === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(text)) {
+                return text + MCE_SYSTEM_TIME_OFFSET;
+            };
+            return text;
+        };
+
+        /**
+         * @function actionListSnippets
+         * @description Lists the snippets saved in the session's Business Unit (their mid), by name, up to
+         *              SNIPPET_MAX_COUNT. A Data Extension that does not exist yet answers an empty list.
+         * @param {Object} payload - { mid, midSig }
+         * @param {Object} authRow
+         * @returns {{items:Array}}
+         */
+        function actionListSnippets(payload, authRow) {
+            var deName = requireSnippetsEnabled();
+            var userId = requireSnippetUser(authRow);
+            var mid = requireSnippetMid(payload, authRow);
+            var rows = readSnippetRows(deName, 'mid', mid);
+            rows.sort(compareSnippetNames);
+            if (rows.length > SNIPPET_MAX_COUNT) {
+                rows = rows.slice(0, SNIPPET_MAX_COUNT);
+            };
+            var items = [];
+            for (var i = 0; i < rows.length; i++) {
+                items.push(snippetItem(rows[i], userId));
+            };
+            var data = { items: items };
+            return data;
+        };
+
+        /**
+         * @function actionSaveSnippet
+         * @description Saves a snippet: a new one without an id, or with the id of the user's own snippet a
+         *              rename or a change of its SQL. The name is unique in the Business Unit without regard
+         *              to case, and the Business Unit keeps at most SNIPPET_MAX_COUNT snippets. The first save
+         *              creates the Data Extension, in the SQL Studio folder with no retention, and writes again.
+         * @param {Object} payload - { mid, midSig, id?, name, sql }
+         * @param {Object} authRow
+         * @returns {{item:Object}} the snippet as listSnippets gives it
+         */
+        function actionSaveSnippet(payload, authRow) {
+            var deName = requireSnippetsEnabled();
+            var userId = requireSnippetUser(authRow);
+            var mid = requireSnippetMid(payload, authRow);
+            var name = requireSnippetName(payload.name);
+            var sql = requireSnippetSql(payload.sql);
+            var id = payload.id;
+            var isChange = (id !== undefined && id !== null && id !== '');
+            if (isChange) {
+                requireGuid(id, 'id');
+            };
+
+            var rows = readSnippetRows(deName, 'mid', mid);
+            var ownRow = null;
+            var lowerName = name.toLowerCase();
+            for (var i = 0; i < rows.length; i++) {
+                if (isChange && String(rows[i].id) === id) {
+                    ownRow = rows[i];
+                    continue;
+                };
+                if (String(rows[i].name).toLowerCase() === lowerName) {
+                    throw apiError('BAD_REQUEST', 'This Business Unit has a snippet named "' + String(rows[i].name) + '" already. Names are not case sensitive.', null);
+                };
+            };
+
+            var now = Platform.Function.Now();
+            var item = null;
+            if (isChange) {
+                if (ownRow === null) {
+                    throw apiError('NOT_FOUND', 'This snippet is not there any more. Someone may have deleted it.', null);
+                };
+                if (String(ownRow.userId) !== userId) {
+                    throw apiError('BAD_REQUEST', 'Only its author can rename or change this snippet.', null);
+                };
+                try {
+                    Platform.Function.UpdateData(deName, ['id', 'userId'], [id, userId], ['name', 'sql', 'modifiedDate'], [name, sql, now]);
+                } catch (updateErr) {
+                    throwIfSnippetsLayoutWrong(deName);
+                    throw updateErr;
+                };
+                ownRow.name = name;
+                ownRow.sql = sql;
+                ownRow.modifiedDate = now;
+                item = snippetItem(ownRow, userId);
+            } else {
+                if (rows.length >= SNIPPET_MAX_COUNT) {
+                    throw apiError('BAD_REQUEST', 'This Business Unit has ' + SNIPPET_MAX_COUNT + ' snippets already, the most SQL Studio keeps. Delete one to save another.', null);
+                };
+                var newId = GUID();
+                var userEmail = truncate(trimString(authRow.userEmail || ''), 254);
+                var columns = ['id', 'mid', 'userId', 'userEmail', 'name', 'sql', 'createdDate', 'modifiedDate'];
+                var values = [newId, mid, userId, userEmail, name, sql, now, now];
+                try {
+                    Platform.Function.InsertData(deName, columns, values);
+                } catch (insertErr) {
+
+                    /* A Data Extension that exists without a field of ours is never re-created. */
+                    throwIfSnippetsLayoutWrong(deName);
+
+                    /* The Data Extension is missing, as on the first save: create it once, with no
+                    retention, and write again. Never for a shared ('ENT.') name, and never when it exists
+                    (some other write failure, which should surface as the usual INTERNAL error). */
+                    var provisionStatus = provisionDataExtension(deName, snippetsLogFields(), null, SNIPPETS_DESCRIPTION, authRow.token);
+                    if (provisionStatus !== 'created' && provisionStatus !== 'created-no-retention' && provisionStatus !== 'raced') {
+                        throw insertErr;
+                    };
+                    Platform.Function.InsertData(deName, columns, values);
+                };
+                item = snippetItem({ id: newId, name: name, sql: sql, userEmail: userEmail, userId: userId, createdDate: now, modifiedDate: now }, userId);
+            };
+
+            var data = { item: item };
+            return data;
+        };
+
+        /**
+         * @function actionDeleteSnippet
+         * @description Deletes a snippet of the session's Business Unit, only when its author asks: the row's user
+         *              id must be the session's. The delete itself filters on both, so a row that changed hands in
+         *              between stays.
+         * @param {Object} payload - { mid, midSig, id }
+         * @param {Object} authRow
+         * @returns {{deleted:number}}
+         */
+        function actionDeleteSnippet(payload, authRow) {
+            var deName = requireSnippetsEnabled();
+            var userId = requireSnippetUser(authRow);
+            var mid = requireSnippetMid(payload, authRow);
+            var id = requireGuid(payload.id, 'id');
+            var rows = readSnippetRows(deName, 'id', id);
+            if (rows.length === 0 || String(rows[0].mid) !== mid) {
+                throw apiError('NOT_FOUND', 'This snippet is not there any more. Someone may have deleted it.', null);
+            };
+            if (String(rows[0].userId) !== userId) {
+                throw apiError('BAD_REQUEST', 'Only its author can delete this snippet.', null);
+            };
+            var deleted = 0;
+            try {
+                deleted = Platform.Function.DeleteData(deName, ['id', 'userId'], [id, userId]);
+            } catch (deleteErr) {
+                throwIfSnippetsLayoutWrong(deName);
+                throw deleteErr;
+            };
+            var data = { deleted: (typeof deleted === 'number') ? deleted : 0 };
+            return data;
+        };
+
         /**
          * @function retrieveDataFolders
          * @description Retrieves every DataFolder of the given content types over SOAP, for the
@@ -3445,7 +4082,7 @@
                 '<Objects xsi:type="DataFolder">' +
                 '<ParentFolder><ID>' + xmlEscape(parentId) + '</ID></ParentFolder>' +
                 '<Name>' + xmlEscape(name) + '</Name>' +
-                '<Description>' + xmlEscape(isQueryFolder ? 'SQL Studio: the query activities it runs for each user.' : 'SQL Studio: its sign-in, error and history Data Extensions, and the temporary results of each run.') + '</Description>' +
+                '<Description>' + xmlEscape(isQueryFolder ? 'SQL Studio: the query activities it runs for each user.' : 'SQL Studio: its sign-in, error, history and snippets Data Extensions, and the temporary results of each run.') + '</Description>' +
                 '<ContentType>' + xmlEscape(contentType) + '</ContentType>' +
                 '<IsActive>true</IsActive>' +
                 '<IsEditable>true</IsEditable>' +
@@ -5299,6 +5936,107 @@
         };
 
         /**
+         * @function startQueryActivity
+         * @description Starts a Query Activity with the user's token: SOAP Perform (Action Start) on the
+         *              QueryDefinition, which answers with a Task ID that getRunStatus and getRunOutcome later
+         *              read back through AsyncActivityStatus to learn whether the run is queued, running,
+         *              finished or failed. The REST start only ever answers "OK", with nothing to ask about
+         *              later. The REST start is the fallback only after a clear refusal: Marketing Cloud
+         *              Engagement answered the Perform itself and said Error, or faulted the request as the
+         *              client's. After anything else, such as a network failure or a gateway's error page, the
+         *              Perform may have started the run, and a REST start could run it twice: that is thrown as
+         *              a failed start is. Shared by runQuery and moveToDataExtension, so both answer a task
+         *              the same way.
+         * @param {string} queryId - the Query Activity's ObjectID
+         * @param {string} userHash - computeUserHash of the session's row
+         * @param {string} token
+         * @returns {{startMethod: string, taskId: ?string, taskSig: ?string, startResponse: string}} startMethod is
+         *          'soap' or 'rest'. taskSig binds taskId to this user (taskSignature) and is null whenever taskId is.
+         *          startResponse is a diagnostic of at most 500 characters, with the secrets masked.
+         * @throws {Object} apiError MCE_ERROR when the start fails. It carries isStartUnclear true when the start may
+         *         have happened all the same: a Perform answer that is no clear refusal (isSoapClearRefusal), or a REST
+         *         start whose answer is no clear refusal either (isRestClearRefusal), such as no answer, an HTTP 408 or 504
+         *         cut off at a time limit, or a server error.
+         */
+        function startQueryActivity(queryId, userHash, token) {
+            var startMethod = 'soap';
+            var taskId = null;
+            var taskSig = null;
+            var startResponse = '';
+
+            var performBody = '<PerformRequestMsg xmlns="http://exacttarget.com/wsdl/partnerAPI">' +
+                '<Action>Start</Action>' +
+                '<Definitions>' +
+                '<Definition xsi:type="QueryDefinition">' +
+                '<ObjectID>' + xmlEscape(queryId) + '</ObjectID>' +
+                '</Definition>' +
+                '</Definitions>' +
+                '</PerformRequestMsg>';
+            var performRes = soap('Perform', performBody, token);
+
+            var performResultBlock = (performRes.results && performRes.results.length > 0) ? performRes.results[0] : null;
+            /* The Result's own StatusCode, not the Task's, which comes later in the same block. */
+            var performResultStatusCode = performResultBlock ? xmlValue(xmlWithout(performResultBlock, 'Task'), 'StatusCode') : null;
+            var performResultStatusMessage = performResultBlock ? xmlValue(xmlWithout(performResultBlock, 'Task'), 'StatusMessage') : null;
+            /* Only inside <Task>: the echoed <Object> comes first and may carry an <ID> of its own, such
+            as its Client's MID. */
+            var performTaskBlock = performResultBlock ? xmlRaw(performResultBlock, 'Task') : null;
+            var performTaskId = performTaskBlock ? xmlValue(performTaskBlock, 'ID') : null;
+            var performFailed = !performRes.ok || (performResultStatusCode !== null && performResultStatusCode !== 'OK');
+            var isClearRefusal = isSoapClearRefusal(performRes, performResultStatusCode);
+
+            if (performFailed && !isClearRefusal) {
+                /* The Perform may have started the activity: moveToDataExtension answers this as START_UNCONFIRMED, and
+                runQuery as the failed start it has always been. */
+                var unclearErr = sfmcErrorFromSoap(performRes);
+                unclearErr.isStartUnclear = true;
+                throw unclearErr;
+            };
+
+            if (performFailed && isSoapSessionFault(performRes.raw)) {
+                /* The fault text itself says the token is the problem: a REST start would fail the
+                same way, so there is nothing a fallback would fix. */
+                throw sfmcErrorFromSoap(performRes);
+            };
+
+            if (performFailed) {
+                startMethod = 'rest';
+                var startRes = httpJSON('POST', restBase + '/automation/v1/queries/' + urlEncode(queryId) + '/actions/start/', {}, token);
+                if (startRes.status < 200 || startRes.status >= 300) {
+                    var restStartErr = sfmcErrorFromResponse(startRes);
+                    /* Anything but a clear refusal (isRestClearRefusal), such as no answer, a time limit or a server error,
+                    may have started it too: the move then waits in Marketing Cloud Engagement's queue. */
+                    if (!isRestClearRefusal(startRes)) {
+                        restStartErr.isStartUnclear = true;
+                    };
+                    throw restStartErr;
+                };
+                taskId = null;
+                startResponse = truncate(maskSecrets('Perform: ' + (performResultStatusMessage || performRes.overallStatus || 'failed') + '. Fell back to REST start.'), 500);
+            } else {
+                /* An ID of another shape is no Task ID the app could send back: getRunStatus would not take it. */
+                taskId = isTaskIdShape(performTaskId) ? performTaskId : null;
+                /* The run has started: a signature the platform cannot compute leaves the status to the token. */
+                if (taskId !== null) {
+                    try {
+                        taskSig = taskSignature(taskId, userHash);
+                    } catch (sigErr) {
+                        taskSig = null;
+                    };
+                };
+                startResponse = truncate(maskSecrets('Perform: ' + (performResultStatusMessage || 'OK') + '. Task ID: ' + (taskId ? 'yes' : 'no') + '.'), 500);
+            };
+
+            var started = {
+                startMethod: startMethod,
+                taskId: taskId,
+                taskSig: taskSig,
+                startResponse: startResponse
+            };
+            return started;
+        };
+
+        /**
          * @function actionRunQuery
          * @description Runs a query: picks the first free slot, from the requested one up, in the
          *              caller's pool of up to QUERY_SLOT_COUNT per-user ad-hoc Query Activities (M6),
@@ -5474,79 +6212,19 @@
                 };
             };
 
-            /* Step 5: start the Query Activity. SOAP Perform (Action Start) on the QueryDefinition
-            answers with a Task ID, which getRunOutcome later reads back
-            through AsyncActivityStatus to learn whether a 0-row run finished, failed or is still
-            queued. The REST start only ever answers "OK", with nothing to ask about later. The REST
-            start is the fallback only after a clear refusal: Marketing Cloud Engagement answered the
-            Perform itself and said Error, or faulted the request as the client's. After anything
-            else, such as a network failure or a gateway's error page, the Perform may have started
-            the run, and a REST start could run it twice: that is thrown as a failed start is,
-            deleting only the temp DE, never the activity. */
-            var startMethod = 'soap';
-            var taskId = null;
-            var taskSig = null;
-            var startResponse = '';
-
-            var performBody = '<PerformRequestMsg xmlns="http://exacttarget.com/wsdl/partnerAPI">' +
-                '<Action>Start</Action>' +
-                '<Definitions>' +
-                '<Definition xsi:type="QueryDefinition">' +
-                '<ObjectID>' + xmlEscape(queryId) + '</ObjectID>' +
-                '</Definition>' +
-                '</Definitions>' +
-                '</PerformRequestMsg>';
-            var performRes = soap('Perform', performBody, authRow.token);
-
-            var performResultBlock = (performRes.results && performRes.results.length > 0) ? performRes.results[0] : null;
-            /* The Result's own StatusCode, not the Task's, which comes later in the same block. */
-            var performResultStatusCode = performResultBlock ? xmlValue(xmlWithout(performResultBlock, 'Task'), 'StatusCode') : null;
-            var performResultStatusMessage = performResultBlock ? xmlValue(xmlWithout(performResultBlock, 'Task'), 'StatusMessage') : null;
-            /* Only inside <Task>: the echoed <Object> comes first and may carry an <ID> of its own, such
-            as its Client's MID. */
-            var performTaskBlock = performResultBlock ? xmlRaw(performResultBlock, 'Task') : null;
-            var performTaskId = performTaskBlock ? xmlValue(performTaskBlock, 'ID') : null;
-            var performFailed = !performRes.ok || (performResultStatusCode !== null && performResultStatusCode !== 'OK');
-            var performFaultCode = xmlValue(performRes.raw, 'faultcode');
-            var isClearRefusal = performRes.status !== 0 && (
-                (performRes.overallStatus !== null && performRes.overallStatus !== '' && isSoapError(performRes.overallStatus)) ||
-                (performRes.ok && performResultStatusCode === 'Error') ||
-                (performFaultCode !== null && performFaultCode.toLowerCase().indexOf('client') !== -1));
-
-            if (performFailed && !isClearRefusal) {
+            /* Step 5: start the Query Activity (startQueryActivity). A failed start deletes only the temp DE,
+            never the activity. */
+            var started = null;
+            try {
+                started = startQueryActivity(queryId, userHash, authRow.token);
+            } catch (startErr) {
                 deleteDataExtensionByKey(authRow.token, deKey);
-                throw sfmcErrorFromSoap(performRes);
+                throw startErr;
             };
-
-            if (performFailed && isSoapSessionFault(performRes.raw)) {
-                /* The fault text itself says the token is the problem: a REST start would fail the
-                same way, so there is nothing a fallback would fix. */
-                deleteDataExtensionByKey(authRow.token, deKey);
-                throw sfmcErrorFromSoap(performRes);
-            };
-
-            if (performFailed) {
-                startMethod = 'rest';
-                var startRes = httpJSON('POST', restBase + '/automation/v1/queries/' + urlEncode(queryId) + '/actions/start/', {}, authRow.token);
-                if (startRes.status < 200 || startRes.status >= 300) {
-                    deleteDataExtensionByKey(authRow.token, deKey);
-                    throw sfmcErrorFromResponse(startRes);
-                };
-                taskId = null;
-                startResponse = truncate(maskSecrets('Perform: ' + (performResultStatusMessage || performRes.overallStatus || 'failed') + '. Fell back to REST start.'), 500);
-            } else {
-                /* An ID of another shape is no Task ID the app could send back: getRunStatus would not take it. */
-                taskId = isTaskIdShape(performTaskId) ? performTaskId : null;
-                /* The run has started: a signature the platform cannot compute leaves the status to the token. */
-                if (taskId !== null) {
-                    try {
-                        taskSig = taskSignature(taskId, userHash);
-                    } catch (sigErr) {
-                        taskSig = null;
-                    };
-                };
-                startResponse = truncate(maskSecrets('Perform: ' + (performResultStatusMessage || 'OK') + '. Task ID: ' + (taskId ? 'yes' : 'no') + '.'), 500);
-            };
+            var startMethod = started.startMethod;
+            var taskId = started.taskId;
+            var taskSig = started.taskSig;
+            var startResponse = started.startResponse;
 
             var data = {
                 runId: deKey,
@@ -6343,6 +7021,877 @@
             };
         };
 
+        /* ---------------------- Save to Data Extension ------------------------- */
+
+        /* The field types Marketing Cloud Engagement offers for a Data Extension. A Text field takes a length and a
+        Decimal a precision and a scale. Marketing Cloud Engagement fixes the length of every other type, so a payload
+        that gives one is refused instead of ignored. The limits of a Decimal are the ones the typed fields of a run use
+        (DECIMAL_MAX_PRECISION and DECIMAL_MAX_SCALE). */
+        var DE_FIELD_TYPES = ['Text', 'Number', 'Date', 'Boolean', 'EmailAddress', 'Phone', 'Decimal', 'Locale'];
+        var DE_NAME_MAX_LENGTH = 128;
+        var DE_KEY_MAX_LENGTH = 36;
+        var DE_FIELD_NAME_MAX_LENGTH = 128;
+        var DE_TEXT_MAX_LENGTH = 4000;
+        var DE_DEFAULT_VALUE_MAX_LENGTH = 4000;
+        /* The same cap as the columns of a run: the move reads the columns of a run's Data Extension. */
+        var DE_FIELD_MAX_COUNT = 500;
+        var DE_RETENTION_UNITS = ['Days', 'Weeks', 'Months', 'Years'];
+        var DE_RETENTION_MAX_PERIOD = 999;
+        /* The Name that SendableSubscriberField takes for each send relationship, as MCE's SOAP guide "Create a Data
+        Extension" writes it in its samples: 'Subscriber Key', with the space, and 'Email Address'. A Retrieve answers
+        '_SubscriberKey' for the first, which the list reads, and a Create is not documented to take that spelling. The
+        org check confirms both. A different spelling is a change to this one value. */
+        var SENDABLE_SUBSCRIBER_NAMES = {
+            subscriberKey: 'Subscriber Key',
+            emailAddress: 'Email Address'
+        };
+        /* The field types each send relationship takes. MCE's "Data Extension Properties" help says a Text, EmailAddress
+        or Phone field can relate to the Subscriber Key, and the guide above relates an EmailAddress field to it. The Email
+        Address takes an EmailAddress field. */
+        var SENDABLE_FIELD_TYPES = {
+            subscriberKey: ['Text', 'EmailAddress', 'Phone'],
+            emailAddress: ['EmailAddress']
+        };
+
+        /**
+         * @function isGiven
+         * @description Tells whether a payload value is there: neither undefined nor null.
+         * @param {*} value
+         * @returns {boolean}
+         */
+        function isGiven(value) {
+            return value !== undefined && value !== null;
+        };
+
+        /**
+         * @function isAppDataExtension
+         * @description Tells whether a name or a key names one of SQL Studio's own Data Extensions, the Auth Log, the
+         *              Error Log, the history and the snippets (authDE, errorDE, historyDE and readSnippetsDE(), each
+         *              without its 'ENT.' prefix), without regard to case, as Marketing Cloud Engagement matches a
+         *              CustomerKey. SQL Studio creates each with its name as its key (isWsProxyCreateOk), and the data
+         *              functions find the history and the snippets by name, so a Data Extension of another key with one of
+         *              these names would be read in their place. The default names of the history and the snippets
+         *              (HISTORY_DEFAULT_DE, SNIPPETS_DEFAULT_DE) count always, also while the feature is off or its setting
+         *              names another Data Extension: one a user made under that name would be adopted, rows included,
+         *              when an admin later turns the feature on with its default. createDataExtension never makes one of
+         *              these names or keys, and moveToDataExtension never writes into one, whatever its payload says.
+         *              Names that only look alike, such as with a doubled space, are not caught.
+         * @param {string} nameOrKey
+         * @returns {boolean}
+         */
+        function isAppDataExtension(nameOrKey) {
+            var wanted = trimString(nameOrKey).toLowerCase();
+            var names = [authDE, errorDE, historyDE, readSnippetsDE(), HISTORY_DEFAULT_DE, SNIPPETS_DEFAULT_DE];
+            for (var i = 0; i < names.length; i++) {
+                var name = (typeof names[i] === 'string') ? names[i] : '';
+                if (isEnterpriseShared(name)) {
+                    name = name.substring(4);
+                };
+                name = trimString(name).toLowerCase();
+                if (name !== '' && name === wanted) {
+                    return true;
+                };
+            };
+            return false;
+        };
+
+        /**
+         * @function isOneOf
+         * @description Tells whether a value is one of a list, compared as it is, with the case. A loop, as
+         *              Array.prototype.indexOf is not ES3.
+         * @param {Array} list
+         * @param {*} value
+         * @returns {boolean}
+         */
+        function isOneOf(list, value) {
+            for (var i = 0; i < list.length; i++) {
+                if (list[i] === value) {
+                    return true;
+                };
+            };
+            return false;
+        };
+
+        /**
+         * @function hasControlCharacter
+         * @description Tells whether a text holds a character below a space, a line break or a tab among them,
+         *              which no name or value of a Data Extension needs and which XML may not carry.
+         * @param {string} text
+         * @returns {boolean}
+         */
+        function hasControlCharacter(text) {
+            for (var i = 0; i < text.length; i++) {
+                if (text.charCodeAt(i) < 32) {
+                    return true;
+                };
+            };
+            return false;
+        };
+
+        /**
+         * @function requireLabel
+         * @description Validates a name or a value of a Data Extension: a string of 1 to maxLen characters once
+         *              trimmed, with no control character. Throws BAD_REQUEST otherwise.
+         * @param {*} value
+         * @param {string} fieldName
+         * @param {number} maxLen
+         * @returns {string} the trimmed text
+         */
+        function requireLabel(value, fieldName, maxLen) {
+            requireString(value, fieldName, 1, maxLen);
+            var trimmed = trimString(value);
+            if (hasControlCharacter(trimmed)) {
+                throw apiError('BAD_REQUEST', 'Field "' + fieldName + '" must not hold control characters.', null);
+            };
+            return trimmed;
+        };
+
+        /**
+         * @function readOptionalBoolean
+         * @description Reads a payload flag that may be left out: absent (undefined or null) gives the fallback,
+         *              and anything but true or false is BAD_REQUEST.
+         * @param {*} value
+         * @param {string} fieldName
+         * @param {boolean} fallback
+         * @returns {boolean}
+         */
+        function readOptionalBoolean(value, fieldName, fallback) {
+            if (!isGiven(value)) {
+                return fallback;
+            };
+            if (value !== true && value !== false) {
+                throw apiError('BAD_REQUEST', 'Field "' + fieldName + '" must be true or false.', null);
+            };
+            return value;
+        };
+
+        /**
+         * @function validateDataExtensionField
+         * @description Validates one field of createDataExtension's payload and fills what it leaves out. The name is
+         *              never the row mark column's (ROW_MARK_FIELD), which a move leaves out. The type
+         *              is one of DE_FIELD_TYPES, with its case. A length is for Text alone, 1 to 4,000, and absent
+         *              means the default of Marketing Cloud Engagement. A Decimal takes a precision from 1 to 29 and a
+         *              scale from 0 to the smaller of the precision and 8, taking 18 and 4 (4 at most the precision)
+         *              for either that is absent, as a run's Decimal does. Any other type takes none of the three.
+         *              A primary key is not nullable, and a field is nullable otherwise unless it says it is not.
+         * @param {*} entry - one item of fields
+         * @param {number} index - its place in the list, for the error text
+         * @returns {{name: string, type: string, length: ?number, precision: ?number, scale: ?number,
+         *           isPrimaryKey: boolean, isNullable: boolean, defaultValue: ?string}}
+         * @throws {Object} apiError BAD_REQUEST
+         */
+        function validateDataExtensionField(entry, index) {
+            var label = 'fields[' + index + ']';
+            if (entry === null || entry === undefined || typeof entry !== 'object' || isArray(entry)) {
+                throw apiError('BAD_REQUEST', 'Field "' + label + '" must be an object.', null);
+            };
+            var name = requireLabel(entry.name, label + '.name', DE_FIELD_NAME_MAX_LENGTH);
+            if (name.toLowerCase() === ROW_MARK_FIELD.toLowerCase()) {
+                throw apiError('BAD_REQUEST', 'Field "' + label + '.name" is the row mark column of SQL Studio, which a move never fills. Choose another name.', null);
+            };
+            var type = entry.type;
+            if (!isOneOf(DE_FIELD_TYPES, type)) {
+                throw apiError('BAD_REQUEST', 'Field "' + label + '.type" must be one of ' + DE_FIELD_TYPES.join(', ') + '.', null);
+            };
+
+            /* maxLength, never length: on the author's org (2026-10-08) a field object that ParseJSON gave answered .length although
+            the app sent none, and the check refused an EmailAddress field for it. */
+            var length = null;
+            if (isGiven(entry.maxLength)) {
+                if (type !== 'Text') {
+                    throw apiError('BAD_REQUEST', 'Field "' + label + '.maxLength" is for Text fields only: Marketing Cloud Engagement sets the length of a ' + type + ' field.', null);
+                };
+                length = requireInt(entry.maxLength, label + '.maxLength', 1, DE_TEXT_MAX_LENGTH);
+            };
+
+            var precision = null;
+            var scale = null;
+            if (type === 'Decimal') {
+                precision = DECIMAL_DEFAULT_PRECISION;
+                if (isGiven(entry.precision)) {
+                    precision = requireInt(entry.precision, label + '.precision', 1, DECIMAL_MAX_PRECISION);
+                };
+                scale = (DECIMAL_DEFAULT_SCALE < precision) ? DECIMAL_DEFAULT_SCALE : precision;
+                if (isGiven(entry.scale)) {
+                    var maxScale = (precision < DECIMAL_MAX_SCALE) ? precision : DECIMAL_MAX_SCALE;
+                    scale = requireInt(entry.scale, label + '.scale', 0, maxScale);
+                };
+            } else if (isGiven(entry.precision) || isGiven(entry.scale)) {
+                throw apiError('BAD_REQUEST', 'Fields "' + label + '.precision" and "' + label + '.scale" are for Decimal fields only.', null);
+            };
+
+            var isPrimaryKey = readOptionalBoolean(entry.isPrimaryKey, label + '.isPrimaryKey', false);
+            var isNullable = readOptionalBoolean(entry.isNullable, label + '.isNullable', !isPrimaryKey);
+            if (isPrimaryKey && isNullable) {
+                throw apiError('BAD_REQUEST', 'Field "' + label + '" is a primary key, which cannot be nullable.', null);
+            };
+            /* Marketing Cloud Engagement refuses it with "A text field with no length specified cannot be used as a primary key"
+            (the author's org, 2026-10-09), after the call: the check says so before it. */
+            if (isPrimaryKey && type === 'Text' && length === null) {
+                throw apiError('BAD_REQUEST', 'Field "' + label + '.maxLength" is needed: a Text primary key must have a length.', null);
+            };
+
+            var defaultValue = null;
+            if (isGiven(entry.defaultValue) && entry.defaultValue !== '') {
+                defaultValue = requireLabel(entry.defaultValue, label + '.defaultValue', DE_DEFAULT_VALUE_MAX_LENGTH);
+            };
+
+            var field = {
+                name: name,
+                type: type,
+                length: length,
+                precision: precision,
+                scale: scale,
+                isPrimaryKey: isPrimaryKey,
+                isNullable: isNullable,
+                defaultValue: defaultValue
+            };
+            return field;
+        };
+
+        /**
+         * @function validateNewDataExtension
+         * @description Validates everything createDataExtension is asked to make, before any call: the name (1 to 128
+         *              characters, not starting with an underscore, never the name of SQL Studio's own Data Extensions,
+         *              isAppDataExtension), the key (1 to 36, or absent for Marketing Cloud Engagement to make one, never
+         *              the shape of a temporary run Data Extension, which the app hides and sweeps, and never the key of
+         *              SQL Studio's own Data Extensions), the folder, 1 to 500 fields with names that differ without regard
+         *              to case (validateDataExtensionField), the retention (a period of 1 to 999 and a unit of Days, Weeks,
+         *              Months or Years) and the send relationship (the sendable field must be a field of the payload, of a
+         *              type SENDABLE_FIELD_TYPES gives the relationship: Text, EmailAddress or Phone for the Subscriber
+         *              Key and EmailAddress for the Email Address).
+         * @param {Object} payload - createDataExtension's payload
+         * @param {Object} [progress] - { stage }, where each check writes its name before it starts, for an error of the platform
+         * @returns {{name: string, key: ?string, categoryId: ?number, fields: Object[], retention: ?Object, sendable: ?Object}}
+         * @throws {Object} apiError BAD_REQUEST
+         */
+        function validateNewDataExtension(payload, progress) {
+            var stageOf = progress || {};
+            stageOf.stage = 'the checks: the name';
+            var name = requireLabel(payload.name, 'name', DE_NAME_MAX_LENGTH);
+            if (name.charAt(0) === '_') {
+                throw apiError('BAD_REQUEST', 'Field "name" must not start with an underscore.', null);
+            };
+            stageOf.stage = 'the checks: SQL Studio\'s own names';
+            if (isAppDataExtension(name)) {
+                throw apiError('BAD_REQUEST', 'Field "name" must not be the name of one of SQL Studio\'s own Data Extensions.', null);
+            };
+
+            stageOf.stage = 'the checks: the key';
+            var key = null;
+            var isKeyBlank = (typeof payload.key === 'string' && trimString(payload.key) === '');
+            if (isGiven(payload.key) && !isKeyBlank) {
+                key = requireLabel(payload.key, 'key', DE_KEY_MAX_LENGTH);
+                if (isTempDeKey(key)) {
+                    throw apiError('BAD_REQUEST', 'Field "key" must not be the key of a temporary Data Extension of SQL Studio.', null);
+                };
+                if (isAppDataExtension(key)) {
+                    throw apiError('BAD_REQUEST', 'Field "key" must not be the key of one of SQL Studio\'s own Data Extensions.', null);
+                };
+            };
+
+            stageOf.stage = 'the checks: the folder';
+            var categoryId = null;
+            if (isGiven(payload.categoryId)) {
+                categoryId = requireInt(payload.categoryId, 'categoryId', 1, null);
+            };
+
+            stageOf.stage = 'the checks: the fields';
+            requireArray(payload.fields, 'fields');
+            if (payload.fields.length < 1 || payload.fields.length > DE_FIELD_MAX_COUNT) {
+                throw apiError('BAD_REQUEST', 'Field "fields" must contain 1 to ' + DE_FIELD_MAX_COUNT + ' items.', null);
+            };
+            var fields = [];
+            var seen = {};
+            for (var i = 0; i < payload.fields.length; i++) {
+                stageOf.stage = 'the checks: field ' + (i + 1);
+                var field = validateDataExtensionField(payload.fields[i], i);
+                var lower = field.name.toLowerCase();
+                /* A prefix, so a field named like an Object member never reads as taken. */
+                if (seen.hasOwnProperty('n:' + lower)) {
+                    throw apiError('BAD_REQUEST', 'Field names must differ without regard to case: "' + field.name + '" is there twice.', null);
+                };
+                seen['n:' + lower] = true;
+                fields.push(field);
+            };
+
+            stageOf.stage = 'the checks: the retention';
+            var retention = null;
+            if (isGiven(payload.retention)) {
+                var retentionIn = payload.retention;
+                if (typeof retentionIn !== 'object' || isArray(retentionIn)) {
+                    throw apiError('BAD_REQUEST', 'Field "retention" must be an object.', null);
+                };
+                var period = requireInt(retentionIn.period, 'retention.period', 1, DE_RETENTION_MAX_PERIOD);
+                if (!isOneOf(DE_RETENTION_UNITS, retentionIn.unit)) {
+                    throw apiError('BAD_REQUEST', 'Field "retention.unit" must be one of ' + DE_RETENTION_UNITS.join(', ') + '.', null);
+                };
+                retention = {
+                    period: period,
+                    unit: retentionIn.unit,
+                    isRowBased: readOptionalBoolean(retentionIn.isRowBased, 'retention.isRowBased', false),
+                    isDataExtensionDeleted: readOptionalBoolean(retentionIn.isDataExtensionDeleted, 'retention.isDataExtensionDeleted', false),
+                    resetOnImport: readOptionalBoolean(retentionIn.resetOnImport, 'retention.resetOnImport', false)
+                };
+            };
+
+            stageOf.stage = 'the checks: the send relationship';
+            var sendable = null;
+            if (isGiven(payload.sendable)) {
+                var sendableIn = payload.sendable;
+                if (typeof sendableIn !== 'object' || isArray(sendableIn)) {
+                    throw apiError('BAD_REQUEST', 'Field "sendable" must be an object.', null);
+                };
+                var sendableName = requireLabel(sendableIn.field, 'sendable.field', DE_FIELD_NAME_MAX_LENGTH);
+                var relationship = sendableIn.subscriberField;
+                if (relationship !== 'subscriberKey' && relationship !== 'emailAddress') {
+                    throw apiError('BAD_REQUEST', 'Field "sendable.subscriberField" must be one of subscriberKey, emailAddress.', null);
+                };
+                var sendableField = null;
+                for (var f = 0; f < fields.length; f++) {
+                    if (fields[f].name.toLowerCase() === sendableName.toLowerCase()) {
+                        sendableField = fields[f];
+                        break;
+                    };
+                };
+                if (sendableField === null) {
+                    throw apiError('BAD_REQUEST', 'Field "sendable.field" must name one of the fields.', null);
+                };
+                var neededTypes = SENDABLE_FIELD_TYPES[relationship];
+                if (!isOneOf(neededTypes, sendableField.type)) {
+                    var typesText = (neededTypes.length > 1) ? neededTypes.slice(0, neededTypes.length - 1).join(', ') + ' or ' + neededTypes[neededTypes.length - 1] : neededTypes[0];
+                    throw apiError('BAD_REQUEST', 'The sendable field must be of type ' + typesText + ' for a relationship to ' + (relationship === 'emailAddress' ? 'the Email Address' : 'the Subscriber Key') + '.', null);
+                };
+                sendable = {
+                    field: sendableField.name,
+                    fieldType: sendableField.type,
+                    subscriberField: relationship,
+                    subscriberFieldName: SENDABLE_SUBSCRIBER_NAMES[relationship]
+                };
+            };
+
+            var spec = {
+                name: name,
+                key: key,
+                categoryId: categoryId,
+                fields: fields,
+                retention: retention,
+                sendable: sendable
+            };
+            return spec;
+        };
+
+        /**
+         * @function buildUserFieldXml
+         * @description Builds the DataExtensionField XML of one validated field of createDataExtension, in the order
+         *              of a run's fields: Name, FieldType, then a Text field's MaxLength or a Decimal's Scale and
+         *              MaxLength (its precision, as buildColumnFieldXml writes it), IsRequired, IsPrimaryKey and
+         *              the DefaultValue. A type with a fixed length has none.
+         * @param {Object} field - a validateDataExtensionField result
+         * @returns {string} The Field element.
+         */
+        function buildUserFieldXml(field) {
+            var sizeXml = '';
+            if (field.type === 'Text' && field.length !== null) {
+                sizeXml = '<MaxLength>' + field.length + '</MaxLength>';
+            } else if (field.type === 'Decimal') {
+                sizeXml = '<Scale>' + field.scale + '</Scale>' +
+                    '<MaxLength>' + field.precision + '</MaxLength>';
+            };
+            var defaultXml = '';
+            if (field.defaultValue !== null) {
+                defaultXml = '<DefaultValue>' + xmlEscape(field.defaultValue) + '</DefaultValue>';
+            };
+            var fieldXml = '<Field xsi:type="DataExtensionField">' +
+                '<Name>' + xmlEscape(field.name) + '</Name>' +
+                '<FieldType>' + field.type + '</FieldType>' +
+                sizeXml +
+                '<IsRequired>' + (field.isNullable ? 'false' : 'true') + '</IsRequired>' +
+                '<IsPrimaryKey>' + (field.isPrimaryKey ? 'true' : 'false') + '</IsPrimaryKey>' +
+                defaultXml +
+                '</Field>';
+            return fieldXml;
+        };
+
+        /**
+         * @function buildUserDataExtensionCreateXml
+         * @description Builds the SOAP CreateRequest XML for a Data Extension the user sets up on purpose. The
+         *              CustomerKey is left out when none was given, for Marketing Cloud Engagement to make one, and so
+         *              is the Description, which the temporary run Data Extensions alone carry. The send relationship
+         *              is IsSendable with SendableDataExtensionField (the field's Name and FieldType) and
+         *              SendableSubscriberField (its Name, see SENDABLE_SUBSCRIBER_NAMES). The retention is
+         *              DataRetentionPeriodLength and DataRetentionPeriod, with RowBasedRetention (true: each row goes when
+         *              it is old enough), DeleteAtEndOfRetentionPeriod (true with RowBasedRetention false: all rows go and
+         *              the Data Extension stays, both false: all rows and the Data Extension go, as MCE's SOAP guide
+         *              "Create a Data Extension" says of object-based retention) and ResetRetentionPeriodOnImport.
+         *              Unlike the temporary one's, it is never retried without the retention: the user asked for it.
+         * @param {Object} spec - a validateNewDataExtension result
+         * @returns {string} The CreateRequest SOAP body XML.
+         */
+        function buildUserDataExtensionCreateXml(spec) {
+            var fieldsXml = '';
+            for (var i = 0; i < spec.fields.length; i++) {
+                fieldsXml += buildUserFieldXml(spec.fields[i]);
+            };
+
+            var keyXml = '';
+            if (spec.key !== null) {
+                keyXml = '<CustomerKey>' + xmlEscape(spec.key) + '</CustomerKey>';
+            };
+
+            var categoryXml = '';
+            if (spec.categoryId !== null) {
+                categoryXml = '<CategoryID>' + xmlEscape(spec.categoryId) + '</CategoryID>';
+            };
+
+            var sendableXml = '<IsSendable>false</IsSendable>';
+            if (spec.sendable !== null) {
+                sendableXml = '<IsSendable>true</IsSendable>' +
+                    '<SendableDataExtensionField>' +
+                    '<Name>' + xmlEscape(spec.sendable.field) + '</Name>' +
+                    '<FieldType>' + spec.sendable.fieldType + '</FieldType>' +
+                    '</SendableDataExtensionField>' +
+                    '<SendableSubscriberField>' +
+                    '<Name>' + xmlEscape(spec.sendable.subscriberFieldName) + '</Name>' +
+                    '</SendableSubscriberField>';
+            };
+
+            var retentionXml = '';
+            if (spec.retention !== null) {
+                retentionXml = '<DataRetentionPeriodLength>' + spec.retention.period + '</DataRetentionPeriodLength>' +
+                    '<DataRetentionPeriod>' + spec.retention.unit + '</DataRetentionPeriod>' +
+                    '<RowBasedRetention>' + (spec.retention.isRowBased ? 'true' : 'false') + '</RowBasedRetention>' +
+                    '<ResetRetentionPeriodOnImport>' + (spec.retention.resetOnImport ? 'true' : 'false') + '</ResetRetentionPeriodOnImport>' +
+                    '<DeleteAtEndOfRetentionPeriod>' + (spec.retention.isDataExtensionDeleted ? 'true' : 'false') + '</DeleteAtEndOfRetentionPeriod>';
+            };
+
+            var bodyXml = '<CreateRequest xmlns="http://exacttarget.com/wsdl/partnerAPI">' +
+                '<Options/>' +
+                '<Objects xsi:type="DataExtension">' +
+                keyXml +
+                '<Name>' + xmlEscape(spec.name) + '</Name>' +
+                categoryXml +
+                sendableXml +
+                retentionXml +
+                '<Fields>' + fieldsXml + '</Fields>' +
+                '</Objects>' +
+                '</CreateRequest>';
+            return bodyXml;
+        };
+
+        /**
+         * @function retrieveDataExtensionInfo
+         * @description Reads one Data Extension's ObjectID, CustomerKey and Name with the user's token, by one of
+         *              them, in one SOAP Retrieve (1 API call). createDataExtension asks it for what the Create did
+         *              not answer, and moveToDataExtension for the ObjectID and Name its target needs. Never read
+         *              through WSProxy: that context reads every Data Extension of the Business Unit, whoever asks.
+         * @param {string} token
+         * @param {string} filterProperty - 'ObjectID', 'CustomerKey' or 'Name'
+         * @param {string} filterValue
+         * @returns {?{objectId: ?string, key: ?string, name: ?string}} null when no Data Extension matches.
+         * @throws {Object} apiError MCE_ERROR when the Retrieve fails.
+         */
+        function retrieveDataExtensionInfo(token, filterProperty, filterValue) {
+            var bodyXml = '<RetrieveRequestMsg xmlns="http://exacttarget.com/wsdl/partnerAPI">' +
+                '<RetrieveRequest>' +
+                '<ObjectType>DataExtension</ObjectType>' +
+                '<Properties>ObjectID</Properties>' +
+                '<Properties>CustomerKey</Properties>' +
+                '<Properties>Name</Properties>' +
+                '<Filter xsi:type="SimpleFilterPart">' +
+                '<Property>' + filterProperty + '</Property>' +
+                '<SimpleOperator>equals</SimpleOperator>' +
+                '<Value>' + xmlEscape(filterValue) + '</Value>' +
+                '</Filter>' +
+                '</RetrieveRequest>' +
+                '</RetrieveRequestMsg>';
+            var soapRes = soap('Retrieve', bodyXml, token);
+            if (!soapRes.ok) {
+                throw sfmcErrorFromSoap(soapRes);
+            };
+            if (soapRes.results.length === 0) {
+                return null;
+            };
+            var info = {
+                objectId: xmlValue(soapRes.results[0], 'ObjectID'),
+                key: xmlValue(soapRes.results[0], 'CustomerKey'),
+                name: xmlValue(soapRes.results[0], 'Name')
+            };
+            return info;
+        };
+
+        /**
+         * @function actionCreateDataExtension
+         * @description Creates a Data Extension the user sets up on purpose, with the user's token and SOAP Create,
+         *              as the hybrid model creates every asset. Everything is validated before any call
+         *              (validateNewDataExtension). A clear refusal of Marketing Cloud Engagement (isSoapClearRefusal),
+         *              such as a name that is taken, is MCE_ERROR with its own message, and nothing was made. Any other
+         *              failed answer, such as none, a gateway's page or a SOAP server fault, is CREATE_UNCONFIRMED, as
+         *              the Data Extension may have been made all the same. The answer's key is the one
+         *              given, else the one the Create answers, else one Retrieve reads it by the new ObjectID, or by
+         *              the name when the Create answered neither. The folder, the retention and the send
+         *              relationship are part of the Create. WSProxy is never used. The answer's targetSig binds the
+         *              key to this user (saveTargetSignature), and moveToDataExtension writes only into a key with one.
+         * @param {Object} payload - { name, key?, categoryId?, fields: [{ name, type, maxLength?, precision?, scale?,
+         *        isPrimaryKey?, isNullable?, defaultValue? }], retention?: { period, unit, isRowBased,
+         *        isDataExtensionDeleted, resetOnImport }, sendable?: { field, subscriberField } }. type is Text,
+         *        Number, Date, Boolean, EmailAddress, Phone, Decimal or Locale. unit is Days, Weeks, Months or Years.
+         *        subscriberField is 'subscriberKey' (a field of type Text, EmailAddress or Phone) or 'emailAddress' (a field
+         *        of type EmailAddress).
+         * @param {Object} authRow
+         * @returns {{objectId: ?string, key: string, name: string, targetSig: ?string}}
+         * @throws {Object} apiError BAD_REQUEST for a payload that fails validation, MCE_ERROR for a clear refusal,
+         *         after which nothing was made, CREATE_UNCONFIRMED for an answer that is no clear refusal, after which the
+         *         Data Extension may be there, or CREATED_NO_KEY for a Data Extension that was created but whose key
+         *         cannot be read. An error of the platform itself (not an apiError) names the step it came at, and is
+         *         CREATE_UNCONFIRMED once the Create was sent, as the Data Extension may be there, and INTERNAL before.
+         */
+        function actionCreateDataExtension(payload, authRow) {
+            /* The author's RC3 test (2026-10-08): MCE's script engine stopped a create with "StartIndex cannot be less than
+            zero", which names no line, and the app said that nothing was made. The step tells where, and once the Create
+            is sent nothing may say that it was not made. */
+            var progress = {
+                stage: 'the checks',
+                isSent: false
+            };
+            try {
+                return createUserDataExtension(payload, authRow, progress);
+            } catch (createFault) {
+                if (createFault && typeof createFault.code === 'string') {
+                    throw createFault;
+                };
+                var at = ' (createDataExtension, at ' + progress.stage + (progress.stage === 'the Create' ? ', ' + soapStage : '') + ')';
+                if (progress.isSent) {
+                    var deName = (payload && typeof payload.name === 'string') ? trimString(payload.name) : '';
+                    throw apiError('CREATE_UNCONFIRMED', 'SQL Studio could not read what Marketing Cloud Engagement answered when it created the Data Extension "' + deName + '", so it may have made it. ' + describeError(createFault) + at, null);
+                };
+                throw apiError('INTERNAL', describeError(createFault) + at, null);
+            };
+        };
+
+        /**
+         * @function createUserDataExtension
+         * @description The steps of actionCreateDataExtension, which see. Each step writes its name to progress.stage
+         *              before it starts, and progress.isSent is true from the moment the Create goes out.
+         * @param {Object} payload
+         * @param {Object} authRow
+         * @param {{stage: string, isSent: boolean}} progress
+         * @returns {{objectId: ?string, key: string, name: string, targetSig: ?string}}
+         */
+        function createUserDataExtension(payload, authRow, progress) {
+            var spec = validateNewDataExtension(payload, progress);
+            /* Before the Create: a session that cannot sign the key makes nothing. */
+            progress.stage = 'the user hash';
+            var userHash = computeUserHash(authRow);
+
+            progress.stage = 'the request';
+            var createXml = buildUserDataExtensionCreateXml(spec);
+            progress.stage = 'the Create';
+            progress.isSent = true;
+            var soapRes = soap('Create', createXml, authRow.token);
+            progress.stage = 'the answer';
+            var block = (soapRes.results.length > 0) ? soapRes.results[0] : '';
+            /* The Result's own StatusCode too: an answer whose OverallStatus is OK is no Data Extension if the
+            Result says Error, and the user must never be told it was made. */
+            var resultStatusCode = xmlValue(block, 'StatusCode');
+            if (!soapRes.ok || (resultStatusCode !== null && resultStatusCode !== 'OK')) {
+                var createErr = sfmcErrorFromSoap(soapRes);
+                /* Only a clear refusal says nothing was made. After no answer, a gateway's page or a SOAP server fault,
+                Marketing Cloud Engagement may have made it all the same, and the app must not say otherwise. */
+                if (!isSoapClearRefusal(soapRes, resultStatusCode)) {
+                    throw apiError('CREATE_UNCONFIRMED', 'Marketing Cloud Engagement gave no clear answer when SQL Studio created the Data Extension "' + spec.name + '", so it may have made it. ' + createErr.message, createErr.details);
+                };
+                throw createErr;
+            };
+
+            var objectId = xmlValue(block, 'NewObjectID');
+            if (objectId === '') {
+                objectId = null;
+            };
+            var key = spec.key;
+            if (key === null) {
+                progress.stage = 'the key in the answer';
+                /* The echoed object's own CustomerKey: the nested objects carry keys of their own. */
+                var echoed = xmlWithout(xmlWithout(xmlWithout(xmlWithout(block, 'Fields'), 'SendableDataExtensionField'), 'SendableSubscriberField'), 'Template');
+                key = xmlValue(echoed, 'CustomerKey');
+                if (key === '') {
+                    key = null;
+                };
+            };
+            if (key === null || objectId === null) {
+                var filterProperty = 'Name';
+                var filterValue = spec.name;
+                if (spec.key !== null) {
+                    filterProperty = 'CustomerKey';
+                    filterValue = spec.key;
+                } else if (objectId !== null) {
+                    filterProperty = 'ObjectID';
+                    filterValue = objectId;
+                };
+                /* The Data Extension exists now, so a read that fails is no reason to fail the call: the key it
+                could not read is reported below, with that fact. */
+                var found = null;
+                progress.stage = 'the read of the key';
+                try {
+                    found = retrieveDataExtensionInfo(authRow.token, filterProperty, filterValue);
+                } catch (readErr) {
+                    found = null;
+                };
+                if (found !== null) {
+                    if (key === null && found.key !== null && found.key !== '') {
+                        key = found.key;
+                    };
+                    if (objectId === null && found.objectId !== null && found.objectId !== '') {
+                        objectId = found.objectId;
+                    };
+                };
+            };
+            if (key === null) {
+                /* Its own code: MCE_ERROR says nothing was made, and the app would say so. */
+                throw apiError('CREATED_NO_KEY', 'The Data Extension "' + spec.name + '" was created, but Marketing Cloud Engagement did not answer its key. Find it by its name in Contact Builder.', null);
+            };
+
+            /* The Data Extension exists now: a hash the platform cannot compute leaves it without a signature, so no move
+            writes into it, rather than failing a call whose Create worked. */
+            progress.stage = 'the signature';
+            var targetSig = null;
+            try {
+                targetSig = saveTargetSignature(key, userHash);
+            } catch (sigErr) {
+                targetSig = null;
+            };
+
+            var data = {
+                objectId: objectId,
+                key: key,
+                name: spec.name,
+                targetSig: targetSig
+            };
+            return data;
+        };
+
+        /**
+         * @function quoteIdentifier
+         * @description Writes a name as one SQL Server bracketed identifier: the name in brackets, with each closing
+         *              bracket in it doubled, so no name ends the identifier early.
+         * @param {string} name
+         * @returns {string}
+         */
+        function quoteIdentifier(name) {
+            return '[' + String(name).split(']').join(']]') + ']';
+        };
+
+        /**
+         * @function validateMoveColumns
+         * @description Validates the columns moveToDataExtension reads from a run's Data Extension: 1 to 500 entries, each
+         *              a column name or an object { name, as } where as is the name of the new field, for a user who
+         *              renamed it. Every name is 1 to 128 characters with no control character, as createDataExtension's
+         *              field names are, and a column is never the row mark column, which only the Frontend's reads use.
+         *              The names the target gets (as, else name) must differ without regard to case. A bracket in a
+         *              name is allowed, since quoteIdentifier escapes it.
+         * @param {*} columns
+         * @returns {Array<{name: string, alias: ?string}>} the trimmed names, alias null for a plain name or an object without as
+         * @throws {Object} apiError BAD_REQUEST
+         */
+        function validateMoveColumns(columns) {
+            requireArray(columns, 'from.columns');
+            if (columns.length < 1 || columns.length > DE_FIELD_MAX_COUNT) {
+                throw apiError('BAD_REQUEST', 'Field "from.columns" must contain 1 to ' + DE_FIELD_MAX_COUNT + ' items.', null);
+            };
+            var cleaned = [];
+            var seen = {};
+            for (var i = 0; i < columns.length; i++) {
+                var label = 'from.columns[' + i + ']';
+                var entry = columns[i];
+                var name = null;
+                var alias = null;
+                if (isGiven(entry) && typeof entry === 'object' && !isArray(entry)) {
+                    name = requireLabel(entry.name, label + '.name', 128);
+                    if (isGiven(entry.as)) {
+                        alias = requireLabel(entry.as, label + '.as', DE_FIELD_NAME_MAX_LENGTH);
+                    };
+                } else {
+                    name = requireLabel(entry, label, 128);
+                };
+                if (name.toLowerCase() === ROW_MARK_FIELD.toLowerCase()) {
+                    throw apiError('BAD_REQUEST', 'Field "' + label + '" is the row mark column, which is not moved.', null);
+                };
+                var targetName = (alias === null) ? name : alias;
+                var lower = targetName.toLowerCase();
+                if (seen.hasOwnProperty('n:' + lower)) {
+                    throw apiError('BAD_REQUEST', 'Field "from.columns" gives the name "' + targetName + '" to two columns.', null);
+                };
+                seen['n:' + lower] = true;
+                cleaned.push({
+                    name: name,
+                    alias: alias
+                });
+            };
+            return cleaned;
+        };
+
+        /**
+         * @function actionMoveToDataExtension
+         * @description Moves rows into a Data Extension the user set up (createDataExtension): it points the slot's own
+         *              Query Activity, the one the tab's runs use (found as runQuery finds it: the id the app sent
+         *              once its key is this user's key for the slot, else SOAP Retrieve by key, or WSProxy first with
+         *              the inBackendBu hint), at the new SQL and the target with Overwrite, and starts it with the
+         *              user's token (startQueryActivity). It never touches a Query Activity outside the pool, and
+         *              never makes a temporary Data Extension. The SQL is either `SELECT [a], [b] AS [c] FROM [deKey]`
+         *              from a run's own temporary Data Extension, without the row mark column, or the user's SQL as given.
+         *              The target is read once with the user's token (1 API call), for the ObjectID and Name the
+         *              activity's target needs, and a missing one is NOT_FOUND. The target must not be a temporary
+         *              Data Extension of SQL Studio, so a move can never overwrite a run's results, nor one of SQL
+         *              Studio's own Data Extensions, and it must carry the targetSig createDataExtension answered for
+         *              its key and this user (isSaveTargetSignatureOk), else BAD_REQUEST before any call. A target whose
+         *              name, as the read answers it, is one of SQL Studio's own is BAD_REQUEST too, before the activity is
+         *              touched. A slot whose activity is still running is RUN_IN_PROGRESS. The activity is created, as
+         *              runQuery creates it, when the slot has none. A start whose answer cannot be read (startQueryActivity
+         *              marks it isStartUnclear) is START_UNCONFIRMED, not MCE_ERROR: the move may have started, and the
+         *              Frontend says it could not confirm the move instead of saying the rows were not moved. The answer
+         *              carries what runQuery answers for the same follow-up: the Frontend follows the move with
+         *              getRunStatus and taskOnly.
+         * @param {Object} payload - { slot, targetKey, targetSig, from: { deKey, columns } } or { slot, targetKey, targetSig,
+         *        sql }, and optionally queryId (the app's cached id for the slot), queryFolderId and inBackendBu, as runQuery
+         *        takes them. Exactly one of from and sql. A column of from is a name, written `[name]`, or an object
+         *        { name, as } for a field the user renamed, written `[name] AS [as]`.
+         * @param {Object} authRow
+         * @returns {{queryId: string, slot: number, targetKey: string, taskId: ?string, taskSig: ?string,
+         *           startMethod: string, startResponse: string}} taskSig binds taskId to this user, as runQuery's does.
+         * @throws {Object} apiError BAD_REQUEST, NOT_FOUND, RUN_IN_PROGRESS, START_UNCONFIRMED or MCE_ERROR.
+         */
+        function actionMoveToDataExtension(payload, authRow) {
+            var slot = requireInt(payload.slot, 'slot', 1, QUERY_SLOT_COUNT);
+            var targetKey = requireLabel(payload.targetKey, 'targetKey', DE_KEY_MAX_LENGTH);
+            if (isTempDeKey(targetKey)) {
+                throw apiError('BAD_REQUEST', 'A temporary Data Extension of SQL Studio cannot be the target of a move.', null);
+            };
+            if (isAppDataExtension(targetKey)) {
+                throw apiError('BAD_REQUEST', 'SQL Studio\'s own Data Extensions cannot be the target of a move.', null);
+            };
+            var userHash = computeUserHash(authRow);
+            /* Only a Data Extension this user made with createDataExtension: its answer signed the key. */
+            if (!isSaveTargetSignatureOk(targetKey, payload.targetSig, userHash)) {
+                throw apiError('BAD_REQUEST', 'Field "targetSig" must be the one createDataExtension answered for this Data Extension.', null);
+            };
+
+            var hasFrom = isGiven(payload.from);
+            var hasSql = isGiven(payload.sql);
+            if (hasFrom === hasSql) {
+                throw apiError('BAD_REQUEST', 'Give either "from" or "sql", not both and not neither.', null);
+            };
+            var sql = null;
+            if (hasSql) {
+                sql = payload.sql;
+                requireString(sql, 'sql', 1, 100000);
+            } else {
+                var from = payload.from;
+                if (typeof from !== 'object' || isArray(from)) {
+                    throw apiError('BAD_REQUEST', 'Field "from" must be an object.', null);
+                };
+                var deKey = from.deKey;
+                requireString(deKey, 'from.deKey', 1, DE_KEY_MAX_LENGTH);
+                if (!isOwnTempDeKey(authRow, deKey)) {
+                    throw apiError('BAD_REQUEST', 'Only SQL Studio\'s own temporary Data Extensions can be moved.', null);
+                };
+                var columns = validateMoveColumns(from.columns);
+                var columnsSql = '';
+                for (var c = 0; c < columns.length; c++) {
+                    columnsSql += (c === 0 ? '' : ', ') + quoteIdentifier(columns[c].name);
+                    if (columns[c].alias !== null) {
+                        columnsSql += ' AS ' + quoteIdentifier(columns[c].alias);
+                    };
+                };
+                sql = 'SELECT ' + columnsSql + ' FROM ' + quoteIdentifier(deKey);
+            };
+
+            var queryFolderId = null;
+            if (isGiven(payload.queryFolderId)) {
+                queryFolderId = requireInt(payload.queryFolderId, 'queryFolderId', 1, null);
+            };
+            var cachedQueryId = payload.queryId;
+            var hasCachedQueryId = (isGiven(cachedQueryId) && cachedQueryId !== '');
+            if (hasCachedQueryId) {
+                requireGuid(cachedQueryId, 'queryId');
+            };
+
+            var isBackendBu = (payload.inBackendBu === true);
+
+            /* The target first: a Data Extension that is gone is the likelier failure, and it costs the least. */
+            var target = retrieveDataExtensionInfo(authRow.token, 'CustomerKey', targetKey);
+            if (target === null || !target.objectId) {
+                throw apiError('NOT_FOUND', 'The Data Extension "' + targetKey + '" was not found.', null);
+            };
+            /* Its name too, which the read gives for free: the data functions find the history and the snippets by name, so a
+            Data Extension renamed to one of theirs in Contact Builder would be read in their place. */
+            if (target.name && isAppDataExtension(target.name)) {
+                throw apiError('BAD_REQUEST', 'SQL Studio\'s own Data Extensions cannot be the target of a move.', null);
+            };
+
+            /* The slot's own activity, as runQuery resolves it: a cached id counts only once its key is this
+            user's key for the slot, and anything else is found by key. */
+            var activityKey = adHocActivityKey(userHash, slot);
+            var isCachedQueryIdOwn = hasCachedQueryId && isOwnActivity(authRow.token, cachedQueryId, activityKey, isBackendBu);
+            var queryId = isCachedQueryIdOwn ? cachedQueryId : findActivityIdByKey(authRow.token, activityKey, isBackendBu);
+            if (queryId !== null && isActivityRunning(authRow.token, queryId)) {
+                throw apiError('RUN_IN_PROGRESS', 'Your SQL Studio query activity ' + slot + ' is still running one of your queries, from another tab or window. Try again in a moment.', null);
+            };
+
+            var activityBody = {
+                name: adHocActivityName(authRow.userName, userHash, slot),
+                key: activityKey,
+                description: adHocActivityDescription(authRow.userEmail),
+                queryText: sql,
+                targetName: target.name || targetKey,
+                targetKey: target.key || targetKey,
+                targetId: target.objectId,
+                targetUpdateTypeId: updateTypeIdFromName('Overwrite'),
+                targetUpdateTypeName: 'Overwrite'
+            };
+            if (queryFolderId !== null) {
+                activityBody.categoryId = queryFolderId;
+            };
+
+            if (queryId !== null) {
+                var patchRes = httpJSON('PATCH', restBase + '/automation/v1/queries/' + urlEncode(queryId), activityBody, authRow.token);
+                if (patchRes.status < 200 || patchRes.status >= 300) {
+                    throw sfmcErrorFromResponse(patchRes);
+                };
+            } else {
+                var createRes = httpJSON('POST', restBase + '/automation/v1/queries/', activityBody, authRow.token);
+                if (createRes.status < 200 || createRes.status >= 300 || !createRes.json || !createRes.json.queryDefinitionId) {
+                    throw sfmcErrorFromResponse(createRes);
+                };
+                queryId = createRes.json.queryDefinitionId;
+            };
+
+            var started = null;
+            try {
+                started = startQueryActivity(queryId, userHash, authRow.token);
+            } catch (startErr) {
+                if (startErr && startErr.isStartUnclear === true) {
+                    throw apiError('START_UNCONFIRMED', 'Marketing Cloud Engagement gave no clear answer to the start of the move, so it may have started it. ' + startErr.message, startErr.details);
+                };
+                /* An error of the platform itself, not an apiError, may come after the start went out (the author's RC3
+                test, 2026-10-08, saw one in a create): the move may run, and nothing may say that it does not. */
+                if (!(startErr && typeof startErr.code === 'string')) {
+                    throw apiError('START_UNCONFIRMED', 'SQL Studio could not read what Marketing Cloud Engagement answered to the start of the move, so it may have started it. ' + describeError(startErr) + ' (moveToDataExtension, at the start)', null);
+                };
+                throw startErr;
+            };
+
+            var data = {
+                queryId: queryId,
+                slot: slot,
+                targetKey: activityBody.targetKey,
+                taskId: started.taskId,
+                taskSig: started.taskSig,
+                startMethod: started.startMethod,
+                startResponse: started.startResponse
+            };
+            return data;
+        };
+
         /**
          * @function actionSaveQueryActivity
          * @description Creates a new, permanent Query Activity ("Save as"), distinct from the reused
@@ -6710,13 +8259,18 @@
                 exportRows: actionExportRows,
                 deleteRun: actionDeleteRun,
                 listRuns: actionListRuns,
+                createDataExtension: actionCreateDataExtension,
+                moveToDataExtension: actionMoveToDataExtension,
                 saveQueryActivity: actionSaveQueryActivity,
                 updateQueryActivity: actionUpdateQueryActivity,
                 listQueryActivities: actionListQueryActivities,
                 getQueryActivity: actionGetQueryActivity,
                 addHistory: actionAddHistory,
                 listHistory: actionListHistory,
-                clearHistory: actionClearHistory
+                clearHistory: actionClearHistory,
+                listSnippets: actionListSnippets,
+                saveSnippet: actionSaveSnippet,
+                deleteSnippet: actionDeleteSnippet
             };
             if (!handlers.hasOwnProperty(action)) {
                 throw apiError('UNKNOWN_ACTION', 'Unknown action: ' + action, null);

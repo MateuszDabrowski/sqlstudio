@@ -1,12 +1,12 @@
 {
-  "version": "1.1.0",
-  "date": "2026-10-05",
+  "version": "1.2.0",
+  "date": "2026-10-09",
   "highlights": [
-    "SQL Studio opens twice as fast.",
-    "Child Business Units see the parent's shared and synchronized Data Extensions, with ENT. added for you.",
-    "JOIN autocomplete writes the whole join for Data Views and Data Extensions.",
-    "Fewer API calls, a free export up to 1,999 rows, and its cost shown before the click.",
-    "Mistyped Data Views and unknown Data Extensions flagged before Run, with fixes."
+    "This release is driven by feedback from Scott and Greg. Thank you both! Send yours to sqlstudio_feedback@mateuszdabrowski.pl.",
+    "You can now use Save to DE to keep a run's results in a new Data Extension, with the field types, retention and send relationship you choose.",
+    "Shared snippets: save a piece of SQL once, and everyone who uses SQL Studio in the Business Unit can insert it.",
+    "Autocomplete keeps what you type, so SELECT ID stays ID. And a new Join to the query icon, on each table in the sidebar, writes that table's whole join into your query.",
+    "Data Extensions load in the sidebar up to four times faster, even if you have thousands of them. If you still see a timeout there, it's a call for an instance clean-up ;)"
   ],
   "updateGuide": "https://github.com/MateuszDabrowski/sqlstudio/blob/main/docs/DEPLOYMENT.md#8-updating",
   "changelog": "https://github.com/MateuszDabrowski/sqlstudio/blob/main/CHANGELOG.md"

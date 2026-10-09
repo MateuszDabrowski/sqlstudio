@@ -1,11 +1,11 @@
-/* SQL Studio 1.1.1 - SQL Studio Frontend, the readable copy with its comments. Paste sql-studio-frontend.min.js instead: it is the same code, and Marketing Cloud Engagement served it in 2 s, against 18 s for this file, on the author's org. */
+/* SQL Studio 1.2.0 - SQL Studio Frontend, the readable copy with its comments. Paste sql-studio-frontend.min.js instead: it is the same code, and Marketing Cloud Engagement served it in 2 s, against 18 s for this file, on the author's org. */
 /* Copyright (c) 2026 Mateusz Dąbrowski. Free to use, change and share, commercial use included, as long as this notice stays. Licensed under the EUPL 1.2: https://github.com/MateuszDabrowski/sqlstudio/blob/main/LICENSE */
 /* Includes Salesforce Lightning Design System icons, unchanged: © Salesforce, Inc., CC BY-ND 4.0, https://creativecommons.org/licenses/by-nd/4.0/ */
 /* Contents (line numbers are where each part starts in this finished file):
      1. SQL data: Data Views, functions and keywords - line 10
      2. SQL tools: lint rules, formatter and parser - line 1185
-     3. Styles - line 12688
-     4. The interface: editor, tabs, results, dialogs and runs - line 12692
+     3. Styles - line 13227
+     4. The interface: editor, tabs, results, dialogs and runs - line 13231
 */
 /* ================================================ sqlstudio-sql-data.js == */
 /*
@@ -3766,6 +3766,8 @@ window.SQLStudioSQL = {
             };
             /* Right after ON: joinCompletions can then offer the conditions to a related earlier table. */
             if (joinPosition(tokens, lastBeforeIdx) === 'on') columnContext.afterOn = true;
+            /* Right after the = of alias.column = in a join's ON, or in an AND of it: the other side of the condition. */
+            if (onOperandBefore(tokens, lastBeforeIdx)) columnContext.afterOnEquals = true;
             return columnContext;
         };
 
@@ -3815,6 +3817,97 @@ window.SQLStudioSQL = {
         var before = tokens[idx - 1];
         if (before && before.type === 'keyword' && before.upper === 'CROSS') return null;
         return 'join';
+    };
+
+    /**
+     * @function onOperandBefore
+     * @description Tells whether the cursor sits right after the = of a condition in a join's ON, written alias.column = , as the first condition after ON or after an AND of that ON. That is where the other side of the condition goes. The condition has to be at the ON's own paren depth, with no OR and no open CASE between the ON and the condition: an OR makes the conditions alternatives, and the relationship between the two tables says nothing about them. A column with no alias in front, a comparison other than =, and anything outside an ON, a WHERE included, give null.
+     * @param {Array<Object>} tokens - Comment-free token stream.
+     * @param {number} idx - Index of the last token before the word being typed, or -1.
+     * @returns {Object|null} {onIdx, alias, column, aliasStart, columnEnd}: onIdx is the index of the ON keyword, alias and column are the names typed before the =, without brackets, and aliasStart and columnEnd are where the left side starts and ends in the text.
+     */
+    function onOperandBefore(tokens, idx) {
+        var op = tokens[idx];
+        if (!op || op.type !== 'operator' || op.value !== '=') return null;
+        var column = tokens[idx - 1];
+        var dot = tokens[idx - 2];
+        var alias = tokens[idx - 3];
+        var lead = tokens[idx - 4];
+        if (!isName(column) || !dot || dot.type !== 'punct' || dot.value !== '.' || !isName(alias) || !(isKw(lead, 'ON') || isKw(lead, 'AND'))) return null;
+        var closedCases = 0;
+        for (var k = idx - 4; k >= 0; k--) {
+            var t = tokens[k];
+            if (t.depth > op.depth) continue;
+            if (t.depth < op.depth) return null;
+            if (t.type !== 'keyword') continue;
+            if (t.upper === 'ON') return {
+                onIdx: k,
+                alias: alias.value,
+                column: column.value,
+                aliasStart: alias.start,
+                columnEnd: column.end
+            };
+            if (t.upper === 'AND') continue;
+            if (t.upper === 'OR') return null;
+            if (t.upper === 'END') {
+                closedCases++;
+                continue;
+            };
+            if (t.upper === 'CASE') {
+                if (closedCases === 0) return null;
+                closedCases--;
+                continue;
+            };
+            if (CLAUSE_COLUMN_CONTEXT[t.upper] || TABLE_CONTEXT_KEYWORDS[t.upper]) return null;
+        };
+        return null;
+    };
+
+    /**
+     * @function otherSideItems
+     * @description Turns the conditions an ON would offer into the other side of the condition typed so far, alias.column = : the earlier table's column that joins the typed one when the typed alias is the joined table, and the joined table's column when it is an earlier table. A condition counts only when the typed column is one of its key columns, matched without regard to case, so a column no relationship joins on gets nothing. Each other side is offered once, written as the join writes a column, the alias or the name, in brackets when it needs them. They come in the order of the conditions: the recorded relationships of Data Views, then the joins with a Data Extension, each earlier table in FROM order.
+     * @param {Array<Object>} items - The ON items of joinCompletions, each with its pairs of key columns.
+     * @param {Object} operand - The typed left side, from onOperandBefore.
+     * @param {string} sql - Full SQL source text.
+     * @param {number} start - Where the word typed after the = starts.
+     * @param {number} end - Where the cursor is.
+     * @returns {Array<Object>} Items {mode, label, filterText, detail, note, view, table, alias, anchorAlias, anchorView, conditions, insertText, start, end, additionalEdits} with mode 'side': label, filterText and insertText are the other side, alias.column, detail is the label of the ON item it comes from, left is the left side as typed, and conditions holds the whole condition as it reads with the other side in.
+     */
+    function otherSideItems(items, operand, sql, start, end) {
+        var left = operand.alias.toLowerCase();
+        var column = operand.column.toLowerCase();
+        var typed = sql.slice(operand.aliasStart, operand.columnEnd);
+        var seen = {};
+        var sides = [];
+        items.forEach(function (item) {
+            var isJoined = item.alias.toLowerCase() === left;
+            if (!isJoined && item.anchorAlias.toLowerCase() !== left) return;
+            item.pairs.forEach(function (pair) {
+                if ((isJoined ? pair.joined : pair.anchor).toLowerCase() !== column) return;
+                var text = formatIdentifier(isJoined ? item.anchorAlias : item.alias) + '.' + formatIdentifier(isJoined ? pair.anchor : pair.joined);
+                if (seen[text]) return;
+                seen[text] = true;
+                sides.push({
+                    mode: 'side',
+                    label: text,
+                    filterText: text,
+                    detail: item.label,
+                    note: item.note,
+                    view: item.view,
+                    table: item.table,
+                    alias: item.alias,
+                    anchorAlias: item.anchorAlias,
+                    anchorView: item.anchorView,
+                    left: typed,
+                    conditions: [typed + ' = ' + text],
+                    insertText: text,
+                    start: start,
+                    end: end,
+                    additionalEdits: []
+                });
+            });
+        });
+        return sides;
     };
 
     /**
@@ -4360,6 +4453,12 @@ window.SQLStudioSQL = {
     SubscriberID in a relationship (subscriberStandIns), and with it the rule below that leaves it out beside SubscriberID. */
     var DE_JOIN_EXTRA_KEYS = ['SubscriberKey'];
 
+    /* The identity fields a Data Extension joins on by name when no relationship or key column joins it (identityMatch): a Data Extension and a
+    Data View, or two Data Extensions, that both have one of them with the same type family. SubscriberKey comes first in that order, and
+    DE_JOIN_EXTRA_KEYS holds it already, so it joins before any of these are tried. The first of these two that both tables have is the join,
+    and the other is left out. Emptying this list takes the join on them out. */
+    var DE_IDENTITY_FIELDS = ['ContactKey', 'EmailAddress'];
+
     /* The key that names a subscriber on its own. When two Data Extensions both have it, with the same type, the extra keys are left out of
     their join: SubscriberKey beside SubscriberID only repeats the match. */
     var DE_JOIN_SUBSCRIBER_KEY = 'SubscriberID';
@@ -4678,6 +4777,48 @@ window.SQLStudioSQL = {
     };
 
     /**
+     * @function identityMatch
+     * @description Finds the identity field two tables join on when no relationship, send relationship, synchronized Id or shared key column joins them (the author's decision, 2026-10-06): ContactKey or EmailAddress (DE_IDENTITY_FIELDS) in both, the same name without regard to case and the same type family. SubscriberKey is joined before this, as a key column. The first of the fields that both have is the join. The others both have are left out, since a second condition on the same contact only gives a row one more reason to go missing, and the note says so. Each table keeps its own spelling.
+     * @param {Object} aMap - The first table's fields, from fieldMap or deFieldMap.
+     * @param {Object} bMap - The second table's fields, the same.
+     * @returns {Object|null} {key, a, b, leftOut}: key is the field's name as DE_IDENTITY_FIELDS spells it, a and b each table's spelling of it, and leftOut the names of the other shared identity fields. Null when the two share none.
+     */
+    function identityMatch(aMap, bMap) {
+        var found = null;
+        var leftOut = [];
+        DE_IDENTITY_FIELDS.forEach(function (name) {
+            var lower = name.toLowerCase();
+            if (!isSameFamily(aMap[lower], bMap[lower])) return;
+            if (found) {
+                leftOut.push(name);
+                return;
+            };
+            found = {
+                key: name,
+                a: aMap[lower].name,
+                b: bMap[lower].name
+            };
+        });
+        if (!found) return null;
+        found.leftOut = leftOut;
+        return found;
+    };
+
+    /**
+     * @function identityNotes
+     * @description Writes the sentences a join on an identity field adds to its note, after the one that says it rests on a name: the other identity fields it leaves out, since both tables have the one it joins on, and, for EmailAddress, that two contacts can share an address, so the join can repeat rows.
+     * @param {string} key - The identity field the join is on, as DE_IDENTITY_FIELDS spells it.
+     * @param {Array<string>} leftOut - The other identity fields both tables have.
+     * @returns {Array<string>} The sentences, possibly none.
+     */
+    function identityNotes(key, leftOut) {
+        var sentences = [];
+        if (leftOut.length) sentences.push(listWords(leftOut) + (leftOut.length === 1 ? ' is' : ' are') + ' left out, since both tables have ' + key + '.');
+        if (key.toLowerCase() === 'emailaddress') sentences.push('Two contacts can share an email address, so a join on it can repeat rows.');
+        return sentences;
+    };
+
+    /**
      * @function viewRelations
      * @description Reads dataViewJoins per Data View: every relationship the view has, from its own side, with the view at the other end and each pair of columns as {view, partner}, the view's own column first.
      * @param {Object} data - The SQL data: dataViewJoins.
@@ -4716,14 +4857,26 @@ window.SQLStudioSQL = {
     };
 
     /**
+     * @function isSendPendingByList
+     * @description Tells whether a Data Extension's send relationship is still on its way, by what the list holds: it is sendable, and hasDetails false says its details, the sendable field among them, have not come. A list of more than 500 Data Extensions gives them only on use. A table that does not say (hasDetails undefined) has them.
+     * @param {Object} table - The Data Extension's schema table.
+     * @returns {boolean} True while its send relationship is not known.
+     */
+    function isSendPendingByList(table) {
+        return !!table && table.kind === 'de' && table.isSendable === true && table.hasDetails === false;
+    };
+
+    /**
      * @function joinTableContext
-     * @description Gathers what the Data Extension joins read a table from: the key columns, the relationships of each Data View, the fields of each Data View, and how a FROM entry resolves.
+     * @description Gathers what the Data Extension joins read a table from: the key columns, the relationships of each Data View, the fields of each Data View, how a FROM entry resolves, and whether a Data Extension's send relationship is still on its way. The schema says that last itself when it has an isDetailsPending function, as the Frontend's does, which also knows when the details cannot come, and the list's flags say it otherwise (isSendPendingByList).
      * @param {Object} data - The SQL data: dataViewJoins, dataViews.
      * @param {Object} schemaIndex - Indexed schema's byName, as ensureIndex gives it.
      * @param {Object} viewByLower - Lowercase Data View name to its name in dataViewAliases.
-     * @returns {Object} {data, schemaIndex, viewByLower, keys, relations, viewFields, viewMaps}: relations is viewRelations, viewFields maps a Data View's name to its fields, and viewMaps holds the fieldMap of each view once viewFieldMap has made it.
+     * @param {Object} [schema] - The schema object, for its isDetailsPending.
+     * @returns {Object} {data, schemaIndex, viewByLower, keys, relations, viewFields, viewMaps, isSendPending}: relations is viewRelations, viewFields maps a Data View's name to its fields, viewMaps holds the fieldMap of each view once viewFieldMap has made it, and isSendPending(table) tells whether a Data Extension's send relationship is still on its way.
      */
-    function joinTableContext(data, schemaIndex, viewByLower) {
+    function joinTableContext(data, schemaIndex, viewByLower, schema) {
+        var isDetailsPending = schema && typeof schema.isDetailsPending === 'function' ? schema.isDetailsPending : null;
         var context = {
             data: data,
             schemaIndex: schemaIndex,
@@ -4731,7 +4884,17 @@ window.SQLStudioSQL = {
             keys: deJoinKeys(data),
             relations: viewRelations(data),
             viewFields: Object.create(null),
-            viewMaps: Object.create(null)
+            viewMaps: Object.create(null),
+            /**
+             * @function isSendPending
+             * @description Tells whether a Data Extension's send relationship is still on its way, as the schema or the list says.
+             * @param {Object} table - A schema table.
+             * @returns {boolean} True while it is.
+             */
+            isSendPending: function (table) {
+                if (!table || table.kind !== 'de') return false;
+                return isDetailsPending ? !!isDetailsPending(table) : isSendPendingByList(table);
+            }
         };
         (data.dataViews || []).forEach(function (dv) {
             if (dv && dv.name) context.viewFields[dv.name] = Array.isArray(dv.fields) ? dv.fields : [];
@@ -4753,7 +4916,7 @@ window.SQLStudioSQL = {
 
     /**
      * @function joinSide
-     * @description Resolves a FROM entry to what a join reads of it: a Data View, with its fields from the SQL data, or a Data Extension, with the fields its schema table holds. A Data Extension whose fields are not loaded yet has fields and map null. A derived table, a function and a name the schema does not know give null.
+     * @description Resolves a FROM entry to what a join reads of it: a Data View, with its fields from the SQL data, or a Data Extension, with the fields its schema table holds. A Data Extension whose fields are not loaded yet has fields and map null, and so does one whose send relationship is still on its way (isSendPending): its sendable field joins before any column of its name, so until it comes no join of the table is known, and none is made on an identity field it would then not take. A derived table, a function and a name the schema does not know give null.
      * @param {Object} entry - A parsed FROM entry.
      * @param {Object} context - From joinTableContext.
      * @returns {Object|null} {entry, ref, text, name, view, table, fields, map, isDataExtension}: ref is the name the query refers to the table by, its alias or else its name, and text is that as it is written before a column, in brackets when it needs them. name is the Data View's or the Data Extension's name, for a note. view is the Data View's name, null for a Data Extension, and table is the Data Extension's schema table, null for a Data View. map is fieldMap of the fields, and for a Data Extension deFieldMap, with its sendable field, or the Id of a synchronized Contact or Lead, standing in for SubscriberKey.
@@ -4774,7 +4937,7 @@ window.SQLStudioSQL = {
         };
         var table = fieldCheckTable(context.schemaIndex, entry);
         if (!table || table.kind === 'dataview') return null;
-        var fields = Array.isArray(table.fields) ? table.fields : null;
+        var fields = (Array.isArray(table.fields) && !context.isSendPending(table)) ? table.fields : null;
         return {
             entry: entry,
             ref: ref,
@@ -4926,6 +5089,27 @@ window.SQLStudioSQL = {
                 leftOut: []
             };
         });
+        /* No relationship and no SubscriberKey joins them: an identity field both have by name, ContactKey or EmailAddress, with the same
+        type family (identityMatch). It is the last resort, so a view never joins on an address where a relationship holds. */
+        if (!best) {
+            var identity = identityMatch(viewMap, deMap);
+            if (identity) best = {
+                columns: [{
+                    view: identity.a,
+                    de: identity.b,
+                    partner: identity.key,
+                    standIn: null,
+                    standInKind: null,
+                    signature: identity.key.toLowerCase() + '=' + identity.key.toLowerCase()
+                }],
+                signature: identity.key.toLowerCase() + '=' + identity.key.toLowerCase(),
+                partners: [],
+                rels: [],
+                missing: [],
+                leftOut: [],
+                identity: identity
+            };
+        };
         return best;
     };
 
@@ -5005,7 +5189,7 @@ window.SQLStudioSQL = {
      * @param {string} kind - The join's type, from joinKind: 'INNER', 'LEFT', 'RIGHT' or 'FULL'.
      * @param {Object} context - From joinTableContext.
      * @param {Object} [match] - From standInMatch, when the caller has it already.
-     * @returns {Object|null} {conditions, columns, note}: columns are the joined table's spelling of the key columns, and their number is what an anchor is picked by. Null when nothing applies.
+     * @returns {Object|null} {conditions, columns, pairs, note}: columns are the joined table's spelling of the key columns, and their number is what an anchor is picked by. pairs holds {joined, anchor} for each key column, the joined table's column and the earlier table's, as the conditions write them, for the other side of a typed condition (otherSideItems). Null when nothing applies.
      */
     function viewDataExtensionJoin(viewSide, deSide, isViewJoined, kind, context, match) {
         var view = viewSide.view;
@@ -5063,6 +5247,7 @@ window.SQLStudioSQL = {
             var leftOut = listWords(match.leftOut) + (match.leftOut.length === 1 ? ' is' : ' are') + ' left out';
             sentences.push(hasSubscriber ? leftOut + ', since both tables have ' + DE_JOIN_SUBSCRIBER_KEY + '.' : leftOut + ': the join is the one ' + view + ' has with ' + match.partners[0] + '.');
         };
+        if (match.identity) identityNotes(match.identity.key, match.identity.leftOut).forEach(function (sentence) { sentences.push(sentence); });
         standInExtras(view, deSide.map, match, context).forEach(function (extra) {
             var isCarrierJoined = extra.isOnView === isViewJoined;
             var carrier = isCarrierJoined ? joined : anchor;
@@ -5079,6 +5264,12 @@ window.SQLStudioSQL = {
         return {
             conditions: conditions,
             columns: match.columns.map(function (column) { return isViewJoined ? column.view : column.de; }),
+            pairs: match.columns.map(function (column) {
+                return {
+                    joined: isViewJoined ? column.view : column.de,
+                    anchor: isViewJoined ? column.de : column.view
+                };
+            }),
             note: sentences.join(' '),
             match: match
         };
@@ -5119,7 +5310,7 @@ window.SQLStudioSQL = {
      * @param {Object} joined - The joined table's side, from joinSide, with its fields loaded.
      * @param {Object} anchor - The earlier table's side, the same.
      * @param {Object} context - From joinTableContext.
-     * @returns {Object|null} {conditions, columns, note}: columns are the joined table's spelling of the key columns. Null when they make no join.
+     * @returns {Object|null} {conditions, columns, pairs, note}: columns are the joined table's spelling of the key columns, and pairs holds {joined, anchor} for each, the joined table's column and the earlier table's. Null when they make no join.
      */
     function dataExtensionsJoin(joined, anchor, context) {
         /* Two synchronized Data Extensions never join each other on a subscriber stand-in: the record IDs of two Salesforce objects,
@@ -5130,7 +5321,24 @@ window.SQLStudioSQL = {
         var joinedMap = isBothSynchronized ? fieldMap(joined.fields) : joined.map;
         var anchorMap = isBothSynchronized ? fieldMap(anchor.fields) : anchor.map;
         var shared = sharedKeyColumns(joinedMap, anchorMap, context.keys);
-        if (!shared.columns.length) return null;
+        /* No key column joins them: an identity field both have by name, ContactKey or EmailAddress, with the same type family
+        (identityMatch). It reads the fields as they are named, never a stand-in for SubscriberKey. */
+        var identity = null;
+        if (!shared.columns.length) {
+            identity = identityMatch(fieldMap(joined.fields), fieldMap(anchor.fields));
+            if (!identity) return null;
+            shared = {
+                columns: [{
+                    key: identity.key,
+                    joined: identity.a,
+                    anchor: identity.b,
+                    joinedKind: null,
+                    anchorKind: null,
+                    label: identity.key
+                }],
+                leftOut: []
+            };
+        };
         var named = shared.columns.filter(function (column) { return column.label !== null; });
         var sentences = [];
         if (named.length) {
@@ -5158,11 +5366,18 @@ window.SQLStudioSQL = {
             };
         });
         if (shared.leftOut.length) sentences.push(listWords(shared.leftOut) + (shared.leftOut.length === 1 ? ' is' : ' are') + ' left out, since both tables have ' + DE_JOIN_SUBSCRIBER_KEY + '.');
+        if (identity) identityNotes(identity.key, identity.leftOut).forEach(function (sentence) { sentences.push(sentence); });
         return {
             conditions: shared.columns.map(function (column) {
                 return joined.text + '.' + formatIdentifier(column.joined) + ' = ' + anchor.text + '.' + formatIdentifier(column.anchor);
             }),
             columns: shared.columns.map(function (column) { return column.joined; }),
+            pairs: shared.columns.map(function (column) {
+                return {
+                    joined: column.joined,
+                    anchor: column.anchor
+                };
+            }),
             note: sentences.join(' ')
         };
     };
@@ -5175,7 +5390,7 @@ window.SQLStudioSQL = {
      * @param {string} kind - The join's type, from joinKind.
      * @param {Object} context - From joinTableContext.
      * @param {Object} viewsInQuery - Data View name to true, for those the query reads besides the joined table.
-     * @returns {Object|null} {conditions, columns, note, match}, or null when the two make no join.
+     * @returns {Object|null} {conditions, columns, pairs, note, match}, or null when the two make no join.
      */
     function sideJoin(joinedSide, anchorSide, kind, context, viewsInQuery) {
         var made;
@@ -5250,13 +5465,13 @@ window.SQLStudioSQL = {
 
     /**
      * @function joinCompletions
-     * @description Offers the recommended joins at a cursor. Right after INNER, LEFT, RIGHT or FULL JOIN (or a plain JOIN), it lists one item per Data View that inserts the view, a free alias and the whole ON clause in the formatter's layout, joined to the earlier table it shares the most key columns with, the first of those in FROM order on a tie: a Data View by their recorded relationship, or a Data Extension by standInMatch. The views the query does not read yet come first. Right after the ON of a join written by hand, it lists the conditions to each earlier table: a Data View's recorded relationship to another, and, when either table is a Data Extension, the join on their key columns. An alias that is taken gets a number. The relationship's extra conditions, such as IsUnique = 1, go in only when the event view is on the join's optional side (isExtraAdded), and the item's note says why otherwise. In a child Business Unit, _Subscribers and _EnterpriseAttribute go in as Ent._Subscribers and Ent._EnterpriseAttribute (dataViewTable). Nothing is offered for a CROSS JOIN, or for a Data View with no recorded relationship and no Data Extension to join. A Data Extension joins a Data View on the whole column set of one of the view's relationships, in the place of the view at its other end, or else on SubscriberKey (standInMatch), and another Data Extension on the key columns both have (sharedKeyColumns). A column matches by name, without regard to case, and by type family. After JOIN, the Data Extensions come as whole joins too, as the Data Views do, after them: each with an alias from its name (deJoinAlias: Contact_Salesforce gives cs) and the conditions and note of the same join after a typed ON (sideJoin), to the earlier table it shares the most key columns with. They are built from what the list holds with no field load (knownJoinFields): a Data Extension whose fields are loaded, or a sendable one whose send relationship maps its field to the subscriber key. One the query reads already is not offered again, and none of the others gets a field load. A Data Extension of the query whose fields are not loaded gives no item and comes back in pendingTables.
+     * @description Offers the recommended joins at a cursor. Right after INNER, LEFT, RIGHT or FULL JOIN (or a plain JOIN), it lists one item per Data View that inserts the view, a free alias and the whole ON clause in the formatter's layout, joined to the earlier table it shares the most key columns with, the first of those in FROM order on a tie: a Data View by their recorded relationship, or a Data Extension by standInMatch. The views the query does not read yet come first. Right after the ON of a join written by hand, it lists the conditions to each earlier table: a Data View's recorded relationship to another, and, when either table is a Data Extension, the join on their key columns. Right after the = of alias.column = in that ON, or in an AND of it, it lists the other side of the condition: the column of the other table of the join that the recorded relationship, or the Data Extension join, pairs with the typed one (otherSideItems), written as the ON items write it, and nothing when the typed column pairs with none, the typed alias is neither the joined table nor an earlier table of the join, or the condition follows an OR. An alias that is taken gets a number. The relationship's extra conditions, such as IsUnique = 1, go in only when the event view is on the join's optional side (isExtraAdded), and the item's note says why otherwise. In a child Business Unit, _Subscribers and _EnterpriseAttribute go in as Ent._Subscribers and Ent._EnterpriseAttribute (dataViewTable). Nothing is offered for a CROSS JOIN, or for a Data View with no recorded relationship and no Data Extension to join. A Data Extension joins a Data View on the whole column set of one of the view's relationships, in the place of the view at its other end, or else on SubscriberKey (standInMatch), and another Data Extension on the key columns both have (sharedKeyColumns). A column matches by name, without regard to case, and by type family. After JOIN, the Data Extensions come as whole joins too, as the Data Views do, after them: each with an alias from its name (deJoinAlias: Contact_Salesforce gives cs) and the conditions and note of the same join after a typed ON (sideJoin), to the earlier table it shares the most key columns with. They are built from what the list holds with no field load (knownJoinFields): a Data Extension whose fields are loaded, or a sendable one whose send relationship maps its field to the subscriber key. One the query reads already is not offered again, nor is a sendable one whose details have not come (isSendPending), and none of the others gets a field load. A Data Extension of the query whose fields are not loaded, or whose send relationship is still on its way, gives no item and comes back in pendingTables, and so does the joined table after ON.
      * @param {string} sql - SQL text being edited.
      * @param {number} offset - Cursor position (character offset) within sql.
      * @param {Object} schema - Schema object used to resolve table references.
      * @param {Object} [data] - The SQL data (dataViewJoins, dataViewAliases, dataViews). Defaults to window.SQLStudioSQL when that is loaded.
      * @param {Object} [options] - {isChildBusinessUnit}: true only when the session is known to run in a child Business Unit.
-     * @returns {Object} {mode, items, pendingTables}: mode is 'join', 'on' or null when the cursor is elsewhere. Each item is {mode, label, filterText, detail, note, view, table, alias, anchorAlias, anchorView, conditions, insertText, start, end, additionalEdits}: table is the view as inserted, insertText replaces sql[start, end), and additionalEdits are {start, end, text} replacements elsewhere, which keep the earlier tables' AS lined up. For a Data Extension, anchorView is its name as the query writes it, and for a Data Extension joined after ON or after JOIN, view is null. After JOIN, a Data Extension's item also has dataExtension, its schema table, which the caller loads the fields of once it is picked. pendingTables holds the schema tables of the Data Extensions the query reads whose fields are not loaded, for the caller to load and ask again.
+     * @returns {Object} {mode, items, pendingTables}: mode is 'join', 'on', 'side' for the other side of a typed condition, or null when the cursor is elsewhere. Each item is {mode, label, filterText, detail, note, view, table, alias, anchorAlias, anchorView, conditions, insertText, start, end, additionalEdits}: table is the view as inserted, insertText replaces sql[start, end), and additionalEdits are {start, end, text} replacements elsewhere, which keep the earlier tables' AS lined up. For a Data Extension, anchorView is its name as the query writes it, and for a Data Extension joined after ON or after JOIN, view is null. After JOIN, a Data Extension's item also has dataExtension, its schema table, which the caller loads the fields of once it is picked. pendingTables holds the schema tables of the Data Extensions the query reads whose fields are not loaded or whose send relationship is still on its way, for the caller to load and ask again.
      */
     function joinCompletions(sql, offset, schema, data, options) {
         var result = {
@@ -5283,17 +5498,21 @@ window.SQLStudioSQL = {
             lastIdx = i;
         };
         var mode = joinPosition(tokens, lastIdx);
+        /* Right after the = of alias.column = in an ON: the conditions of the ON are asked for, and only the other side of the typed one is kept. */
+        var operand = mode ? null : onOperandBefore(tokens, lastIdx);
+        if (operand) mode = 'side';
         if (!mode) return result;
         result.mode = mode;
 
         var schemaIndex = ensureIndex(schema);
-        var entries = joinScopeEntries(tokens, sql, lastIdx, schemaIndex);
+        var onIdx = operand ? operand.onIdx : lastIdx;
+        var entries = joinScopeEntries(tokens, sql, onIdx, schemaIndex);
         var viewByLower = {};
         Object.keys(data.dataViewAliases).forEach(function (name) { viewByLower[name.toLowerCase()] = name; });
-        var context = joinTableContext(data, schemaIndex, viewByLower);
+        var context = joinTableContext(data, schemaIndex, viewByLower, schema);
         /**
          * @function hasFields
-         * @description Tells whether a join side's fields are known. A Data Extension whose fields are not loaded yet is put in pendingTables, once, for the caller to load.
+         * @description Tells whether a join side's fields are known. A Data Extension whose fields are not loaded yet, or whose send relationship is still on its way (joinSide), is put in pendingTables, once, for the caller to load.
          * @param {Object} side - A side from joinSide.
          * @returns {boolean} True when the fields are there.
          */
@@ -5316,7 +5535,20 @@ window.SQLStudioSQL = {
             return views;
         };
 
-        if (mode === 'on') {
+        /**
+         * @function isSideTable
+         * @description Tells whether an earlier table can matter to the condition typed so far: always for an ON, and after the = of a typed condition only the table on its left, or any earlier table when the left is the joined table. A Data Extension that does not matter is not put in pendingTables, so its fields are not loaded for a condition it has no part in.
+         * @param {Object} anchor - An earlier FROM entry.
+         * @param {Object} joined - The table the ON belongs to.
+         * @returns {boolean} True when it may matter.
+         */
+        function isSideTable(anchor, joined) {
+            if (!operand) return true;
+            var left = operand.alias.toLowerCase();
+            return entryReference(joined).toLowerCase() === left || entryReference(anchor).toLowerCase() === left;
+        };
+
+        if (mode === 'on' || mode === 'side') {
             /* The table the ON belongs to is the last one parsed. Its alias, or name, is what it is joined as. */
             var joined = entries.pop();
             var joinedSide = joined ? joinSide(joined, context) : null;
@@ -5326,7 +5558,7 @@ window.SQLStudioSQL = {
             /* The JOIN keyword comes right before the joined table, and the AND lines go under the ON. */
             var joinIdx = tokenIndexAtOrAfter(tokens, joined.start) - 1;
             var onJoinKind = isKw(tokens[joinIdx], 'JOIN') ? joinKind(tokens, joinIdx) : 'INNER';
-            var andIndent = conditionIndent(sql, tokens[lastIdx].start);
+            var andIndent = conditionIndent(sql, tokens[onIdx].start);
             var onViewsInQuery = viewsInQuery();
             /* A send-log view joined through a relationship without JobID, beside another send-log view, is what MCE046 flags: such as
             _Sent again, matched to _Subscribers on SubscriberID, in a query that reads _Sent. */
@@ -5348,6 +5580,12 @@ window.SQLStudioSQL = {
                     anchorAlias: anchorRef,
                     anchorView: option.anchorView,
                     conditions: conditions,
+                    pairs: option.relation.on.map(function (pair) {
+                        return {
+                            joined: String(option.isJoinedB ? pair[1] : pair[0]),
+                            anchor: String(option.isJoinedB ? pair[0] : pair[1])
+                        };
+                    }),
                     insertText: placeOnText(andIndent, conditions),
                     start: wordStart,
                     end: offset,
@@ -5359,6 +5597,7 @@ window.SQLStudioSQL = {
             recorded relationships above. The items follow those, each earlier table in FROM order. */
             var isJoinedReady = !joinedSide.isDataExtension || hasFields(joinedSide);
             entries.forEach(function (anchor) {
+                if (!isSideTable(anchor, joined)) return;
                 var anchorSide = joinSide(anchor, context);
                 if (!anchorSide || !(joinedSide.isDataExtension || anchorSide.isDataExtension)) return;
                 var isAnchorReady = !anchorSide.isDataExtension || hasFields(anchorSide);
@@ -5377,12 +5616,14 @@ window.SQLStudioSQL = {
                     anchorAlias: anchorSide.ref,
                     anchorView: anchorSide.name,
                     conditions: made.conditions,
+                    pairs: made.pairs,
                     insertText: placeOnText(andIndent, made.conditions),
                     start: wordStart,
                     end: offset,
                     additionalEdits: []
                 });
             });
+            if (mode === 'side') result.items = otherSideItems(result.items, operand, sql, wordStart, offset);
             return result;
         };
 
@@ -5516,6 +5757,8 @@ window.SQLStudioSQL = {
             /* Only the table the index finds under its name: a Data Extension named like a System Data View, or listed twice, is no table the query would reach. */
             if (schemaIndex[(table.isShared ? 'ent.' : '') + String(table.name).toLowerCase()] !== table) return;
             if (readTables.indexOf(table) !== -1) return;
+            /* A sendable one whose details have not come is not known: its sendable field may join it to any of them. It gets no load. */
+            if (context.isSendPending(table)) return;
             var fields = knownJoinFields(table);
             if (!fields) return;
             var deSide = wholeJoinSide(table, fields, deJoinAlias(table.name, used));
@@ -5561,6 +5804,221 @@ window.SQLStudioSQL = {
                 end: offset,
                 additionalEdits: placed.edits,
                 dataExtension: join.table
+            });
+        });
+        return result;
+    };
+
+    /**
+     * @function cteBodyAt
+     * @description Finds the body of the CTE of a WITH query that the cursor is in: the tokens between the parentheses after its AS. A CTE's column list and the query below the CTEs are no part of one. A body whose parenthesis is not closed yet runs to the end.
+     * @param {Array<Object>} tokens - Comment-free token stream.
+     * @param {number} cursor - The cursor's offset.
+     * @returns {Object|null} {start, end, depth}: the index of the body's first token, the index just past its last, and its paren depth. Null when the cursor is in no CTE body.
+     */
+    function cteBodyAt(tokens, cursor) {
+        for (var i = 0; i < tokens.length; i++) {
+            if (tokens[i].depth !== 0 || !isKw(tokens[i], 'WITH')) continue;
+            var j = i + 1;
+            while (isName(tokens[j])) {
+                j++;
+                if (isPunctToken(tokens[j], '(')) j = matchParen(tokens, j) + 1;
+                if (isKw(tokens[j], 'AS')) j++;
+                if (!isPunctToken(tokens[j], '(')) break;
+                var close = matchParen(tokens, j);
+                var isClosed = close > j && isPunctToken(tokens[close], ')') && tokens[close].depth === tokens[j].depth;
+                var bodyEnd = isClosed ? close : tokens.length;
+                if (cursor >= tokens[j].end && (!isClosed || cursor <= tokens[close].start)) return {
+                    start: j + 1,
+                    end: bodyEnd,
+                    depth: tokens[j].depth + 1
+                };
+                j = bodyEnd + 1;
+                if (!isPunctToken(tokens[j], ',')) break;
+                j++;
+            };
+        };
+        return null;
+    };
+
+    /**
+     * @function isFromClauseWhole
+     * @description Tells whether a FROM clause is written whole, as the strict parser reads one (parseFromClause): its tables, each join with its ON where the join takes one, and each ON a whole condition, with nothing left over. A last join with no ON yet, or an ON that ends in IS, LIKE, IN, an operator, AND or a column alone, is not. A failure of the parser itself that is no syntax error leaves the clause as whole, as before the parser read it.
+     * @param {Array<Object>} tokens - Comment-free token stream.
+     * @param {number} start - Index of the clause's first token after FROM.
+     * @param {number} end - Index just past its last token.
+     * @param {string} sql - Full SQL source text, for the parser's line index.
+     * @returns {boolean} True when the clause parses whole.
+     */
+    function isFromClauseWhole(tokens, start, end, sql) {
+        var parser = new StrictParser(tokens, start, end, null, buildLineIndex(sql));
+        try {
+            parser.parseFromClause();
+            return parser.pos >= parser.end;
+        } catch (e) {
+            return !(e instanceof StrictError);
+        };
+    };
+
+    /**
+     * @function joinTarget
+     * @description Finds where a join goes in the query: the end of the FROM clause of the SELECT the cursor is in, at the top level of the query or, with the cursor in the body of a CTE, in that body (cteBodyAt), where a subquery has no part in it, or the first SELECT there when the cursor is before every one. That is after the last join, or the FROM itself, and before WHERE, GROUP BY, HAVING, ORDER BY, UNION, the CTE's closing parenthesis or the end. A comment on the clause's last line stays where it is, and the join goes under it. When another clause follows on the same line, as in a query written on one line, the join takes a line of its own and that clause starts a new one at the FROM line's indentation. A clause the strict parser does not read whole (isFromClauseWhole) ends in a half-written join.
+     * @param {string} sql - Full SQL source text.
+     * @param {Array<Object>} allTokens - The token stream with its comments.
+     * @param {Array<Object>} tokens - The same without comments.
+     * @param {number} cursor - The cursor's offset.
+     * @param {Object} schemaIndex - Indexed schema, as ensureIndex gives it.
+     * @returns {Object|null} {entries, isUnfinished, insertAt, replaceEnd, trailer, indent}: entries are the FROM entries, isUnfinished tells that the clause ends in a half-written join, insertAt is where the join goes and replaceEnd the end of the whitespace the join replaces, trailer the text after the join, and indent the column of the join's line. Null when the query has no SELECT with a FROM there.
+     */
+    function joinTarget(sql, allTokens, tokens, cursor, schemaIndex) {
+        var scope = cteBodyAt(tokens, cursor) || {
+            start: 0,
+            end: tokens.length,
+            depth: 0
+        };
+        var selectIdx = -1;
+        for (var i = scope.start; i < scope.end; i++) {
+            if (tokens[i].depth !== scope.depth || !isKw(tokens[i], 'SELECT')) continue;
+            if (selectIdx === -1 || tokens[i].start <= cursor) selectIdx = i;
+        };
+        if (selectIdx === -1) return null;
+        var fromIdx = -1;
+        for (var j = selectIdx + 1; j < scope.end && fromIdx === -1; j++) {
+            var t = tokens[j];
+            if (t.depth !== scope.depth) continue;
+            if (isKw(t, 'FROM')) {
+                fromIdx = j;
+            } else if ((t.type === 'punct' && t.value === ';') || isKwAny(t, ['UNION', 'EXCEPT', 'INTERSECT', 'WHERE', 'HAVING', 'SELECT'])) {
+                break;
+            };
+        };
+        if (fromIdx === -1) return null;
+        var end = fromIdx + 1;
+        while (end < scope.end) {
+            var u = tokens[end];
+            if (u.depth === scope.depth && ((u.type === 'punct' && u.value === ';') || (isBoundaryKeyword(u, tokens[end + 1]) && u.upper !== 'FROM') || isKwAny(u, ['FOR', 'OPTION', 'SELECT']))) break;
+            end++;
+        };
+        if (end - 1 === fromIdx) return null;
+        var entries;
+        try {
+            entries = parseSelect(tokens, selectIdx, end, { schemaIndex: schemaIndex, ctes: {} }, sql).from;
+        } catch (e) {
+            return null;
+        };
+        var lastTok = tokens[end - 1];
+        var isUnfinished = !isFromClauseWhole(tokens, fromIdx + 1, end, sql);
+        /* The comments that end the clause's last line stay above the join. */
+        var pos = lastTok.end;
+        var k = tokenIndexAtOrAfter(allTokens, pos);
+        var next = allTokens[k];
+        while (next && next.type === 'comment' && sql.slice(pos, next.start).indexOf('\n') === -1) {
+            pos = next.end;
+            next = allTokens[++k];
+        };
+        var isMoreOnLine = !!next && sql.slice(pos, next.start).indexOf('\n') === -1 && !(next.type === 'punct' && next.value === ';');
+        var fromTok = tokens[fromIdx];
+        var fromLead = /^[ \t]*/.exec(sql.slice(lineStartOf(sql, fromTok.start), fromTok.start))[0];
+        return {
+            entries: entries,
+            isUnfinished: isUnfinished,
+            insertAt: pos,
+            replaceEnd: isMoreOnLine ? next.start : pos,
+            trailer: isMoreOnLine ? '\n' + fromLead : '',
+            indent: textColumns(fromLead) + 4
+        };
+    };
+
+    /**
+     * @function joinToQuery
+     * @description Lists the tables that can be joined to the query as it stands, each with the edits that write the whole join, for the sidebar's "Join to the query" action. It writes the join as the join completion after JOIN does, and builds no join of its own: it puts "LEFT JOIN " at the end of the FROM clause (joinTarget), asks joinCompletions for the recommended joins there, and turns each item into edits to the real text, which are the item's additionalEdits, so the earlier tables' AS lines up as the formatter lays it out, and the join itself. A Data Extension the query reads is not offered again, as joinCompletions leaves it out, and neither is a Data View it reads, which the completion after JOIN still lists. A Data Extension whose fields are not loaded gives no item, as after JOIN, nor does a sendable one whose details have not come, and neither does one the query reads whose fields are not loaded or whose send relationship is still on its way: those come back in pendingTables, and the caller loads them and asks again.
+     * @param {string} sql - SQL text being edited.
+     * @param {number} cursor - Cursor position (character offset): the SELECT it is in gets the join.
+     * @param {Object} schema - Schema object used to resolve table references.
+     * @param {Object} [data] - The SQL data. Defaults to window.SQLStudioSQL when that is loaded.
+     * @param {Object} [options] - {isChildBusinessUnit}: as for joinCompletions.
+     * @returns {Object} {hasTable, isUnfinished, readTables, readViews, pendingTables, items}: hasTable tells whether the query has a table to join to, isUnfinished that its FROM ends in a half-written join, readTables are the Data Extensions the query reads and readViews the names of the Data Views it reads, pendingTables those Data Extensions whose fields are not loaded or whose send relationship is still on its way. Each item is {view, dataExtension, label, table, alias, anchorAlias, anchorView, conditions, note, edits, cursor}: view is the Data View's name, or null, dataExtension its schema table, or undefined, edits are {start, end, text} replacements of the text given, and cursor is the offset after the join in the text those edits make.
+     */
+    function joinToQuery(sql, cursor, schema, data, options) {
+        var result = {
+            hasTable: false,
+            isUnfinished: false,
+            readTables: [],
+            readViews: [],
+            pendingTables: [],
+            items: []
+        };
+        data = data || (typeof window !== 'undefined' ? window.SQLStudioSQL : null);
+        if (!data || !Array.isArray(data.dataViewJoins) || !data.dataViewAliases) return result;
+        sql = sql == null ? '' : String(sql);
+        cursor = Math.max(0, Math.min(cursor | 0, sql.length));
+        var allTokens;
+        try {
+            allTokens = tokenize(sql);
+        } catch (e) {
+            return result;
+        };
+        var tokens = withoutComments(allTokens);
+        var schemaIndex = ensureIndex(schema);
+        var target = joinTarget(sql, allTokens, tokens, cursor, schemaIndex);
+        if (!target || !target.entries.length) return result;
+        result.hasTable = true;
+        if (target.isUnfinished) {
+            result.isUnfinished = true;
+            return result;
+        };
+        var viewByLower = {};
+        Object.keys(data.dataViewAliases).forEach(function (name) { viewByLower[name.toLowerCase()] = name; });
+        var context = joinTableContext(data, schemaIndex, viewByLower, schema);
+        target.entries.forEach(function (entry) {
+            var side = joinSide(entry, context);
+            if (!side) return;
+            if (side.view) {
+                if (result.readViews.indexOf(side.view) === -1) result.readViews.push(side.view);
+                return;
+            };
+            if (result.readTables.indexOf(side.table) === -1) result.readTables.push(side.table);
+        });
+        var scaffold = '\n' + fmtSpaces(target.indent) + 'LEFT JOIN ';
+        var cursorAt = target.insertAt + scaffold.length;
+        var scratch = sql.slice(0, target.insertAt) + scaffold + target.trailer + sql.slice(target.replaceEnd);
+        var found = joinCompletions(scratch, cursorAt, schema, data, options);
+        result.pendingTables = found.pendingTables;
+        if (found.mode !== 'join') return result;
+        found.items.forEach(function (item) {
+            if (item.mode !== 'join' || item.start !== cursorAt || item.end !== cursorAt) return;
+            /* A Data View the query reads is in it already, as a Data Extension it reads is. */
+            if (item.view && result.readViews.indexOf(item.view) !== -1) return;
+            /* The earlier tables' AS edits are before the join. One that is not is never made, as it would move the text it is written against. */
+            var gaps = item.additionalEdits.filter(function (edit) { return edit.end <= target.insertAt; });
+            if (gaps.length !== item.additionalEdits.length) return;
+            var edits = gaps.map(function (edit) {
+                return {
+                    start: edit.start,
+                    end: edit.end,
+                    text: edit.text
+                };
+            });
+            edits.push({
+                start: target.insertAt,
+                end: target.replaceEnd,
+                text: scaffold + item.insertText + target.trailer
+            });
+            edits.sort(function (a, b) { return a.start - b.start; });
+            var shift = 0;
+            gaps.forEach(function (edit) { shift += edit.text.length - (edit.end - edit.start); });
+            result.items.push({
+                view: item.view,
+                dataExtension: item.dataExtension,
+                label: item.label,
+                table: item.table,
+                alias: item.alias,
+                anchorAlias: item.anchorAlias,
+                anchorView: item.anchorView,
+                conditions: item.conditions,
+                note: item.note,
+                edits: edits,
+                cursor: target.insertAt + shift + scaffold.length + item.insertText.length
             });
         });
         return result;
@@ -9158,27 +9616,38 @@ window.SQLStudioSQL = {
 
     /**
      * @function formatterExtractComments
-     * @description Splits a token stream into coreTokens (non-comment) tokens and the comments that precede each coreTokens token, plus any comments left trailing after the last coreTokens token, so the formatter can re-attach comments to whichever line it emits for that token.
+     * @description Splits a token stream into coreTokens (non-comment) tokens and the comments that precede each coreTokens token, plus any comments left trailing after the last coreTokens token, so the formatter can re-attach comments to whichever line it emits for that token. It also counts, for each group, how many of its first comments sit on the same source line as the token before them, since a comment right after a table reference's alias stays at the end of that line.
      * @param {Array<Object>} tokens - Full token stream, comments included.
-     * @returns {Object} {core, commentsBefore, trailing}; commentsBefore[i] holds the rendered comments immediately before core[i].
+     * @returns {Object} {core, commentsBefore, sameLine, trailing, trailingSameLine}. commentsBefore[i] holds the rendered comments immediately before core[i], and sameLine[i] is how many of them, counted from the first, follow the token before them on the same line. trailingSameLine is the same count for the trailing comments.
      */
     function formatterExtractComments(tokens) {
         var coreTokens = [];
         var commentsBefore = [];
+        var sameLine = [];
         var pendingComments = [];
+        var pendingSameLine = 0;
+        var prev = null;
         tokens.forEach(function (t) {
             if (t.type === 'comment') {
+                /* A comment is on the line the token before it ends on when it starts there. A line comment ends before its line break, so nothing follows it on its line. */
+                var onSameLine = prev !== null && t.line === prev.line + String(prev.raw || '').split('\n').length - 1;
+                if (onSameLine && pendingSameLine === pendingComments.length) pendingSameLine++;
                 pendingComments.push(formatterRenderComment(t));
             } else {
                 coreTokens.push(t);
                 commentsBefore.push(pendingComments);
+                sameLine.push(pendingSameLine);
                 pendingComments = [];
+                pendingSameLine = 0;
             };
+            prev = t;
         });
         return {
             core: coreTokens,
             commentsBefore: commentsBefore,
-            trailing: pendingComments
+            sameLine: sameLine,
+            trailing: pendingComments,
+            trailingSameLine: pendingSameLine
         };
     };
 
@@ -9233,6 +9702,47 @@ window.SQLStudioSQL = {
             taken = taken.concat(arr);
         };
         return taken.join(' ');
+    };
+
+    /**
+     * @function formatterTakeSameLineComments
+     * @description Takes the comments just before the token at idx that sit on the same source line as the token before them, marking them taken so no clause renders them again. At or past the end of the token stream it takes the comments trailing the last token. A comment after those, on a line of its own, stays where the clause renderers find it.
+     * @param {Object} ctx - Formatter render context.
+     * @param {number} idx - Index into ctx.core of the token that follows, or the token count for the end of the query.
+     * @returns {string} The comments joined by single spaces, or an empty string when there are none.
+     */
+    function formatterTakeSameLineComments(ctx, idx) {
+        var atEnd = idx >= ctx.core.length;
+        if (!atEnd && ctx.emitted && ctx.emitted[idx]) return '';
+        var all = atEnd ? ctx.trailing : ctx.commentsBefore[idx];
+        var count = atEnd ? ctx.trailingSameLine : ctx.commentsSameLine[idx];
+        if (!all || !all.length || !count) return '';
+        var taken = all.slice(0, count);
+        if (atEnd) {
+            ctx.trailing = all.slice(count);
+            ctx.trailingSameLine = 0;
+        } else {
+            ctx.commentsBefore[idx] = all.slice(count);
+            ctx.commentsSameLine[idx] = 0;
+        };
+        return taken.join(' ');
+    };
+
+    /**
+     * @function formatterTakeRefComments
+     * @description Takes the comments that stay with a table reference that has an alias, for the end of its line. Those are the comments between the table and the end of the reference, and the ones right after it on the same source line. The formatter writes them there itself, so the next run finds them in the same place and formatting stays idempotent.
+     * @param {Object} ctx - Formatter render context.
+     * @param {number} from - Index of the first token after the table name, or after a derived table's closing parenthesis.
+     * @param {number} to - Index just past the reference's last token, its alias, hint or PIVOT included.
+     * @returns {string} The comments joined by single spaces, or an empty string when there are none.
+     */
+    function formatterTakeRefComments(ctx, from, to) {
+        var parts = [];
+        var inside = takeInlineComments(ctx, from, to);
+        if (inside) parts.push(inside);
+        var after = formatterTakeSameLineComments(ctx, to);
+        if (after) parts.push(after);
+        return parts.join(' ');
     };
 
     /**
@@ -9853,11 +10363,11 @@ window.SQLStudioSQL = {
 
     /**
      * @function formatterRenderTableRef
-     * @description Renders one FROM/JOIN table reference: a derived table subquery with its alias, a table-valued function call, or a plain, possibly dotted, table name, each with its optional alias, table hint and PIVOT/UNPIVOT suffix.
+     * @description Renders one FROM/JOIN table reference: a derived table subquery with its alias, a table-valued function call, or a plain, possibly dotted, table name, each with its optional alias, table hint and PIVOT/UNPIVOT suffix. A reference with an alias carries its comments at the end of its last line, after the alias and hint: those typed between the table and the alias, and those right after it on the same line. A reference without an alias takes none, so its comments go before the next clause.
      * @param {Object} ctx - Formatter render context.
      * @param {number} idx - Index of the table reference's first token.
      * @param {number} indentForSub - Indentation, in spaces, of the table source's own line.
-     * @returns {Object} {first, rest, nextIdx, head, aliasTail}; first is the reference's own line text, rest is any additional lines it produced. head (the text before AS) and aliasTail ("AS alias" plus any hint) are set only for a single-line reference with an alias, the ones the FROM/JOIN alias alignment lines up.
+     * @returns {Object} {first, rest, nextIdx, head, aliasTail}; first is the reference's own line text, rest is any additional lines it produced. head (the text before AS) and aliasTail ("AS alias" plus any hint and comments) are set only for a single-line reference with an alias, the ones the FROM/JOIN alias alignment lines up.
      */
     function formatterRenderTableRef(ctx, idx, indentForSub) {
         var coreTokens = ctx.core;
@@ -9867,12 +10377,16 @@ window.SQLStudioSQL = {
             var valuesClose = formatterMatchParenIdx(coreTokens, idx);
             var valuesText = formatterJoinFlat(coreTokens, idx, valuesClose + 1, ctx);
             var jv = valuesClose + 1;
+            var valuesAliasFrom = jv;
             if (coreTokens[jv] && coreTokens[jv].type === 'keyword' && coreTokens[jv].upper === 'AS') jv++;
             var valuesTail = '';
             if (coreTokens[jv] && coreTokens[jv].type === 'identifier') {
                 valuesTail = 'AS ' + coreTokens[jv].raw;
                 jv++;
                 jv = formatterConsumeColumnAliasList(ctx, jv, function (text) { valuesTail += text; });
+                /* A comment between the constructor and its alias stays with the reference, after the alias. */
+                var valuesComments = formatterTakeRefComments(ctx, valuesAliasFrom, jv);
+                if (valuesComments) valuesTail += ' ' + valuesComments;
             };
             return {
                 first: valuesText + (valuesTail ? ' ' + valuesTail : ''),
@@ -9887,9 +10401,12 @@ window.SQLStudioSQL = {
             var restLines = formatterFormatStatement(ctx, idx + 1, closeIdx, indentForSub + 4);
             var closeLine = fmtSpaces(indentForSub) + ')';
             var j2 = closeIdx + 1;
+            var derivedAliasFrom = j2;
+            var derivedHasAlias = false;
             if (coreTokens[j2] && coreTokens[j2].type === 'keyword' && coreTokens[j2].upper === 'AS') j2++;
             if (coreTokens[j2] && coreTokens[j2].type === 'identifier') {
                 closeLine += ' AS ' + coreTokens[j2].raw;
+                derivedHasAlias = true;
                 j2++;
                 j2 = formatterConsumeColumnAliasList(ctx, j2, function (text) { closeLine += text; });
             };
@@ -9897,6 +10414,9 @@ window.SQLStudioSQL = {
             closeLine += extra1.suffix;
             restLines.push(closeLine);
             extra1.extraLines.forEach(function (ln) { restLines.push(ln); });
+            /* A comment between the closing parenthesis and the alias stays with the reference, at the end of its last line. */
+            var derivedComments = derivedHasAlias ? formatterTakeRefComments(ctx, derivedAliasFrom, extra1.nextIdx) : '';
+            if (derivedComments) restLines[restLines.length - 1] += ' ' + derivedComments;
             return {
                 first: '(',
                 rest: restLines,
@@ -9931,6 +10451,7 @@ window.SQLStudioSQL = {
                 j4 = schemaClose + 1;
             };
         };
+        var aliasFrom = j4;
         var aliasSuffix = '';
         if (coreTokens[j4] && coreTokens[j4].type === 'keyword' && coreTokens[j4].upper === 'AS') j4++;
         if (coreTokens[j4] && coreTokens[j4].type === 'identifier') {
@@ -9938,12 +10459,25 @@ window.SQLStudioSQL = {
             j4++;
         };
         var extra2 = formatterConsumeHintAndPivot(ctx, j4, indentForSub);
+        var firstText = nameText + aliasSuffix + extra2.suffix;
+        var aliasTail = aliasSuffix ? aliasSuffix.slice(1) + extra2.suffix : null;
+        var restText = extra2.extraLines;
+        /* A comment between the table and its alias stays with the reference, at the end of its line, after the alias. So does one right after the alias on the same line, which is where the next run finds it again. A table without an alias keeps its comments as before: they go before the next clause. */
+        var refComments = aliasSuffix ? formatterTakeRefComments(ctx, aliasFrom, extra2.nextIdx) : '';
+        if (refComments) {
+            if (restText.length) {
+                restText[restText.length - 1] += ' ' + refComments;
+            } else {
+                firstText += ' ' + refComments;
+                aliasTail += ' ' + refComments;
+            };
+        };
         return {
-            first: nameText + aliasSuffix + extra2.suffix,
-            rest: extra2.extraLines,
+            first: firstText,
+            rest: restText,
             nextIdx: extra2.nextIdx,
             head: aliasSuffix ? nameText : null,
-            aliasTail: aliasSuffix ? aliasSuffix.slice(1) + extra2.suffix : null
+            aliasTail: aliasTail
         };
     };
 
@@ -10471,7 +11005,10 @@ window.SQLStudioSQL = {
             core: coreTokens,
             overrides: formatterComputeOverrides(coreTokens),
             funcSet: getFormatterFunctionSet(),
-            commentsBefore: extracted.commentsBefore
+            commentsBefore: extracted.commentsBefore,
+            commentsSameLine: extracted.sameLine,
+            trailing: extracted.trailing,
+            trailingSameLine: extracted.trailingSameLine
         };
 
         var segs = [];
@@ -10523,8 +11060,8 @@ window.SQLStudioSQL = {
 
         /* Safety net: comments attached to tokens no clause renderer emitted are kept at the end. */
         lines = lines.concat(commentLinesRange(ctx, 0, coreTokens.length, 0));
-        if (extracted.trailing && extracted.trailing.length) {
-            extracted.trailing.forEach(function (c) { lines.push(c); });
+        if (ctx.trailing && ctx.trailing.length) {
+            ctx.trailing.forEach(function (c) { lines.push(c); });
         };
         var out = lines.map(function (l) { return l.replace(/[ \t]+$/, ''); }).join('\n');
         return {
@@ -12649,6 +13186,8 @@ window.SQLStudioSQL = {
         applyEdits: applyEdits,
         completionContext: completionContext,
         joinCompletions: joinCompletions,
+        joinToQuery: joinToQuery,
+        knownJoinFields: knownJoinFields,
         joinKeyColumns: joinKeyColumns,
         joinKeywordCompletions: joinKeywordCompletions,
         deriveDeAlias: deriveDeAlias,
@@ -12686,7 +13225,7 @@ window.SQLStudioSQL = {
 
 
 /* ======================================================== sqlstudio.css == */
-window.SQLStudioEmbeddedCss = "/* ==========================================================================\n   SQL Studio styles\n\n   Brand: SQL Studio follows the same design tokens and Lightning-adjacent\n   chrome as its sibling app Diagramforce. The dark tokens\n   are the base, and .ss[data-theme=\"light\"] overrides them. The App picks\n   the theme from the user's choice or the operating system's mode. Everything is scoped under .ss so the app can be\n   dropped into a Cloud Page without leaking styles or claiming <html>.\n\n   Sections:\n   1. Design tokens (brand, semantic, surfaces, sizing, shadows)\n   2. Reset and base\n   3. Layout shell (toolbar-on-top anatomy: header, sidebar, main - no status bar)\n   4. Buttons and form controls\n   5. Sidebar tree and search\n   6. Toolbar, help/theme menu, and problems strip\n   7. Editor pane and split resizer\n   8. Results grid, header, notice, error panel and pager\n   9. Dialogs, dropdown managers and modal\n   10. Toasts\n   11. Misc (badges, scrollbars, focus, responsive)\n   ========================================================================== */\n\n/* -------------------------------------------------------------------- */\n/* 1. Design tokens                                                      */\n/* -------------------------------------------------------------------- */\n.ss {\n  /* Brand (theme-stable) */\n  --brand-blue: #1D73C9;\n  --brand-red: #DA4E55;\n  --brand-amber: #F6B355;\n  --brand-amber-strong: #D4911F;\n  --brand-green: #27AE60;\n\n  /* Semantic: the primary hue flips between themes (deliberate, matches\n     Diagramforce); danger is always the brand red. --color-action is a separate accent hue for the\n     Run button, primary dialog buttons, and results/pager accents - it\n     also flips between themes, but independently of --color-primary. */\n  --color-primary: var(--brand-red);\n  --color-primary-hover: color-mix(in srgb, var(--color-primary) 82%, black);\n  --color-danger: var(--brand-red);\n  --color-accent: var(--brand-amber);\n  --color-action: var(--brand-amber);\n  --color-action-hover: color-mix(in srgb, var(--color-action) 82%, black);\n  --color-action-fg: #1C1E21;\n  --tint-danger: color-mix(in srgb, var(--color-danger) 14%, transparent);\n  --tint-warning: color-mix(in srgb, var(--warning-color, var(--brand-amber)) 16%, transparent);\n  --tint-info: color-mix(in srgb, var(--brand-blue) 14%, transparent);\n  /* The focused completion row and the header strip of its details panel, in both themes: brand blue with white\n     text, which reads at 4.8:1 on it, and the row reads at 4.4:1 against the light list and 3.2:1 against the dark\n     one. The Monaco theme writes the same pair (Editor._registerThemes). The rest of the panel is a card in a light\n     tint of the same blue, under which the note's secondary text keeps 4.5:1 in the light theme. */\n  --focus-band: var(--brand-blue);\n  --focus-band-fg: #FFFFFF;\n  --focus-card: color-mix(in srgb, var(--brand-blue) 8%, transparent);\n  --tint-success: color-mix(in srgb, var(--brand-green) 14%, transparent);\n\n  /* Dark theme surfaces and text (default) */\n  --bg-app: #212121;\n  --bg-surface: #18191A;\n  --bg-surface-raised: #242526;\n  --bg-elevated: rgba(127, 127, 127, 0.08);\n  --bg-hover: rgba(255, 255, 255, 0.10);\n  --text-primary: #F5F6F7;\n  --text-secondary: #B0B3B8;\n  --text-muted: #9CA3AF;\n  --text-inverse: #1C1E21;\n  --border-color: #3A3B3C;\n  --border-color-strong: #4E4F50;\n  --toolbar-bg: #242526;\n  --toolbar-button-hover: rgba(255, 255, 255, 0.10);\n  --toolbar-button-active: rgba(218, 78, 85, 0.15);\n  --tooltip-bg: #1F2937;\n  --tooltip-fg: #F9FAFB;\n  --modal-btn-neutral-bg: #E4E6EB;\n  --modal-btn-neutral-hover: #D2D6DC;\n  --modal-btn-neutral-fg: #1C1E21;\n  /* The severity colours: --warning-color, --color-danger and --brand-blue\n     mark (squiggles, rulers, borders, dots) at 3:1 or more, and the -text\n     variants colour words at 4.5:1 or more on the tints, the active tab and\n     the hovered tab they sit on. The dark theme's error red and info blue are\n     a shade lighter as text. */\n  --warning-color: var(--brand-amber);\n  --warning-text: var(--warning-color);\n  --danger-text: #E89397;\n  --info-text: #73AFEB;\n  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);\n  --shadow-md: 0 5px 40px rgba(0, 0, 0, 0.35);\n  --shadow-lg: 0 12px 28px 0 rgba(0, 0, 0, 0.4), 0 2px 4px 0 rgba(0, 0, 0, 0.2);\n  --shadow-dropdown: 0 14px 24px -10px rgba(0, 0, 0, 0.55);\n\n  /* Editor tokens: keywords/functions use the\n     flipping primary/accent hues, data views stay brand blue in both\n     themes, strings are always green, comments always --text-muted.\n     Each reads at 4.5:1 or more on --editor-bg, which the details\n     panel's code blocks share too: where a brand colour falls short,\n     the token takes the same hue a step lighter here, and a step darker\n     in the light theme below. Dark: the keyword red is #DB545B (the\n     brand red is 4.36:1), the Data View blue #2884E0 (the brand blue\n     is 3.65:1). */\n  --editor-bg: var(--bg-surface);\n  --editor-fg: var(--text-primary);\n  --editor-keyword: #DB545B;\n  --editor-function: var(--brand-amber);\n  --editor-string: var(--brand-green);\n  --editor-identifier: var(--text-primary);\n  --editor-dataview: #2884E0;\n  --editor-comment: var(--text-muted);\n  --editor-operator: #778899;\n\n  /* Sizing and type */\n  --toolbar-height: 50px;\n  --panel-header-height: 45px;\n  --border-radius-sm: 6px;\n  --border-radius-md: 8px;\n  --spacing-xs: 4px;\n  --spacing-sm: 8px;\n  --spacing-md: 12px;\n  --spacing-lg: 16px;\n  --spacing-xl: 24px;\n  --font-family: system-ui, -apple-system, \"Segoe UI\", Roboto, Ubuntu, Cantarell, \"Noto Sans\", sans-serif;\n  --font-mono: ui-monospace, SFMono-Regular, \"SF Mono\", Menlo, Consolas, \"Liberation Mono\", monospace;\n  --font-size-xs: 11px;\n  --font-size-sm: 12px;\n  --font-size-md: 14px;\n  --font-size-lg: 16px;\n  --line-height: 1.65;\n  --logo-data-uri: url(\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAABGdBTUEAALGPC/xhBQAAAERlWElmTU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAQKADAAQAAAABAAAAQAAAAABGUUKwAAABy2lUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iWE1QIENvcmUgNi4wLjAiPgogICA8cmRmOlJERiB4bWxuczpyZGY9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkvMDIvMjItcmRmLXN5bnRheC1ucyMiPgogICAgICA8cmRmOkRlc2NyaXB0aW9uIHJkZjphYm91dD0iIgogICAgICAgICAgICB4bWxuczpleGlmPSJodHRwOi8vbnMuYWRvYmUuY29tL2V4aWYvMS4wLyI+CiAgICAgICAgIDxleGlmOkNvbG9yU3BhY2U+MTwvZXhpZjpDb2xvclNwYWNlPgogICAgICAgICA8ZXhpZjpQaXhlbFhEaW1lbnNpb24+MTk2PC9leGlmOlBpeGVsWERpbWVuc2lvbj4KICAgICAgICAgPGV4aWY6UGl4ZWxZRGltZW5zaW9uPjE5NjwvZXhpZjpQaXhlbFlEaW1lbnNpb24+CiAgICAgIDwvcmRmOkRlc2NyaXB0aW9uPgogICA8L3JkZjpSREY+CjwveDp4bXBtZXRhPgosnlo7AAAMIklEQVR4AeVba2wdxRX+9u7eh31jO7ZjB2xwchMCAURCHhWPQsEhIWlTKlIeKvTxB1X9gUAV/0qlItoK2kogVX0L8SeIP6gtqC0VJLQxSdoqPOI4AkNMXnZiOwlx8OPavs/dfmf2Pnbvrl+xHYN9lPHenZmdme+bc86cmc1qmIRYlhVhtVqmaqZFTGEmnenzJFkOJskUZ/qMqU/TtASv44o2VilBC8htTDsAaz2vjUxRQDN4T/BjPspqcyEWO9VIgpXhj2Gmbt4f5PVVpjdIhpAzOSH4rUz/Y5ovIli2+qH3TCMr/ogVn2YK2g8Is19kKUBME8VT1IRnnWgKpZKZA/+MXeGLDtwJU34XoD7pJKGQS/BbWOt1Js78fAMvBIgouKIJ20nC7kIOwZcR9F5W2Dh/wQtcESHBeo/Xr5CE0YDKA+5eGOAFrVotONGCGcgTcJ/cLDBRmANUfwly1i0w8AJ3nWAXDWCEZzUsPAIU5lohoIaJEd6CE8FcQwIyjO0lvF1oIpgzi0iAEaIJfN42NpdgNgSzERIT+BxubC4Bfjso0j2qr2JA/tH8okFN+JqJKDEXgFqmP1KtEKD6lI9VdnHjKiFAw7njXfjJy+9hRA+7SMhmTTTVV+HpR25DyBCLubgOhVozPoSfvrAHHSMBGE48bNLQA/jZI7ejsa4i14eGVDqDH7+4H73n4zCMAMIhA3VVZbiqsRprV9ZhdVMNysK5vdsUx1VCAFA51IfIBwfREr2Gpx5yxmCLwG09eh7N65tw95di+eyLuva1tODwgQ/RHm1EyKEFFjsJEmAiVexXOjCZ336iD8fP9CuCBKPJylJfyFi+tAKbNy7HjtuuQsMSIU6EhZMQ0WmXWIEAtmW6UKunybauBiSDCjHpuoadu9qRysgAnVPnamKcGw3ZkTj69ryBUCSIEGdb2i5NfhZgj0FX2hcK6ogQeFnYgNQ93juA373aiod//jr+9Pc2jCZlvzO58XkIyJKAK41BfDlzGqlCpGxjEtVvO/op9rR2jQNy/KKBAy3IDnQjQAAzIQJTzEbI6I8n8es/v48fPLcbR0/LqdjEJHgIED+nRXVs00+gikdslk8jLxW0YCoQaPujcQy+uwuhqiC0WVh49YCmiDjYcRbff+4tHOw4MyEJXgJkYGU6lkXiuF3v9mpBMEAtOJfTgokZdlIUP7wX5lAPgtEgAhzsJM1UNSH2ztjdTs5GfX5rRhBGqg/mu88je+ET1hh7nF4CODCjTINWHsD26ElU8SzRLG2Ahjc1LeDsJ4YxfHgXjKgBnacPJdblA8OdFSLx4vDE/oW5RCqDZDqrHKGzZsoMoDE6il/d9AFWR05h6MAfqXkXWMWfBI8higkYEVamL4hpw2jO9OC14RjCcuCaE3GIbcdsX7BVrQgTe9zRjr3ASC+C5Qw8uaSqkCLf4LhXC2GCf/7RZqT5nGjN0GgKR7ouYO/h0zjwUS8SyYwixgafwLMb2nB1xSCSZhjWYA9G2l7GopseJQdeEjwEyMzoigCpHMA91Z1oSTRi2DR45wRq4aU329G8rkmtEGNjYEiVHMbox7sRiEh31C6TyaN747TAgV9ZX+mqsHZlPR5sXo3WT87iN39txX/azyC2OIVfbDiEVZUDSGZtJ6MZYaROHUCq6VaEGjawDScGH0WUgemcJElWSENsURybKukLqFpOkRXh8PFzePvQKWZ7mXXWTRzfB3O4VxEQYLsa28UUfYA9cBm8O61btRR/eGILHv3qSjy95j2sqiiCz49BfEfiyD8ZPMgrA7e4UbFM48D0MNd8bhMkgene+lOoNlIeXyBD2fnmh7m4wN2wfcfZTw0jcfQttexpEvbRfAJBasD4nPk1NkaemIiOx791C9asuQEJ+oVS0fQgMn0dSJ/vYJG7Yy8BLM9rgNIC2t+Kyji2LOnx1YJDx86h5VCXp+H8IJIn9yEb74Emzov/ZBOqiHCPI1/9Iq8yFQYia74LvYJnO6aXBCubQar7HU/7HgKEIE1myJGynLV7G7pQHeSKYHlHLr7AGx3K7MeROMbZp7mIacnar9Z/2xV4BjO9DEYs4UpErt7KlcFLgBYwkPn0CKxsytWNPwFUVZmlfDIZacUqh7Glvpda4CZAfMEhrggtyhe42kaycz+yg920d0HOf3kSNNuO5e9MS6hxIwJlfIfr2GOoPti5OcLYQC2JxV59CVBbNGWvHHXuKpzefwPPkCrCaiNSbML+9ZL4goL9FW1fK91xc2D6ohrolZdTVcfYDpc2Pul7i462GkZVE/GXaAGdjpVJKBKczXkIEOeUV1XnNaOZWNVUja/fskIFIM5GJC4o9QXJTtr+EGdf6byjtplGcPmdDLTqmFkySEe16fzUK5dSe2kSDi1WfidAwtPy4rgo3jiAZaKqJc5SrT5ZLicPbVqNf+zvQJzBiApnC23Z0WHz+mUImqPK84vduYS2GYjWIxJrJvYDrqKZvIl36ejbn+Zq455fM52CEeMENBZ7KxkhC3K26k8AD0XqothOLZDlT3ZgeSloQVsvttS0K9uXIMQp4okjK5qhRaroqGZa/Ys9xU8Mor89xeW8mCe/TB6sLB2lP3KIm6J8AUlQBJRec+UP33UtaiojPr4ggJ2vv4MLH+2i3yuSox5Ttl+P8Io7c63MxoUDpl9J9narGKbUBCQSDVZXuTr2J8BVxXvTtLSSvmCljy/Q0HZyEHuPWQyPhb2iWLT9sMx+eDEzZ8P/230lensx0tlF+y+ZABJjRKMI14nvKcpFESCPKy2ooBbIeZVT6PRe6VyORIZrfz5fZp9OLxy7M58za9dP/92CzNAQNbjQu+rLzGYRabicGiD/zakoF0mABdGCe3y0IEhP+8Fni7HvbB2PvGwvb8/+Ji5Rszn7GkY7O3HujTfp/PIHpEWgYhpVN67lojQZH+B4bryfD22+FrW+vgB45WSTrQX0/HqUs0/1nz3RkBkYwPHf/t6efW7lXcLVSy8vR/UtN7uy5aakpqd8nAxqAbeoX7uZcUHJKW5BC87VI8QzpXBMZl+cT4m5jNP65IpEzTUkunvQ8cwvEf/4iO/sm6k0Fm9Yj/LlyzxjKPEUk+vWWevbm6/D3/57TB1IBhx2l6Zv2PnxZbj1iiTqZmT23TYtY5BZP//2PvS++hpS589zx8m9dqlQ9fXyCC6/75sskTbckzBNAmxf8NiOG3GIB5ByjO6UbLYR/SvuQP00Z98iiIH3W3mkPqKaT/f3Y+TECQx92I7EmbPKrn3Bs7aZSqHxvh2IXrWSd27w0tg0CZAmLDy8+XqV5M5fvB371/PLZQzPAKbzhRcxevq07cRo0zKbstSNBVxaMhNJLN64AQ0P3O/XsMqbAQKknekAHHNsrgKNnl3AlnpxVyXHjZlMYtE1VyP2+GMIhCUk9B/jDBHg6Hmuf1I7BHzl2jVY+cQPEaqV///hD16GOq8IMNPcADEEv+wb9+CK732Hx+9y/j42+HlBgDhIi8DFNCqvvw4NDz6AqnU3CjbK+OClhlcDGLZaWf7HarUnliq2WJkUDxnkpePMiLzUGOV5ftYRSotvy/L0WU5xS0W8uah20Qdo9Al8wVpbi4rrVqP2jjsY6a1huUDyPl/aXv7eQ0CgfAki12xneUmMxCNlozqWf27a1+0MoG6ILVFvnAuNcdwBRnGLuccoCg82eCRXv3ULMv0DPFjVua6XIVRTg0hjI8quvAJGRf6VuDw1efBSWyPbm3j9l9zYD3sDDrss/3dqHeSf8l6n2s949ac6pkJbd4kGcMciDeQzp9qYF9rkcqbaz1TrTzQKhTkrei4GPzuHcxONYU7LFeakEMBTQvWZyZwO59J3bn9aIwTIu2P3UemlH81c9CiYLwgBfTSBnrkYwdz2qTD3cQerPi1rndvBzEnvrYJdNEDkL/ZlQf1VmPME7KIjlM9IFgADglGwgphz4R5VYZTgn+Q9Y935TILCJhjlyzFidsS7zNjN+6ckc36SUJhY+XZQsCrJm4C6YYF8VOjQhMJDdu0v5F/BkJ95uL4ZHBMO9wcL99PZPCskQc6Rch9Pgx9PW42852cm6usS9+ln/qG5v8q+JvfxtMZ385jw4+lJ6TjJkP0pP65yfj7Pd18+xwlzw4FgNmQ/w33N1D6f/z9nGYh4iZaoUAAAAABJRU5ErkJggg==\");\n  --transition-fast: 150ms ease;\n  --transition-normal: 400ms cubic-bezier(0.08, 0.52, 0.52, 1);\n\n  color-scheme: dark;\n  background: var(--bg-app);\n  color: var(--text-primary);\n}\n\n.ss[data-theme=\"light\"] {\n  --color-primary: var(--brand-blue);\n  --color-primary-hover: color-mix(in srgb, var(--color-primary) 85%, black);\n  --color-action: var(--brand-blue);\n  --color-action-hover: color-mix(in srgb, var(--color-action) 85%, black);\n  --color-action-fg: #FFFFFF;\n\n  --bg-app: #F5F6F7;\n  --bg-surface: #FFFFFF;\n  --bg-surface-raised: #FFFFFF;\n  --bg-elevated: rgba(127, 127, 127, 0.08);\n  --bg-hover: rgba(0, 0, 0, 0.06);\n  --text-primary: #1C1E21;\n  --text-secondary: #606770;\n  --text-muted: #65707B;\n  --text-inverse: #FFFFFF;\n  --border-color: #DADDE1;\n  --border-color-strong: #BEC3C9;\n  --toolbar-bg: #FFFFFF;\n  --toolbar-button-hover: rgba(0, 0, 0, 0.06);\n  --toolbar-button-active: rgba(53, 120, 229, 0.12);\n  --tooltip-bg: #1F2937;\n  --tooltip-fg: #F9FAFB;\n  --modal-btn-neutral-bg: #E4E6EB;\n  --modal-btn-neutral-hover: #D2D6DC;\n  --modal-btn-neutral-fg: #1C1E21;\n  /* The light theme's severity colours: the warning amber a shade darker\n     than the strong one, which marked at 2.67:1 on white, and every -text\n     variant a shade darker again, for 4.5:1 as text. */\n  --warning-color: #B47B1A;\n  --warning-text: #825913;\n  --danger-text: #B9272E;\n  --info-text: #1962AC;\n  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.1);\n  --shadow-md: 0 5px 40px rgba(0, 0, 0, 0.12);\n  --shadow-lg: 0 12px 28px 0 rgba(0, 0, 0, 0.2), 0 2px 4px 0 rgba(0, 0, 0, 0.1);\n  --shadow-dropdown: 0 14px 24px -10px rgba(0, 0, 0, 0.18);\n\n  /* The light theme's editor tokens at 4.5:1 or more on white: the keyword\n     and Data View blue as they are, the amber a step darker than the\n     strong one (2.67:1), the green a step darker than the brand green\n     (2.87:1), the operator grey a step darker than Monaco's (3.64:1), and\n     the second bracket pair's green a step darker than Monaco's (3.93:1). */\n  --editor-keyword: var(--color-primary);\n  --editor-function: #9E6C17;\n  --editor-string: #1E864A;\n  --editor-dataview: var(--brand-blue);\n  --editor-operator: #667788;\n  --editor-bracket-2: #2D872D;\n\n  color-scheme: light;\n}\n\n/* -------------------------------------------------------------------- */\n/* 2. Reset and base                                                     */\n/* -------------------------------------------------------------------- */\n.ss, .ss * {\n  box-sizing: border-box;\n}\n.ss {\n  position: relative;\n  display: flex;\n  flex-direction: column;\n  /* The viewport, not 100%: the Cloud Page gives html, body and #sqlstudio no height, so a\n     percentage resolved to auto there and the app grew with its content (a 100-row page made\n     it about 3,000px tall, scrolling the whole page instead of the grid). */\n  height: 100vh;\n  min-height: 640px;\n  font-family: var(--font-family);\n  font-size: var(--font-size-sm);\n  line-height: var(--line-height);\n}\n/* :where() keeps this reset at zero specificity, so every component's own\n   color rule (.ss-btn, .ss-toolbar__button, .ss-tab, ...) always wins\n   without needing !important or selector-weight tricks. */\n:where(.ss button, .ss input, .ss select, .ss textarea) {\n  font-family: inherit;\n  font-size: inherit;\n  color: inherit;\n}\n/* A page without a doctype renders in quirks mode, where tables do not inherit\n   the text colour or font: the results grid came out black on the dark theme\n   on the first org deployment. */\n:where(.ss table) {\n  color: inherit;\n  font-size: inherit;\n  font-weight: inherit;\n  font-style: inherit;\n  line-height: inherit;\n}\n.ss a {\n  color: var(--color-primary);\n}\n.ss svg {\n  fill: currentColor;\n}\n.ss :focus-visible {\n  outline: 2px solid var(--color-primary);\n  outline-offset: 1px;\n}\n.ss ul {\n  margin: 0;\n  padding: 0;\n  list-style: none;\n}\n.ss h1, .ss h2, .ss h3, .ss p {\n  margin: 0;\n}\n\n/* -------------------------------------------------------------------- */\n/* 3. Layout shell                                                       */\n/* -------------------------------------------------------------------- */\n.ss-toolbar__brand {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  text-decoration: none;\n  white-space: nowrap;\n  flex: 0 0 auto;\n  padding: 0 var(--spacing-xs);\n}\n.ss-toolbar__brand-logo {\n  width: 32px;\n  height: 32px;\n  flex: 0 0 auto;\n  border-radius: var(--border-radius-sm);\n  background-image: var(--logo-data-uri);\n  background-size: contain;\n  background-repeat: no-repeat;\n  background-position: center;\n}\n.ss-toolbar__brand-name {\n  font-size: 16px;\n  font-weight: 700;\n  letter-spacing: -0.3px;\n  color: var(--color-primary);\n}\n.ss-about-logo {\n  width: 64px;\n  height: 64px;\n  border-radius: var(--border-radius-md);\n  background-image: var(--logo-data-uri);\n  background-size: contain;\n  background-repeat: no-repeat;\n  background-position: center;\n}\n.ss-header__actions {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n}\n\n.ss-body {\n  display: flex;\n  flex: 1 1 auto;\n  min-height: 0;\n  position: relative;\n}\n\n.ss-sidebar {\n  display: flex;\n  flex-direction: column;\n  width: 280px;\n  min-width: 240px;\n  max-width: 480px;\n  flex: 0 0 auto;\n  position: relative;\n  border-left: 1px solid var(--border-color); /* the sidebar sits on the right, like Diagramforce's stencil */\n  background: var(--bg-elevated);\n  overflow: hidden;\n}\n.ss-sidebar.is-collapsed {\n  width: 0 !important;\n  min-width: 0;\n  border-left: none;\n}\n.ss-sidebar__resizer {\n  position: absolute;\n  top: 0;\n  bottom: 0;\n  left: 0;\n  width: 6px;\n  cursor: col-resize;\n  z-index: 5;\n}\n.ss-sidebar__search {\n  position: relative;\n  display: flex;\n  align-items: center;\n  height: var(--panel-header-height);\n  padding: 0 var(--spacing-sm);\n  border-bottom: 1px solid var(--border-color);\n}\n.ss-sidebar__search .ss-input {\n  padding-right: 26px;\n}\n.ss-sidebar__search-clear {\n  position: absolute;\n  right: 14px;\n  top: 50%;\n  transform: translateY(-50%);\n  border: none;\n  background: none;\n  padding: 2px;\n  color: var(--text-secondary);\n  cursor: pointer;\n  border-radius: var(--border-radius-sm);\n}\n.ss-sidebar__search-clear:hover {\n  color: var(--color-primary);\n  background: var(--bg-hover);\n}\n.ss-sidebar__tree {\n  flex: 1 1 auto;\n  overflow-y: auto;\n  overflow-x: hidden;\n  padding: var(--spacing-xs) 0;\n}\n.ss-tree__section-title {\n  padding: var(--spacing-sm) var(--spacing-md) 2px var(--spacing-sm);\n  font-size: var(--font-size-sm);\n  font-weight: 700;\n  color: var(--text-primary);\n  text-transform: uppercase;\n  letter-spacing: 0.03em;\n}\n/* What is under a section title starts one indent step in from it, as a folder's children do from the\n   folder, so the title reads as the outermost level: the title's caret is at the sidebar's left padding, a\n   top-level row's caret one step in and a subfolder's another. */\n.ss-tree__section-body {\n  padding-left: var(--spacing-lg);\n}\n/* The lines in a section body (the hint, a group title, a message, the footer) start in line with the carets\n   of its rows, not a step further in. */\n.ss-tree__section-body > .ss-tree__hint,\n.ss-tree__section-body > .ss-tree__group-title,\n.ss-tree__section-body > .ss-tree__empty,\n.ss-tree__section-body > .ss-tree__loading,\n.ss-tree__section-body > .ss-tree__list-footer {\n  padding-left: var(--spacing-sm);\n}\n/* A section title as a button: pressing it collapses or expands the section, as a Data View group's\n   caret does. It keeps the title's type, and adds the caret and a hover. */\n.ss-tree__section-toggle {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  width: 100%;\n  border: none;\n  background: none;\n  line-height: var(--line-height);\n  text-align: left;\n  cursor: pointer;\n}\n.ss-tree__section-toggle:hover {\n  background: var(--bg-hover);\n}\n.ss-tree__section-caret {\n  flex: 0 0 auto;\n  width: 14px;\n  text-align: center;\n  color: var(--text-secondary);\n}\n/* The line above the Data Extension tree that gives the totals and says to search. */\n.ss-tree__hint {\n  padding: 2px var(--spacing-md) var(--spacing-xs);\n  color: var(--text-muted);\n  font-size: 11px;\n}\n/* A folder of the Data Extension tree reads heavier than the Data Extensions beside it, which have no count. */\n.ss-tree__folder--de > .ss-tree__name {\n  font-weight: 600;\n}\n/* The made-up group of the Data Extensions in no loaded folder reads in italics, so it does not pass\n   for a real folder of that name. */\n.ss-tree__folder--made-up > .ss-tree__name {\n  font-style: italic;\n}\n/* The number of Data Extensions below a folder, at the right end of its row. */\n.ss-tree__count {\n  flex: 0 0 auto;\n  color: var(--text-muted);\n  font-size: 11px;\n}\n/* The \"Show N more\" button under a folder's first Data Extensions, in line with their names. It is\n   a .ss-tree__link too, which comes later in this file, hence the two classes. */\n.ss-tree__link.ss-tree__more {\n  display: block;\n  padding: 3px var(--spacing-sm) 3px 26px;\n  text-align: left;\n}\n/* Inline text link inside a sidebar/Save As hint row (Retry on a failed\n   Data Extension list load, Reload in the list-loaded footer). */\n.ss-tree__link {\n  display: inline;\n  border: none;\n  background: none;\n  padding: 0;\n  color: var(--color-primary);\n  cursor: pointer;\n  font: inherit;\n}\n.ss-tree__link:hover {\n  text-decoration: underline;\n}\n/* Small \"list loaded N min ago\" line under the sidebar Data Extensions\n   section once it has loaded. */\n.ss-tree__list-footer {\n  padding: 2px var(--spacing-md) var(--spacing-sm);\n  color: var(--text-muted);\n  font-size: 11px;\n}\n/* Shared DE name prefix, replacing the old SHARED badge. */\n.ss-tree__ent-prefix {\n  color: var(--text-muted);\n}\n/* A parent Business Unit Data Extension's folder path, on its own line under its row, in line with the name. */\n.ss-tree__path {\n  padding: 0 var(--spacing-sm) 3px 26px;\n  color: var(--text-muted);\n  font-size: 11px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n/* The \"Parent BU\" heading above the parent's shared and synchronized Data Extensions in a search. */\n.ss-tree__group-title {\n  padding: var(--spacing-sm) var(--spacing-md) 2px;\n  color: var(--text-secondary);\n  font-size: 11px;\n  font-weight: 700;\n  text-transform: uppercase;\n  letter-spacing: 0.03em;\n}\n.ss-sidebar-overlay-bg {\n  display: none;\n}\n\n.ss-main {\n  display: flex;\n  flex-direction: column;\n  flex: 1 1 auto;\n  min-width: 0;\n  min-height: 0;\n}\n\n/* -------------------------------------------------------------------- */\n/* 4. Buttons and form controls                                          */\n/* -------------------------------------------------------------------- */\n/* Neutral dialog/modal button: used for\n   Cancel and other non-primary actions in modals and dropdown panels. */\n.ss-btn {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  gap: var(--spacing-xs);\n  height: 28px;\n  padding: 0 var(--spacing-md);\n  border: 1px solid transparent;\n  border-radius: var(--border-radius-sm);\n  background: var(--modal-btn-neutral-bg);\n  color: var(--modal-btn-neutral-fg);\n  cursor: pointer;\n  white-space: nowrap;\n  line-height: 1;\n  transition: background-color var(--transition-fast);\n}\n.ss-btn:hover {\n  background: var(--modal-btn-neutral-hover);\n}\n.ss-btn:disabled {\n  opacity: 0.35;\n  cursor: not-allowed;\n}\n.ss-btn--primary {\n  background: var(--color-action);\n  border-color: var(--color-action);\n  color: var(--color-action-fg);\n}\n.ss-btn--primary:hover {\n  background: var(--color-action-hover);\n  border-color: var(--color-action-hover);\n}\n.ss-btn--icon {\n  width: 28px;\n  padding: 0;\n}\n.ss-btn--sm {\n  height: 24px;\n  padding: 0 var(--spacing-sm);\n  font-size: var(--font-size-sm);\n}\n.ss-btn--link {\n  border-color: transparent;\n  background: transparent;\n  color: var(--color-primary);\n  text-decoration: underline;\n}\n.ss-btn--link:hover {\n  background: transparent;\n  color: var(--color-primary-hover);\n}\n\n.ss-field {\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n  margin-bottom: var(--spacing-md);\n}\n.ss-label {\n  font-size: var(--font-size-sm);\n  font-weight: 600;\n  color: var(--text-secondary);\n}\n.ss-hint {\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n}\n/* The History dialog's line on where its entries are kept, between the search box and the list. */\n.ss .ss-history__where {\n  margin: 6px 0 8px;\n}\n.ss-input, .ss-select, .ss-textarea {\n  height: 30px;\n  padding: 0 var(--spacing-sm);\n  border: 1px solid var(--border-color-strong);\n  border-radius: var(--border-radius-sm);\n  background: var(--bg-surface-raised);\n  color: var(--text-primary);\n  width: 100%;\n}\n.ss-textarea {\n  height: auto;\n  padding: var(--spacing-sm);\n  resize: vertical;\n  font-family: var(--font-mono);\n}\n.ss-input:focus, .ss-select:focus, .ss-textarea:focus {\n  border-color: var(--color-primary);\n}\n.ss-radio-group {\n  display: flex;\n  flex-direction: column;\n  gap: var(--spacing-sm);\n}\n/* Three equal cards in one row (Save As update type). */\n.ss-radio-group--row {\n  flex-direction: row;\n}\n.ss-radio-group--row .ss-radio-option {\n  flex: 1 1 0;\n}\n.ss-radio-option {\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  padding: var(--spacing-sm);\n  cursor: pointer;\n  transition: border-color var(--transition-fast), outline-color var(--transition-fast);\n}\n.ss-radio-option.is-selected {\n  border-color: var(--color-action);\n  outline: 2px solid var(--color-action);\n  outline-offset: -1px;\n}\n.ss-radio-option strong {\n  display: block;\n}\n.ss-radio-option span {\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n}\n\n/* -------------------------------------------------------------------- */\n/* 5. Sidebar tree and search                                            */\n/* -------------------------------------------------------------------- */\n.ss-tree__row {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  padding: 3px var(--spacing-sm);\n  cursor: pointer;\n  border-radius: var(--border-radius-sm);\n  white-space: nowrap;\n  overflow: hidden;\n}\n.ss-tree__row:hover {\n  background: var(--bg-hover);\n}\n/* A table row holds its toggle and its actions side by side, so no control sits inside another. The\n   toggle, which opens and closes the fields, fills the row and has the row's padding, so its arrow and\n   name sit where a folder row has them and a click anywhere on the name's side of the row hits it. The\n   row does not clip, so the toggle's focus outline shows in full, as a focused row's did: the toggle cuts\n   the name short itself.\n   The actions, Insert name and Insert table query (SELECT with all fields), sit at the right end of the row. They take\n   no width of their own: hidden, they leave the whole row to the name, and shown, while the row is\n   hovered or the keyboard's focus is on its toggle or on one of them, they lie over the end of the row on\n   its own background (the sidebar's, made opaque, with the hover tint on a hovered row). So a long name\n   is cut only while they show, and nothing in the row moves. Their left edge fades, so what they cover\n   fades out instead of breaking off (the mask's colour only gives its opacity). Hidden, they stay in the\n   tab order and take no click. */\n.ss-tree__row--table {\n  position: relative;\n  padding: 0;\n  overflow: visible;\n}\n.ss-tree__toggle {\n  display: flex;\n  flex: 1 1 auto;\n  align-items: center;\n  gap: 4px;\n  min-width: 0;\n  padding: 3px var(--spacing-sm);\n  border-radius: var(--border-radius-sm);\n  overflow: hidden;\n}\n.ss-tree__actions {\n  position: absolute;\n  top: 0;\n  right: 0;\n  bottom: 0;\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  padding: 0 var(--spacing-xs) 0 var(--spacing-md);\n  /* The row's own corners, as the row does not clip them. */\n  border-top-right-radius: inherit;\n  border-bottom-right-radius: inherit;\n  background: linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-app);\n  -webkit-mask-image: linear-gradient(to right, transparent, var(--bg-app) var(--spacing-md));\n  mask-image: linear-gradient(to right, transparent, var(--bg-app) var(--spacing-md));\n  opacity: 0;\n  pointer-events: none;\n}\n.ss-tree__row:hover > .ss-tree__actions,\n.ss-field-item:hover > .ss-tree__actions {\n  background: linear-gradient(var(--bg-hover), var(--bg-hover)), linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-app);\n}\n.ss-tree__row:hover > .ss-tree__actions,\n.ss-tree__toggle:focus-visible ~ .ss-tree__actions,\n.ss-field-item:hover > .ss-tree__actions,\n.ss-field-row:focus-visible ~ .ss-tree__actions,\n.ss-tree__actions:focus-within {\n  opacity: 1;\n  pointer-events: auto;\n}\n/* One action: the toolbar icon-button style, scaled to 24px for the sidebar tree. */\n.ss-tree__action {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  flex: 0 0 auto;\n  width: 24px;\n  height: 24px;\n  padding: 0;\n  border: none;\n  border-radius: var(--border-radius-sm);\n  background: transparent;\n  color: var(--text-secondary);\n  cursor: pointer;\n  transition: background-color var(--transition-fast), color var(--transition-fast);\n}\n.ss-tree__action:hover {\n  background: var(--toolbar-button-hover);\n  color: var(--color-primary);\n}\n.ss-tree__caret {\n  flex: 0 0 auto;\n  width: 14px;\n  text-align: center;\n  color: var(--text-secondary);\n  background: none;\n  border: none;\n  padding: 0;\n  cursor: pointer;\n}\n.ss-tree__name {\n  flex: 1 1 auto;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n/* Object-kind marker: DE, SHARED, VIEW, QUERY. */\n.ss-type-badge {\n  flex: 0 0 auto;\n  font-size: 10px;\n  font-weight: 700;\n  text-transform: uppercase;\n  letter-spacing: 0.02em;\n  color: var(--color-primary);\n  border: 1px solid currentColor;\n  border-radius: 2px;\n  padding: 0 3px;\n}\n/* A badge in a folder tree row: smaller type and less space around it, so the name keeps the room. */\n.ss-type-badge--compact {\n  font-size: 9px;\n  letter-spacing: 0;\n  padding: 0 2px;\n}\n.ss-tree__children {\n  padding-left: var(--spacing-lg);\n}\n.ss-tree__fields {\n  padding-left: var(--spacing-xl);\n}\n/* A field holds its row and its Insert name button side by side, as a table row holds its toggle and its\n   actions: the button lies over the end of the row while the field is hovered or the keyboard's focus is\n   on the row or on the button, and takes no width while hidden. The hover tint is the holder's, so it\n   stays while the pointer is on the button. */\n.ss-field-item {\n  position: relative;\n  border-radius: var(--border-radius-sm);\n}\n.ss-field-item:hover {\n  background: var(--bg-hover);\n}\n.ss-field-row {\n  display: flex;\n  align-items: baseline;\n  gap: 6px;\n  padding: 2px var(--spacing-sm);\n  cursor: pointer;\n  border-radius: var(--border-radius-sm);\n  overflow: hidden;\n}\n/* A field row is shorter than a table row: its button fits it. */\n.ss-field-item .ss-tree__action {\n  width: 20px;\n  height: 20px;\n}\n.ss-field-row__name {\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.ss-field-row__type {\n  flex: 0 0 auto;\n  color: var(--text-secondary);\n  font-size: 11px;\n  font-family: var(--font-mono);\n}\n/* The primary key's mark: the SLDS key icon, as tall as the field's text, in the warning text colour, which reads at\n   4.5:1 on the sidebar in both themes. */\n.ss-field-row__key {\n  display: inline-flex;\n  flex: 0 0 auto;\n  align-self: center;\n  color: var(--warning-text);\n}\n.ss-field-row__key .ss-icon {\n  width: 12px;\n  height: 12px;\n}\n.ss-tree__empty, .ss-tree__loading {\n  padding: var(--spacing-md);\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n}\n\n/* -------------------------------------------------------------------- */\n/* 6. Toolbar and problems strip                                         */\n/* -------------------------------------------------------------------- */\n/* Toolbar, sidebar tree and tab labels are controls, not text: a drag or a select-all never paints\n   them. The query, the grid, the Status messages and the run summary stay selectable. */\n.ss-toolbar,\n.ss-sidebar__tree,\n.ss-tab {\n  -webkit-user-select: none;\n  user-select: none;\n}\n\n.ss-toolbar {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n  height: var(--toolbar-height);\n  padding: 0 var(--spacing-sm);\n  background: var(--toolbar-bg);\n  border-bottom: 1px solid var(--border-color);\n  flex: 0 0 auto;\n  flex-wrap: nowrap;\n  min-width: 0;\n  overflow: visible;\n}\n.ss-icon {\n  width: 16px;\n  height: 16px;\n  flex: 0 0 auto;\n  fill: currentColor;\n}\n/* Toolbar buttons: transparent by default, icon (16px) + label. Run is the one filled/primary button. */\n.ss-toolbar__button {\n  display: inline-flex;\n  align-items: center;\n  gap: 5px;\n  min-height: 32px;\n  padding: var(--spacing-xs) 10px;\n  border: none;\n  border-radius: var(--border-radius-sm);\n  background: transparent;\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n  font-weight: 500;\n  white-space: nowrap;\n  cursor: pointer;\n  transition: background-color var(--transition-fast), color var(--transition-fast);\n}\n.ss-toolbar__button:hover {\n  background: var(--toolbar-button-hover);\n  color: var(--color-primary);\n}\n.ss-toolbar__button.is-active,\n.ss-toolbar__button[aria-expanded=\"true\"] {\n  background: var(--toolbar-button-active);\n  color: var(--color-primary);\n}\n.ss-toolbar__button:disabled {\n  opacity: 0.35;\n  cursor: not-allowed;\n}\n.ss-toolbar__button:disabled:hover {\n  background: transparent;\n  color: var(--text-secondary);\n}\n.ss-toolbar__button--primary {\n  background: var(--color-action);\n  color: var(--color-action-fg);\n}\n.ss-toolbar__button--primary:hover {\n  background: var(--color-action-hover);\n  color: var(--color-action-fg);\n}\n/* Focus rings on primary controls use --color-action too: amber in dark mode, blue in light mode, same as their fill. */\n.ss-toolbar__button--primary:focus-visible,\n.ss-btn--primary:focus-visible {\n  outline-color: var(--color-action);\n}\n.ss-toolbar__button--icon-only {\n  padding: var(--spacing-xs);\n  min-width: 32px;\n  justify-content: center;\n}\n/* Run while a run is in flight: a spinner in place of the play icon, at full\n   strength rather than the faded disabled look, so it reads as busy. */\n.ss-toolbar__button--primary.is-running:disabled,\n.ss-toolbar__button--primary.is-running:disabled:hover {\n  opacity: 1;\n  cursor: progress;\n  background: var(--color-action);\n  color: var(--color-action-fg);\n}\n/* Validate while Marketing Cloud Engagement checks the query: busy, not faded. */\n.ss-toolbar__button.is-running:disabled {\n  opacity: 1;\n  cursor: progress;\n}\n.ss-toolbar__button.is-running > svg {\n  display: none;\n}\n.ss-toolbar__button.is-running::before {\n  content: '';\n  width: 14px;\n  height: 14px;\n  box-sizing: border-box;\n  border: 2px solid currentColor;\n  border-right-color: transparent;\n  border-radius: 50%;\n  animation: ss-spin 0.8s linear infinite;\n  flex: 0 0 auto;\n}\n\n/* Monaco's hovers and suggestion details can sit outside .ss, so these rules are not scoped\n   to it. Tables there inherit the hover's colour and size, even in quirks mode, and read as a\n   compact list rather than bold oversized headers. */\n.monaco-hover table,\n.suggest-details table {\n  border-collapse: collapse;\n  margin: 4px 0;\n  color: inherit;\n  font-size: inherit;\n  line-height: inherit;\n}\n.monaco-hover th,\n.monaco-hover td,\n.suggest-details th,\n.suggest-details td {\n  padding: 1px 16px 1px 0;\n  text-align: left;\n  vertical-align: top;\n}\n.monaco-hover th,\n.suggest-details th {\n  font-weight: 600;\n  opacity: 0.7;\n  border-bottom: 1px solid rgba(128, 128, 128, 0.35);\n}\n\n/* Off-site links end with the arrow mateuszdabrowski.pl uses. Inline-block keeps the link's\n   underline off it. Monaco's hovers and suggestion details can sit outside .ss. */\n.monaco-hover a::after,\n.suggest-details a::after,\n.ss a[target=\"_blank\"]:not(.ss-btn):not(.ss-toolbar__brand)::after {\n  content: '\\2197';\n  display: inline-block;\n  margin-left: 0.3em;\n  font-size: 0.85em;\n  opacity: 0.6;\n  text-decoration: none;\n}\n\n/* The suggestion details panel and its list (Monaco's suggest widget, set up by Editor._watchSuggestDetails in\n   sqlstudio.js). The widget and the panel sit inside .ss, so the tokens reach them. The script says where the panel\n   is against the list with data-ss-details on both: right, left or below. */\n/* The border-box rule of the reset above reaches Monaco's own boxes. It sizes the panel by its content, so the panel\n   gets Monaco's content-box back, and its two border lines no longer cut off the last 2px of its text. */\n.ss .suggest-details {\n  box-sizing: content-box;\n}\n/* The tie between the focused row and the panel: the row's band (the theme's editorSuggestWidget.selectedBackground,\n   the same blue as --focus-band) goes on over the panel's header strip, and the panel has no border on the side that\n   faces the list. Monaco lays the panel 1px over the list's border on that side, so with no border of its own the\n   panel covers it, and the row and the strip meet with no line between them. At the list's left, Monaco stops the\n   panel 1px short of that border, so the panel moves 1px over it. */\n.ss .suggest-details-container[data-ss-details=\"right\"] .suggest-details {\n  border-left-width: 0;\n}\n.ss .suggest-details-container[data-ss-details=\"left\"] .suggest-details {\n  position: relative;\n  left: 1px;\n  border-right-width: 0;\n}\n.ss .suggest-details-container[data-ss-details=\"below\"] .suggest-details {\n  border-top-width: 0;\n}\n/* The card: Monaco keeps the panel at the list's top, wherever the focused row is, so the rest of the panel takes a\n   light tint of the band's blue, and the whole panel reads as the focused row's own. */\n.ss .suggest-details > .monaco-scrollable-element {\n  background: var(--focus-card);\n}\n/* The close button sits on the header strip in every panel, so it takes the strip's text colour. The selectors are as\n   long as Monaco's own, which load later and would win a tie. */\n.ss .suggest-details > .monaco-scrollable-element > .body > .header > .codicon-close,\n.ss .suggest-details > .monaco-scrollable-element > .body > .header > .codicon-close::before {\n  color: var(--focus-band-fg);\n}\n/* The header strip of any other item: Monaco's own header line, with the item's detail at full opacity, or, for an\n   item with none, the first line of its text, which runs under the close button to the panel's edge. */\n.ss .suggest-details:not(.no-type):not(.ss-join-details) > .monaco-scrollable-element > .body > .header {\n  color: var(--focus-band-fg);\n  background: var(--focus-band);\n}\n.ss .suggest-details:not(.no-type):not(.ss-join-details) > .monaco-scrollable-element > .body > .header > .type {\n  opacity: 1;\n}\n.ss .suggest-details.no-type:not(.ss-join-details) > .monaco-scrollable-element > .body > .docs.markdown-docs {\n  margin-right: 0;\n}\n.ss .suggest-details.no-type:not(.ss-join-details) > .monaco-scrollable-element > .body > .docs.markdown-docs > .rendered-markdown > p:first-child {\n  margin: -4px -5px 0;\n  padding: 4px 29px 4px 5px;\n  color: var(--focus-band-fg);\n  background: var(--focus-band);\n}\n/* A code block in any panel has the editor's own background, so its tokens read as they do in the editor. */\n.ss .suggest-details .rendered-markdown > div {\n  margin: 4px 0;\n  padding: 4px 8px;\n  border-radius: var(--border-radius-sm);\n  background: var(--editor-bg);\n}\n/* A recommended join (class set by the script): its label in bold on the first line, the key columns under it,\n   the SQL it writes in a block, and the note last, smaller and in the secondary text colour, which keeps 4.5:1 on\n   the card. The label takes the place of the panel's own header line, which would only repeat the key columns, so\n   the header keeps its close button alone. The label and the key columns are the header strip, out to the panel's\n   edges, the label clear of the close button. */\n.ss .suggest-details.ss-join-details .header > .type {\n  display: none;\n}\n.ss .suggest-details.ss-join-details > .monaco-scrollable-element > .body > .docs.markdown-docs > .rendered-markdown > p:first-child {\n  margin: -4px -5px 0;\n  padding: 4px 25px 2px 5px;\n  color: var(--focus-band-fg);\n  background: var(--focus-band);\n}\n.ss .suggest-details.ss-join-details > .monaco-scrollable-element > .body > .docs.markdown-docs > .rendered-markdown > p:nth-child(2) {\n  margin: 0 -5px 6px;\n  padding: 0 5px 6px;\n  color: var(--focus-band-fg);\n  font-size: var(--font-size-sm);\n  background: var(--focus-band);\n}\n.ss .suggest-details.ss-join-details .rendered-markdown > div {\n  margin: 6px 0;\n  padding: 6px 8px;\n}\n.ss .suggest-details.ss-join-details .rendered-markdown > div ~ p {\n  margin: 6px 0 0;\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n  line-height: 1.5;\n}\n\n/* Run summary parts that open a breakdown (UI.showHint): after a short hover, on focus, or pinned\n   by a click. */\n.ss-run-summary__hint {\n  text-decoration: underline dotted;\n  text-underline-offset: 3px;\n  cursor: help;\n}\n.ss-run-summary__hint:focus-visible {\n  outline: 2px solid var(--color-action);\n  outline-offset: 2px;\n}\n/* Temp DE when it links to Contact Builder: a click goes there instead of pinning the hint. It keeps the summary's own colour and\n   dotted underline, as the other parts with a hover do, so it does not read as a second red link beside Delete results. */\n.ss a.ss-run-summary__link {\n  cursor: pointer;\n  color: inherit;\n}\n.ss-hint {\n  display: none;\n  position: absolute;\n  z-index: 150;\n  max-width: 380px;\n  padding: 10px 12px;\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  background: var(--bg-surface-raised);\n  box-shadow: var(--shadow-md);\n  font-size: var(--font-size-xs);\n  color: var(--text-secondary);\n}\n.ss .ss-hint__title {\n  margin: 0 0 4px;\n  font-weight: 600;\n  color: var(--text-primary);\n}\n.ss .ss-hint__title:not(:first-child) {\n  margin-top: 10px;\n}\n/* The run's total split between calls through the API and through WSProxy, above the two tables. */\n.ss .ss-hint__split {\n  margin: 0 0 6px;\n  color: var(--text-primary);\n}\n.ss .ss-hint__line {\n  margin: 2px 0;\n}\n.ss-hint__table {\n  border-collapse: collapse;\n  width: 100%;\n}\n.ss-hint__table td {\n  padding: 2px 0;\n  vertical-align: top;\n}\n.ss-hint__table td + td {\n  padding-left: 16px;\n  text-align: right;\n  white-space: nowrap;\n  color: var(--text-primary);\n}\n/* The Status tab's first line during a run. */\n.ss-status-run-note {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  padding: var(--spacing-sm) var(--spacing-md);\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n  border-bottom: 1px solid var(--border-color);\n}\n\n/* Update notice: a small outlined pill next to the theme toggle. */\n.ss-update-badge {\n  margin-right: var(--spacing-sm);\n  padding: 2px 10px;\n  border: 1px solid var(--color-action);\n  border-radius: 12px;\n  background: transparent;\n  color: var(--color-action);\n  font-size: 12px;\n  font-weight: 600;\n  white-space: nowrap;\n  cursor: pointer;\n}\n.ss-update-badge:hover {\n  background: var(--color-action);\n  color: var(--color-action-fg);\n}\n.ss .ss-update-list {\n  margin: var(--spacing-sm) 0;\n  padding-left: 18px;\n  list-style: disc;\n}\n/* A link that looks like a button takes the button's text colour: `.ss a` gave it the link red, on the neutral grey and on the\n   amber of a primary button alike, in the update dialog's \"All changes\" and \"Update guide\" (the author, 2026-10-05). A link-style\n   button keeps the link colour it asks for. */\n.ss a.ss-btn {\n  text-decoration: none;\n  color: var(--modal-btn-neutral-fg);\n}\n.ss a.ss-btn.ss-btn--primary {\n  color: var(--color-action-fg);\n}\n.ss a.ss-btn.ss-btn--link {\n  color: var(--color-primary);\n}\n.ss .ss-update-list li {\n  margin: 4px 0;\n}\n\n/* Spinner. One turn takes 0.8 s: SPINNER_TURN_MS in sqlstudio.js must match. */\n@keyframes ss-spin {\n  to { transform: rotate(360deg); }\n}\n.ss-spinner {\n  display: inline-block;\n  width: 12px;\n  height: 12px;\n  box-sizing: border-box;\n  border: 2px solid currentColor;\n  border-right-color: transparent;\n  border-radius: 50%;\n  animation: ss-spin 0.8s linear infinite;\n  flex: 0 0 auto;\n}\n@media (prefers-reduced-motion: reduce) {\n  .ss-spinner,\n  .ss-toolbar__button.is-running::before {\n    animation: none;\n  }\n}\n\n/* Theme toggle icon: Diagramforce's\n   moon/sun swap, translated from df- to ss- and scoped to .ss. */\n.ss svg.ss-toolbar__icon--theme,\n.ss svg.ss-toolbar__icon--theme * {\n  /* Diagramforce draws the moon and sun as wire icons; the generic `.ss svg { fill }` rule must not apply. */\n  fill: none;\n  stroke: currentColor;\n  stroke-width: 2;\n  stroke-linecap: round;\n  stroke-linejoin: round;\n}\n.ss-toolbar__icon--theme {\n  width: 18px;\n  height: 18px;\n  fill: none;\n  stroke: currentColor;\n  stroke-width: 2;\n  stroke-linecap: round;\n  stroke-linejoin: round;\n}\n.ss[data-theme=\"dark\"] .ss-icon-sun { display: none; }\n.ss[data-theme=\"dark\"] .ss-icon-moon { display: inline; }\n.ss[data-theme=\"light\"] .ss-icon-sun { display: inline; }\n.ss[data-theme=\"light\"] .ss-icon-moon { display: none; }\n/* The system icon's right half is solid, which the wire-icon rule above would clear. */\n.ss svg.ss-toolbar__icon--theme .ss-icon-system__half { fill: currentColor; }\n.ss .ss-icon-system { display: none; }\n.ss[data-theme-choice=\"system\"] .ss-icon-sun,\n.ss[data-theme-choice=\"system\"] .ss-icon-moon { display: none; }\n.ss[data-theme-choice=\"system\"] .ss-icon-system { display: inline; }\n\n/* Help menu: Diagramforce's\n   ss-toolbar__menu, absolute under its button rather than the centred\n   dropdown-manager system (History keeps that; see section 9). */\n.ss-toolbar__dropdown {\n  position: relative;\n}\n.ss-toolbar__menu {\n  display: none;\n  position: absolute;\n  top: 100%;\n  right: 0;\n  margin-top: 4px;\n  min-width: 180px;\n  background: var(--toolbar-bg);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-md);\n  box-shadow: var(--shadow-md);\n  padding: 4px 0;\n  max-height: calc(100dvh - 64px);\n  overflow-y: auto;\n  z-index: 200;\n}\n.ss-toolbar__dropdown--open > .ss-toolbar__menu {\n  display: block;\n}\n.ss-toolbar__menu-item {\n  display: block;\n  width: 100%;\n  padding: 6px 14px;\n  border: none;\n  background: transparent;\n  color: var(--text-secondary);\n  font-weight: 500;\n  font-size: var(--font-size-sm);\n  font-family: var(--font-family);\n  text-align: left;\n  text-decoration: none;\n  cursor: pointer;\n  white-space: nowrap;\n}\n.ss-toolbar__menu-item:hover {\n  background: var(--toolbar-button-hover);\n  color: var(--text-primary);\n}\n.ss-toolbar__menu-item--icon {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n}\n.ss-toolbar__menu-icon {\n  flex-shrink: 0;\n  opacity: 0.7;\n}\n.ss-toolbar__menu-separator {\n  border-top: 1px solid var(--border-color);\n  margin: 4px 0;\n}\n\n.ss-toolbar__divider {\n  width: 1px;\n  height: 20px;\n  background: var(--border-color);\n  margin: 0 var(--spacing-xs);\n}\n.ss-toolbar__spacer {\n  flex: 1 1 auto;\n}\n/* Save and Disconnect, shown only while the tab on screen has a Query Activity open. */\n.ss-toolbar__group {\n  display: inline-flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n}\n.ss-toolbar__group[hidden] {\n  display: none;\n}\n/* Lint findings list, now inside the Status tab of the bottom panel (see\n   .ss-status-panel below); the whole panel scrolls as one unit, so the\n   list itself carries no height cap of its own. */\n/* The Status tab's Show filter: the size of the small buttons next to it. */\n.ss-select--sm {\n  width: auto;\n  height: 24px;\n  padding-top: 0;\n  padding-bottom: 0;\n  font-size: var(--font-size-sm);\n}\n.ss-problem-hidden-note {\n  padding: 3px var(--spacing-md);\n  border-top: 1px solid var(--border-color);\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n}\n.ss-problem {\n  display: flex;\n  gap: var(--spacing-sm);\n  padding: 3px var(--spacing-md);\n  cursor: pointer;\n  border-top: 1px solid var(--border-color);\n  font-size: var(--font-size-sm);\n  align-items: baseline;\n  flex-wrap: wrap;\n}\n.ss-problem:hover {\n  background: var(--bg-hover);\n}\n.ss-problem__loc {\n  color: var(--text-secondary);\n  font-family: var(--font-mono);\n  flex: 0 0 auto;\n}\n.ss-problem__id {\n  color: var(--text-secondary);\n  flex: 0 0 auto;\n}\n.ss-problem__message {\n  flex: 1 1 auto;\n  min-width: 160px;\n}\n/* One-click fix button on a lint row:\n   the neutral small button style, pushed to the row's right edge. A\n   \"changes results\" fix keeps the same neutral look plus a small accent\n   dot; the actual \"changes results\" wording lives only in the title\n   tooltip, never as visible row text. */\n.ss-problem__fix {\n  flex: 0 0 auto;\n  margin-left: auto;\n}\n.ss-problem__fix--changes-results::before {\n  content: '';\n  display: inline-block;\n  width: 6px;\n  height: 6px;\n  margin-right: var(--spacing-xs);\n  border-radius: 50%;\n  background: var(--brand-amber);\n}\n.ss[data-theme=\"light\"] .ss-problem__fix--changes-results::before {\n  background: var(--warning-color);\n}\n/* Beside Fix all, in the panel header: how many fixes it leaves, with the dot their buttons carry. */\n.ss-fix-review-note {\n  display: inline-flex;\n  align-items: center;\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n  white-space: nowrap;\n}\n.ss-fix-review-note::before {\n  content: '';\n  display: inline-block;\n  width: 6px;\n  height: 6px;\n  margin-right: var(--spacing-xs);\n  border-radius: 50%;\n  background: var(--brand-amber);\n}\n.ss[data-theme=\"light\"] .ss-fix-review-note::before {\n  background: var(--warning-color);\n}\n\n/* -------------------------------------------------------------------- */\n/* 7. Editor pane and split resizer                                       */\n/* -------------------------------------------------------------------- */\n.ss-split {\n  display: flex;\n  flex-direction: column;\n  flex: 1 1 auto;\n  min-height: 0;\n}\n/* The resizable column: the query tab strip (fixed height) above the editor pane, which fills\n   whatever is left. The split resizer/applyInitialSplit set this\n   element's height, not .ss-editor-pane's, so the strip's own height never eats into the ratio\n   the user dragged. */\n.ss-editor-column {\n  display: flex;\n  flex-direction: column;\n  flex: 0 0 auto;\n  height: 300px;\n  min-height: 120px;\n}\n.ss-editor-pane {\n  position: relative;\n  flex: 1 1 auto;\n  min-height: 0;\n}\n.ss-editor-container {\n  /* Plain wrapper only: it deliberately does not carry the \"monaco-editor\"\n     class, which would tie with this rule's specificity against Monaco's\n     own editor.main.css (loaded later) and lose the position:absolute. */\n  position: absolute;\n  inset: 0;\n}\n.ss-split-resizer {\n  height: 6px;\n  cursor: row-resize;\n  background: var(--bg-elevated);\n  border-top: 1px solid var(--border-color);\n  border-bottom: 1px solid var(--border-color);\n  flex: 0 0 auto;\n}\n.ss-split-resizer:hover {\n  background: var(--toolbar-button-active);\n}\n\n/* Query tab strip: 4 fixed tabs, always visible with their state, styled\n   after Diagramforce's css/tabs.css. The strip shares the editor's background. The tabs sit in a tinted\n   tray, as Diagramforce's ungrouped tray: an inactive tab shows the tray through it, and the active tab\n   is taller, takes the editor's background and outline, and runs into the editor with no line between. */\n.ss-querytabs {\n  display: flex;\n  align-items: center;\n  height: 36px;\n  padding: 0 4px;\n  background: var(--editor-bg);\n  flex: 0 0 auto;\n}\n.ss-querytabs__tray {\n  display: flex;\n  align-items: stretch;\n  gap: 2px;\n  flex: 1 1 auto;\n  min-width: 0;\n  height: 28px;\n  box-sizing: border-box;\n  padding-right: 3px;\n  border-radius: var(--border-radius-sm);\n  background: color-mix(in srgb, var(--text-muted) 9%, transparent);\n}\n.ss-querytab {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  flex: 1 1 0;\n  min-width: 0;\n  height: 28px;\n  box-sizing: border-box;\n  padding: 4px 10px;\n  border: 1px solid transparent;\n  border-bottom: none;\n  border-radius: var(--border-radius-sm) var(--border-radius-sm) 0 0;\n  background: transparent;\n  color: var(--text-muted);\n  font-size: var(--font-size-sm);\n  font-weight: 500;\n  white-space: nowrap;\n  cursor: pointer;\n  position: relative;\n  overflow: hidden;\n  /* A narrow tab drops the run time first, then the row count, and keeps its icon and name (below). */\n  container-type: inline-size;\n  transition: background var(--transition-fast), color var(--transition-fast);\n}\n.ss-querytab:hover {\n  background: color-mix(in srgb, var(--text-muted) 14%, transparent);\n  color: var(--text-secondary);\n}\n.ss-querytab.is-active {\n  align-self: flex-start;\n  height: 32px;\n  background: var(--editor-bg);\n  color: var(--text-primary);\n  border-color: var(--border-color);\n  font-weight: 600;\n  box-shadow: inset 0 2.5px 0 color-mix(in srgb, var(--text-muted) 30%, transparent);\n  z-index: 1;\n}\n.ss-querytab.is-active:hover {\n  background: color-mix(in srgb, var(--text-primary) 7%, var(--editor-bg));\n}\n/* The state icon at the left edge: a query glyph while idle, a spinner while the run is in flight,\n   a check once done, an error mark after a failure. */\n.ss-querytab__icon {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  width: 12px;\n  height: 12px;\n  flex: 0 0 auto;\n}\n.ss-querytab__icon .ss-icon {\n  width: 12px;\n  height: 12px;\n}\n.ss-querytab__icon--idle {\n  opacity: 0.6;\n}\n.ss-querytab__icon--done {\n  color: var(--brand-green);\n}\n.ss-querytab__icon--failed {\n  color: var(--color-danger);\n}\n.ss-querytab__label {\n  flex: 0 1 auto;\n  min-width: 3em;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  text-align: left;\n}\n/* An idle, never-run tab is muted: its glyph and label fade further. */\n.ss-querytab.is-empty:not(.is-active) .ss-querytab__label {\n  opacity: 0.75;\n}\n.ss-querytab__time {\n  flex: 0 0 auto;\n  font-weight: 500;\n  color: var(--text-muted);\n  font-variant-numeric: tabular-nums;\n}\n/* Unsaved changes to the tab's Query Activity: grey, apart from the orange dot of an unseen finish. */\n.ss-querytab__unsaved {\n  width: 6px;\n  height: 6px;\n  border-radius: 50%;\n  background: var(--text-muted);\n  flex: 0 0 auto;\n}\n.ss-querytab__meta {\n  margin-left: auto;\n  padding-left: 8px;\n  flex: 0 1 auto;\n  min-width: 0;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  font-weight: 500;\n  color: var(--text-muted);\n  font-variant-numeric: tabular-nums;\n}\n.ss-querytab__meta--failed {\n  color: var(--danger-text);\n}\n@container (max-width: 300px) {\n  .ss-querytab__time {\n    display: none;\n  }\n}\n@container (max-width: 190px) {\n  .ss-querytab__meta {\n    display: none;\n  }\n}\n/* A tab that finished or failed while another one was on screen, until it is opened. */\n.ss-querytab__dot {\n  width: 6px;\n  height: 6px;\n  border-radius: 50%;\n  background: var(--color-action);\n  flex: 0 0 auto;\n}\n.ss-editor-fallback {\n  width: 100%;\n  height: 100%;\n  border: none;\n  resize: none;\n  padding: var(--spacing-md);\n  font-family: var(--font-mono);\n  background: var(--editor-bg);\n  color: var(--editor-fg);\n}\n.ss-banner {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  padding: 6px var(--spacing-md);\n  background: var(--tint-warning);\n  color: var(--warning-text);\n  border-bottom: 1px solid var(--border-color);\n  font-size: var(--font-size-sm);\n  flex: 0 0 auto;\n}\n.ss-banner--error {\n  background: var(--tint-danger);\n  color: var(--danger-text);\n}\n.ss-banner__close {\n  margin-left: auto;\n  border: none;\n  background: none;\n  cursor: pointer;\n  color: inherit;\n}\n\n/* -------------------------------------------------------------------- */\n/* 8. Results grid, tabs, inspector                                       */\n/* -------------------------------------------------------------------- */\n.ss-results-pane {\n  display: flex;\n  flex-direction: column;\n  flex: 1 1 auto;\n  min-height: 120px;\n}\n/* Bottom panel header: the Status/Results tabs on the left, the run\n   summary next to them (shown on either tab), then the page filter and\n   Export CSV, shown only while Results is active (UI.setActiveTab). */\n.ss-results-header {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  height: var(--panel-header-height);\n  padding: 0 var(--spacing-md);\n  border-bottom: 1px solid var(--border-color);\n  background: var(--bg-elevated);\n  flex: 0 0 auto;\n  /* Lets the cost beside Export CSV shorten when the header has little room (.ss-export-cost, below). */\n  container-type: inline-size;\n}\n.ss-tabs {\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  flex: 0 0 auto;\n}\n.ss-tab {\n  display: inline-flex;\n  align-items: center;\n  gap: 6px;\n  height: 26px;\n  padding: 0 var(--spacing-sm);\n  border: none;\n  border-radius: var(--border-radius-sm);\n  background: transparent;\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n  font-weight: 600;\n  cursor: pointer;\n}\n.ss-tab:hover {\n  background: var(--toolbar-button-hover);\n}\n.ss-tab[aria-selected=\"true\"] {\n  background: var(--toolbar-button-active);\n  color: var(--color-primary);\n}\n.ss-tab__counts {\n  display: inline-flex;\n  align-items: center;\n  gap: 6px;\n}\n.ss-tab__count {\n  display: inline-flex;\n  align-items: center;\n  gap: 3px;\n  font-size: 11px;\n  font-weight: 600;\n}\n.ss-tab__count::before {\n  content: '';\n  display: inline-block;\n  width: 6px;\n  height: 6px;\n  border-radius: 50%;\n  background: currentColor;\n}\n.ss-tab__count--error {\n  color: var(--danger-text);\n}\n.ss-tab__count--warning {\n  color: var(--warning-text);\n}\n.ss-tab__count--info {\n  color: var(--info-text);\n}\n.ss-run-summary {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n/* The link takes no padding of its own: the summary's gap already spaces it, and since the WSProxy calls got their own\n   number (\"4 API calls · 2 WSProxy\") the summary is 7 px too long for a 1,280 px window with the sidebar open, which\n   the padding of a link button cut off. */\n.ss-run-summary__delete {\n  flex: 0 0 auto;\n  padding-left: 0;\n  padding-right: 0;\n}\n/* The page filter keeps its 180 px: in a tight header the run summary, which ends in an ellipsis, gives up room first,\n   as the cost beside Export CSV (below) takes some. */\n.ss-results-filter {\n  flex: 0 0 auto;\n}\n/* Beside Export CSV: what a click costs, said before the click (UI._syncExportCost). It never shrinks or wraps, so the\n   button stays on screen and the run summary gives up its room first. A header with little room shows the short form,\n   and with less still, nothing. The full text then stays for assistive technology (clipped out of sight, not removed)\n   and in the button's title. The widths are the header's own (its container), as the sidebar takes room from it. */\n.ss-export-cost {\n  position: relative;\n  flex: 0 0 auto;\n  color: var(--text-muted);\n  font-size: var(--font-size-sm);\n  white-space: nowrap;\n}\n.ss-export-cost__short {\n  display: none;\n}\n/* In a header of 1,100 px or less, as at 1,280 px with the sidebar open, the run summary's row count, which the Results tab\n   shows too, and Temp DE, a convenience, give way, so the two call counts and Delete results stay whole. */\n@container (max-width: 1100px) {\n  .ss-run-summary__rows,\n  .ss-run-summary__temp {\n    display: none;\n  }\n}\n@container (max-width: 640px) {\n  .ss-export-cost__full {\n    position: absolute;\n    width: 1px;\n    height: 1px;\n    overflow: hidden;\n    clip: rect(0 0 0 0);\n  }\n  .ss-export-cost__short {\n    display: inline;\n  }\n}\n@container (max-width: 540px) {\n  .ss-export-cost {\n    position: absolute;\n    width: 1px;\n    height: 1px;\n    overflow: hidden;\n    clip: rect(0 0 0 0);\n  }\n}\n/* Export CSV shows an export's progress itself (UI._syncExportButton): a spinner in place of the download icon, and\n   \"Exporting 1,200 of 2,715…\" in place of the label. The label is two layers in one grid cell, the text and a hidden copy of\n   its widest form (.ss-export-btn__sizer), so the button is as wide as the widest text and the header does not move on each\n   update. Tabular numbers make \"1,200\" as wide as \"2,715\". The button is disabled meanwhile, and keeps full strength as\n   Run does while it runs, so it reads as busy rather than as unavailable. */\n.ss-export-btn__label {\n  display: inline-grid;\n  font-variant-numeric: tabular-nums;\n}\n.ss-export-btn__label > * {\n  grid-area: 1 / 1;\n}\n.ss-export-btn__sizer {\n  visibility: hidden;\n}\n.ss-export-btn.is-exporting > svg {\n  display: none;\n}\n.ss-export-btn.is-exporting:disabled,\n.ss-export-btn.is-exporting:disabled:hover {\n  opacity: 1;\n  cursor: progress;\n  background: var(--modal-btn-neutral-bg);\n}\n/* Where an export's progress is announced to a screen reader (aria-live), out of sight. */\n.ss-export-status {\n  position: absolute;\n  width: 1px;\n  height: 1px;\n  overflow: hidden;\n  clip: rect(0 0 0 0);\n  white-space: nowrap;\n}\n/* Status tab content: the lint findings list (.ss-problem, above), then\n   the error panel and the notice lines below it. The whole panel scrolls\n   as one unit; .ss-empty-state (shared with the grid) covers the \"no\n   problems\" case. */\n.ss-status-panel {\n  flex: 1 1 auto;\n  min-height: 0;\n  overflow-y: auto;\n}\n/* An MCE or validation error (red left border, the message, a Details\n   disclosure with the raw response); lives in Status, never in place of\n   the grid. */\n.ss-error-panel {\n  margin: var(--spacing-md);\n  padding: var(--spacing-md);\n  border-left: 3px solid var(--color-danger);\n  background: var(--tint-danger);\n  border-radius: 0 var(--border-radius-sm) var(--border-radius-sm) 0;\n}\n.ss-error-panel__message {\n  white-space: pre-wrap;\n  color: var(--text-primary);\n}\n.ss-error-panel__hint {\n  margin-top: var(--spacing-xs);\n  white-space: pre-wrap;\n  color: var(--text-secondary);\n}\n.ss-error-panel details {\n  margin-top: var(--spacing-sm);\n}\n.ss-error-panel summary {\n  cursor: pointer;\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n}\n.ss-error-panel pre {\n  margin-top: var(--spacing-xs);\n  padding: var(--spacing-sm);\n  background: var(--bg-elevated);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  font-family: var(--font-mono);\n  font-size: var(--font-size-xs);\n  white-space: pre-wrap;\n  word-break: break-word;\n  max-height: 30vh;\n  overflow-y: auto;\n}\n/* Each outcome notice (0 rows returned, sort rejected, setup results) is one muted line, with\n   nothing to dismiss: the next run or Validate in the tab replaces it. */\n.ss-notice {\n  margin: var(--spacing-xs) var(--spacing-md) 0;\n  padding: 2px 0 2px var(--spacing-sm);\n  border-left: 2px solid var(--border-color-strong);\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n}\n.ss-notice:last-child {\n  margin-bottom: var(--spacing-sm);\n}\n/* Results tab content: the grid and pager, hidden while Status is\n   active. */\n.ss-results-panel {\n  display: flex;\n  flex-direction: column;\n  flex: 1 1 auto;\n  min-height: 0;\n}\n.ss-grid-scroll {\n  flex: 1 1 auto;\n  min-width: 0;\n  overflow: auto;\n  position: relative;\n}\n.ss-grid {\n  border-collapse: collapse;\n  table-layout: fixed;\n  font-size: var(--font-size-sm);\n}\n.ss-grid thead th {\n  position: sticky;\n  top: 0;\n  z-index: 2;\n  /* The same tint as before, laid over the app background so the sticky header is opaque:\n     --bg-elevated alone is 8% grey, and scrolled rows showed through it. */\n  background: linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-app);\n  border-bottom: 1px solid var(--border-color-strong);\n  border-right: 1px solid var(--border-color);\n  padding: 0;\n  text-align: left;\n}\n.ss-grid th button.ss-grid__sort {\n  width: 100%;\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  padding: 4px var(--spacing-sm);\n  border: none;\n  background: transparent;\n  cursor: pointer;\n  font-weight: 600;\n  overflow: hidden;\n  white-space: nowrap;\n  text-overflow: ellipsis;\n}\n/* Active sort column gets the --color-action accent. */\n.ss-grid__sort.is-sorted {\n  color: var(--color-action);\n}\n.ss-grid__resize-handle {\n  position: absolute;\n  right: 0;\n  top: 0;\n  bottom: 0;\n  width: 6px;\n  cursor: col-resize;\n}\n.ss-grid td {\n  padding: 3px var(--spacing-sm);\n  border-bottom: 1px solid var(--border-color);\n  border-right: 1px solid var(--border-color);\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  max-width: 480px;\n  cursor: default;\n}\n.ss-grid tbody tr:hover td {\n  background: var(--bg-hover);\n}\n.ss-grid__cell--null {\n  color: var(--text-secondary);\n  font-style: italic;\n}\n.ss-grid__cell--empty {\n  color: var(--text-secondary);\n  font-style: italic;\n}\n.ss-grid__spacer-row td {\n  border: none;\n  padding: 0;\n}\n/* Cell popover: replaces the old\n   inspector pane. Positioned absolutely within .ss (see\n   UI.openCellPopover), closes on Escape or a click outside. */\n.ss-cell-popover {\n  position: absolute;\n  z-index: 120;\n  width: 280px;\n  max-width: 90vw;\n  background: var(--bg-surface);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-md);\n  box-shadow: var(--shadow-dropdown);\n  padding: var(--spacing-sm);\n}\n.ss-cell-popover__value {\n  white-space: pre-wrap;\n  word-break: break-word;\n  font-family: var(--font-mono);\n  background: var(--bg-elevated);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  padding: var(--spacing-sm);\n  margin-bottom: var(--spacing-sm);\n  max-height: 40vh;\n  overflow-y: auto;\n}\n/* Pager, one row under the grid: page\n   size select on the left, prev/range/next centred, \"Page [n] of N\" on the\n   right. No first/last or Go buttons. */\n.ss-pager {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: var(--spacing-sm);\n  padding: var(--spacing-sm) var(--spacing-md);\n  border-top: 1px solid var(--border-color);\n  flex: 0 0 auto;\n  font-size: var(--font-size-sm);\n}\n.ss-pager__left,\n.ss-pager__center,\n.ss-pager__right {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  flex: 1 1 0;\n}\n.ss-pager__center {\n  justify-content: center;\n}\n.ss-pager__right {\n  justify-content: flex-end;\n}\n.ss-pager__range {\n  white-space: nowrap;\n  color: var(--text-secondary);\n}\n.ss-pager__page-input {\n  width: 56px;\n  text-align: center;\n}\n.ss-pager__page-input:focus {\n  border-color: var(--color-action);\n}\n.ss-pager__page-of {\n  color: var(--text-secondary);\n  white-space: nowrap;\n}\n.ss-message-item {\n  padding: var(--spacing-sm);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  margin-bottom: var(--spacing-sm);\n}\n.ss-message-item--error {\n  border-color: var(--color-danger);\n  background: var(--tint-danger);\n}\n.ss-message-item--warning {\n  border-color: var(--warning-color);\n  background: var(--tint-warning);\n}\n.ss-message-item--info {\n  background: var(--bg-elevated);\n}\n.ss-empty-state {\n  padding: var(--spacing-xl);\n  text-align: center;\n  color: var(--text-secondary);\n}\n.ss-empty-state--running {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: var(--spacing-sm);\n}\n.ss-empty-state--running p {\n  margin: 0;\n}\n.ss-empty-state__title {\n  color: var(--text-primary);\n  font-weight: 500;\n}\n\n/* -------------------------------------------------------------------- */\n/* 9. Dialogs, dropdown managers and modal                                */\n/* -------------------------------------------------------------------- */\n.ss-modal-overlay {\n  position: absolute;\n  inset: 0;\n  background: rgba(0, 0, 0, 0.45);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  z-index: 100;\n  padding: var(--spacing-lg);\n}\n.ss-modal {\n  background: var(--bg-surface);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-md);\n  box-shadow: var(--shadow-md);\n  width: 100%;\n  max-width: 480px;\n  max-height: 100%;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n}\n.ss-modal--wide {\n  max-width: 640px;\n}\n.ss-modal__header {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  padding: var(--spacing-md) var(--spacing-lg);\n  border-bottom: 1px solid var(--border-color);\n}\n.ss-modal__title {\n  font-size: var(--font-size-md);\n  font-weight: 700;\n  flex: 1 1 auto;\n}\n.ss-modal__close {\n  border: none;\n  background: none;\n  cursor: pointer;\n  font-size: 16px;\n  color: var(--text-secondary);\n  padding: 4px;\n  border-radius: var(--border-radius-sm);\n}\n.ss-modal__close:hover {\n  background: var(--bg-hover);\n  color: var(--color-primary);\n}\n.ss-modal__body {\n  padding: var(--spacing-sm) var(--spacing-lg);\n  overflow-y: auto;\n  flex: 1 1 auto;\n}\n.ss-modal__status {\n  margin: var(--spacing-sm) 0 0;\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n}\n.ss-modal__status:empty {\n  display: none;\n}\n.ss-modal__footer {\n  display: flex;\n  justify-content: flex-end;\n  gap: var(--spacing-sm);\n  padding: var(--spacing-md) var(--spacing-lg);\n  border-top: 1px solid var(--border-color);\n  flex: 0 0 auto;\n}\n\n/* Dropdown managers (History, Runs, Settings, Help): anchored under their\n   toolbar button, not centred. Plain anchored, with --shadow-dropdown. */\n.ss-dropdown-scrim {\n  position: absolute;\n  inset: 0;\n  z-index: 100;\n  background: transparent;\n}\n.ss-dropdown-mount {\n  position: absolute;\n  z-index: 101;\n}\n/* --toolbar-bg, not --bg-surface: History\n   keeps its own toolbar button and anchored panel, but uses the same menu\n   surface as the Help ss-toolbar__menu. */\n.ss-dropdown-panel {\n  background: var(--toolbar-bg);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-md);\n  box-shadow: var(--shadow-dropdown);\n  width: 300px;\n  max-height: 70vh;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n}\n.ss-dropdown-panel--wide {\n  width: 420px;\n}\n/* About dialog: Diagramforce's df-about layout,\n * translated to ss-. .ss-about is the flex column all its children sit in;\n * .ss-about__separator is the thin full-width rule (there are exactly two:\n * before the links row and before the licence line), and .ss-about__meta /\n * __signed-in / __license are plain centred text rows, not bordered\n * individually, so the muted signed-in line can sit directly under the\n * links row with no rule between them. */\n.ss-about {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  text-align: center;\n  gap: var(--spacing-md);\n  padding: var(--spacing-sm) 0;\n}\n.ss .ss-about__name {\n  margin: 0;\n  font-size: 20px;\n  font-weight: 700;\n  color: var(--text-primary);\n}\n.ss .ss-about__tagline {\n  margin: 2px 0 0;\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n}\n.ss .ss-about__info {\n  margin: 0;\n  max-width: 440px;\n  font-size: 13px;\n  line-height: var(--line-height);\n  color: var(--text-secondary);\n}\n/* Label and value rows, left-aligned in a quiet panel. */\n.ss-about__details {\n  display: grid;\n  grid-template-columns: max-content 1fr;\n  gap: 6px var(--spacing-md);\n  width: 100%;\n  margin: 0;\n  padding: 10px 14px;\n  box-sizing: border-box;\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  background: var(--bg-elevated);\n  text-align: left;\n  font-size: var(--font-size-xs);\n}\n.ss-about__details dt {\n  color: var(--text-muted);\n}\n.ss-about__details dd {\n  margin: 0;\n  color: var(--text-secondary);\n  overflow-wrap: anywhere;\n}\n.ss-about__links {\n  display: flex;\n  flex-wrap: wrap;\n  justify-content: center;\n  gap: var(--spacing-sm);\n}\n.ss-about__pill {\n  padding: 4px 12px;\n  border: 1px solid var(--border-color);\n  border-radius: 14px;\n  color: var(--color-primary);\n  font-size: var(--font-size-xs);\n  text-decoration: none;\n}\n.ss-about__pill:hover {\n  background: var(--bg-hover);\n}\n.ss-about__link {\n  color: var(--color-primary);\n  text-decoration: none;\n}\n.ss-about__link:hover {\n  text-decoration: underline;\n}\n.ss .ss-about__credits {\n  margin: 0;\n  font-size: var(--font-size-xs);\n  color: var(--text-muted);\n  text-align: center;\n}\n.ss .ss-about__credits p {\n  margin: 0 0 2px;\n}\n.ss-about__license {\n  width: 100%;\n  padding-top: var(--spacing-md);\n  border-top: 1px solid var(--border-color);\n  font-size: var(--font-size-xs);\n  color: var(--text-muted);\n}\n.ss .ss-about__license p {\n  margin: 0;\n}\n.ss .ss-about__license p + p {\n  margin-top: 2px;\n}\n.ss-list {\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  max-height: 320px;\n  overflow-y: auto;\n}\n.ss-list-row {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-md);\n  padding: var(--spacing-sm) var(--spacing-md);\n  border-bottom: 1px solid var(--border-color);\n  cursor: pointer;\n}\n.ss-list-row:last-child {\n  border-bottom: none;\n}\n.ss-list-row:hover {\n  background: var(--bg-hover);\n}\n/* The Save As target the user picked. */\n.ss-list-row.is-selected {\n  background: var(--toolbar-button-active);\n}\n.ss-list-row__main {\n  flex: 1 1 auto;\n  min-width: 0;\n  overflow: hidden;\n}\n.ss-list-row__title {\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.ss-list-row__meta {\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.ss-list-row__sql {\n  font-family: var(--font-mono);\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.ss-check-target {\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  padding: var(--spacing-md);\n  margin-top: var(--spacing-sm);\n}\n.ss-check-target table {\n  width: 100%;\n  border-collapse: collapse;\n  font-size: var(--font-size-sm);\n}\n.ss-check-target th, .ss-check-target td {\n  text-align: left;\n  padding: 3px var(--spacing-sm);\n  border-bottom: 1px solid var(--border-color);\n}\n\n/* -------------------------------------------------------------------- */\n/* 10. Toasts                                                            */\n/* -------------------------------------------------------------------- */\n/* Centred just below the toolbar, where the user is looking after pressing a\n   toolbar button, not in a corner. The column lets clicks through between toasts. */\n.ss-toasts {\n  position: absolute;\n  top: calc(var(--toolbar-height) + var(--spacing-md));\n  left: 50%;\n  transform: translateX(-50%);\n  display: flex;\n  flex-direction: column;\n  align-items: stretch;\n  gap: var(--spacing-sm);\n  z-index: 200;\n  width: min(480px, calc(100% - 32px));\n  pointer-events: none;\n}\n.ss-toast {\n  pointer-events: auto;\n  display: flex;\n  align-items: flex-start;\n  gap: var(--spacing-sm);\n  padding: var(--spacing-sm) var(--spacing-md);\n  border-radius: var(--border-radius-sm);\n  border: 1px solid var(--border-color);\n  background: var(--bg-surface-raised);\n  box-shadow: var(--shadow-md);\n}\n.ss-toast--success {\n  border-color: var(--brand-green);\n}\n.ss-toast--error {\n  border-color: var(--color-danger);\n}\n.ss-toast--warning {\n  border-color: var(--warning-color);\n}\n.ss-toast__body {\n  flex: 1 1 auto;\n  font-size: var(--font-size-sm);\n}\n.ss-toast__close {\n  border: none;\n  background: none;\n  cursor: pointer;\n  color: var(--text-secondary);\n}\n\n/* -------------------------------------------------------------------- */\n/* 11. Misc: badges, scrollbars, focus, responsive                       */\n/* -------------------------------------------------------------------- */\n.ss-badge {\n  display: inline-flex;\n  align-items: center;\n  gap: 3px;\n  padding: 1px 6px;\n  border-radius: 10px;\n  font-size: 11px;\n  font-weight: 600;\n  background: var(--bg-elevated);\n  color: var(--text-secondary);\n}\n.ss-badge--error {\n  background: var(--tint-danger);\n  color: var(--danger-text);\n}\n.ss-badge--warning {\n  background: var(--tint-warning);\n  color: var(--warning-text);\n}\n.ss-badge--info {\n  background: var(--tint-info);\n  color: var(--info-text);\n}\n\n.ss * ::-webkit-scrollbar {\n  width: 10px;\n  height: 10px;\n}\n.ss ::-webkit-scrollbar-thumb {\n  background: var(--border-color-strong);\n  border-radius: 6px;\n}\n.ss ::-webkit-scrollbar-track {\n  background: transparent;\n}\n\n@media (max-width: 1023px) {\n  .ss-sidebar {\n    position: absolute;\n    top: 0;\n    bottom: 0;\n    right: 0;\n    z-index: 50;\n    box-shadow: var(--shadow-md);\n  }\n  .ss-sidebar.is-collapsed {\n    display: none;\n  }\n  .ss-sidebar-overlay-bg {\n    display: block;\n    position: absolute;\n    inset: 0;\n    background: rgba(0, 0, 0, 0.3);\n    z-index: 40;\n  }\n}\n\n/* Narrow windows: toolbar buttons drop their labels (icon only) except the primary Run button,\n   so the single-row toolbar never wraps. Titles carry the label for tooltips. */\n@media (max-width: 1100px) {\n  .ss .ss-toolbar__button--secondary > span { display: none; }\n  .ss .ss-toolbar__button--secondary { padding: 4px 6px; }\n}\n@media (max-width: 900px) {\n  .ss .ss-toolbar__button:not(.ss-toolbar__button--primary) > span { display: none; }\n  .ss .ss-toolbar__button:not(.ss-toolbar__button--primary) { padding: 4px 6px; }\n}\n\n/* Menu links look like menu buttons (Diagramforce): text colour, not link colour. */\n.ss a.ss-toolbar__menu-item {\n  color: var(--text-secondary);\n  text-decoration: none;\n}\n.ss a.ss-toolbar__menu-item:hover {\n  color: var(--text-primary);\n}\n";
+window.SQLStudioEmbeddedCss = "/* ==========================================================================\n   SQL Studio styles\n\n   Brand: SQL Studio follows the same design tokens and Lightning-adjacent\n   chrome as its sibling app Diagramforce. The dark tokens\n   are the base, and .ss[data-theme=\"light\"] overrides them. The App picks\n   the theme from the user's choice or the operating system's mode. Everything is scoped under .ss so the app can be\n   dropped into a Cloud Page without leaking styles or claiming <html>.\n\n   Sections:\n   1. Design tokens (brand, semantic, surfaces, sizing, shadows)\n   2. Reset and base\n   3. Layout shell (toolbar-on-top anatomy: header, sidebar, main - no status bar)\n   4. Buttons and form controls\n   5. Sidebar tree and search\n   6. Toolbar, help/theme menu, and problems strip\n   7. Editor pane and split resizer\n   8. Results grid, header, notice, error panel and pager\n   9. Dialogs, dropdown managers and modal\n   10. Toasts\n   11. Misc (badges, scrollbars, focus, responsive)\n   ========================================================================== */\n\n/* -------------------------------------------------------------------- */\n/* 1. Design tokens                                                      */\n/* -------------------------------------------------------------------- */\n.ss {\n  /* Brand (theme-stable) */\n  --brand-blue: #1D73C9;\n  --brand-red: #DA4E55;\n  --brand-amber: #F6B355;\n  --brand-amber-strong: #D4911F;\n  --brand-green: #27AE60;\n\n  /* Semantic: the primary hue flips between themes (deliberate, matches\n     Diagramforce); danger is always the brand red. --color-action is a separate accent hue for the\n     Run button, primary dialog buttons, and results/pager accents - it\n     also flips between themes, but independently of --color-primary. */\n  --color-primary: var(--brand-red);\n  --color-primary-hover: color-mix(in srgb, var(--color-primary) 82%, black);\n  --color-danger: var(--brand-red);\n  --color-accent: var(--brand-amber);\n  --color-action: var(--brand-amber);\n  --color-action-hover: color-mix(in srgb, var(--color-action) 82%, black);\n  --color-action-fg: #1C1E21;\n  --tint-danger: color-mix(in srgb, var(--color-danger) 14%, transparent);\n  --tint-warning: color-mix(in srgb, var(--warning-color, var(--brand-amber)) 16%, transparent);\n  --tint-info: color-mix(in srgb, var(--brand-blue) 14%, transparent);\n  /* The focused completion row and the header strip of its details panel, in both themes: brand blue with white\n     text, which reads at 4.8:1 on it, and the row reads at 4.4:1 against the light list and 3.2:1 against the dark\n     one. The Monaco theme writes the same pair (Editor._registerThemes). The rest of the panel is a card in a light\n     tint of the same blue, under which the note's secondary text keeps 4.5:1 in the light theme. */\n  --focus-band: var(--brand-blue);\n  --focus-band-fg: #FFFFFF;\n  --focus-card: color-mix(in srgb, var(--brand-blue) 8%, transparent);\n  --tint-success: color-mix(in srgb, var(--brand-green) 14%, transparent);\n\n  /* Dark theme surfaces and text (default) */\n  --bg-app: #212121;\n  --bg-surface: #18191A;\n  --bg-surface-raised: #242526;\n  --bg-elevated: rgba(127, 127, 127, 0.08);\n  --bg-hover: rgba(255, 255, 255, 0.10);\n  --text-primary: #F5F6F7;\n  --text-secondary: #B0B3B8;\n  --text-muted: #9CA3AF;\n  --text-inverse: #1C1E21;\n  --border-color: #3A3B3C;\n  --border-color-strong: #4E4F50;\n  --toolbar-bg: #242526;\n  --toolbar-button-hover: rgba(255, 255, 255, 0.10);\n  --toolbar-button-active: rgba(218, 78, 85, 0.15);\n  /* The quick tip (.ss-tip): a step lighter than the sidebar, with a border and a tight shadow that set it off from the rows\n     under it (the author's RC11 test, 2026-10-09: the surface and border colours left it hard to tell from the list). */\n  --tooltip-bg: #333437;\n  --tooltip-fg: var(--text-primary);\n  --tooltip-border: #6A6D72;\n  --shadow-tooltip: 0 4px 14px rgba(0, 0, 0, 0.55);\n  --modal-btn-neutral-bg: #E4E6EB;\n  --modal-btn-neutral-hover: #D2D6DC;\n  --modal-btn-neutral-fg: #1C1E21;\n  /* The severity colours: --warning-color, --color-danger and --brand-blue\n     mark (squiggles, rulers, borders, dots) at 3:1 or more, and the -text\n     variants colour words at 4.5:1 or more on the tints, the active tab and\n     the hovered tab they sit on. The dark theme's error red and info blue are\n     a shade lighter as text. */\n  --warning-color: var(--brand-amber);\n  --warning-text: var(--warning-color);\n  --danger-text: #E89397;\n  --info-text: #73AFEB;\n  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);\n  --shadow-md: 0 5px 40px rgba(0, 0, 0, 0.35);\n  --shadow-lg: 0 12px 28px 0 rgba(0, 0, 0, 0.4), 0 2px 4px 0 rgba(0, 0, 0, 0.2);\n  --shadow-dropdown: 0 14px 24px -10px rgba(0, 0, 0, 0.55);\n\n  /* Editor tokens: keywords/functions use the\n     flipping primary/accent hues, data views stay brand blue in both\n     themes, strings are always green, comments always --text-muted.\n     Each reads at 4.5:1 or more on --editor-bg, which the details\n     panel's code blocks share too: where a brand colour falls short,\n     the token takes the same hue a step lighter here, and a step darker\n     in the light theme below. Dark: the keyword red is #DB545B (the\n     brand red is 4.36:1), the Data View blue #2884E0 (the brand blue\n     is 3.65:1). */\n  --editor-bg: var(--bg-surface);\n  --editor-fg: var(--text-primary);\n  --editor-keyword: #DB545B;\n  --editor-function: var(--brand-amber);\n  --editor-string: var(--brand-green);\n  --editor-identifier: var(--text-primary);\n  --editor-dataview: #2884E0;\n  --editor-comment: var(--text-muted);\n  --editor-operator: #778899;\n\n  /* Sizing and type */\n  --toolbar-height: 50px;\n  --panel-header-height: 45px;\n  --border-radius-sm: 6px;\n  --border-radius-md: 8px;\n  --spacing-xs: 4px;\n  --spacing-sm: 8px;\n  --spacing-md: 12px;\n  --spacing-lg: 16px;\n  --spacing-xl: 24px;\n  --font-family: system-ui, -apple-system, \"Segoe UI\", Roboto, Ubuntu, Cantarell, \"Noto Sans\", sans-serif;\n  --font-mono: ui-monospace, SFMono-Regular, \"SF Mono\", Menlo, Consolas, \"Liberation Mono\", monospace;\n  --font-size-xs: 11px;\n  --font-size-sm: 12px;\n  --font-size-md: 14px;\n  --font-size-lg: 16px;\n  --line-height: 1.65;\n  --logo-data-uri: url(\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAABGdBTUEAALGPC/xhBQAAAERlWElmTU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAQKADAAQAAAABAAAAQAAAAABGUUKwAAABy2lUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iWE1QIENvcmUgNi4wLjAiPgogICA8cmRmOlJERiB4bWxuczpyZGY9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkvMDIvMjItcmRmLXN5bnRheC1ucyMiPgogICAgICA8cmRmOkRlc2NyaXB0aW9uIHJkZjphYm91dD0iIgogICAgICAgICAgICB4bWxuczpleGlmPSJodHRwOi8vbnMuYWRvYmUuY29tL2V4aWYvMS4wLyI+CiAgICAgICAgIDxleGlmOkNvbG9yU3BhY2U+MTwvZXhpZjpDb2xvclNwYWNlPgogICAgICAgICA8ZXhpZjpQaXhlbFhEaW1lbnNpb24+MTk2PC9leGlmOlBpeGVsWERpbWVuc2lvbj4KICAgICAgICAgPGV4aWY6UGl4ZWxZRGltZW5zaW9uPjE5NjwvZXhpZjpQaXhlbFlEaW1lbnNpb24+CiAgICAgIDwvcmRmOkRlc2NyaXB0aW9uPgogICA8L3JkZjpSREY+CjwveDp4bXBtZXRhPgosnlo7AAAMIklEQVR4AeVba2wdxRX+9u7eh31jO7ZjB2xwchMCAURCHhWPQsEhIWlTKlIeKvTxB1X9gUAV/0qlItoK2kogVX0L8SeIP6gtqC0VJLQxSdoqPOI4AkNMXnZiOwlx8OPavs/dfmf2Pnbvrl+xHYN9lPHenZmdme+bc86cmc1qmIRYlhVhtVqmaqZFTGEmnenzJFkOJskUZ/qMqU/TtASv44o2VilBC8htTDsAaz2vjUxRQDN4T/BjPspqcyEWO9VIgpXhj2Gmbt4f5PVVpjdIhpAzOSH4rUz/Y5ovIli2+qH3TCMr/ogVn2YK2g8Is19kKUBME8VT1IRnnWgKpZKZA/+MXeGLDtwJU34XoD7pJKGQS/BbWOt1Js78fAMvBIgouKIJ20nC7kIOwZcR9F5W2Dh/wQtcESHBeo/Xr5CE0YDKA+5eGOAFrVotONGCGcgTcJ/cLDBRmANUfwly1i0w8AJ3nWAXDWCEZzUsPAIU5lohoIaJEd6CE8FcQwIyjO0lvF1oIpgzi0iAEaIJfN42NpdgNgSzERIT+BxubC4Bfjso0j2qr2JA/tH8okFN+JqJKDEXgFqmP1KtEKD6lI9VdnHjKiFAw7njXfjJy+9hRA+7SMhmTTTVV+HpR25DyBCLubgOhVozPoSfvrAHHSMBGE48bNLQA/jZI7ejsa4i14eGVDqDH7+4H73n4zCMAMIhA3VVZbiqsRprV9ZhdVMNysK5vdsUx1VCAFA51IfIBwfREr2Gpx5yxmCLwG09eh7N65tw95di+eyLuva1tODwgQ/RHm1EyKEFFjsJEmAiVexXOjCZ336iD8fP9CuCBKPJylJfyFi+tAKbNy7HjtuuQsMSIU6EhZMQ0WmXWIEAtmW6UKunybauBiSDCjHpuoadu9qRysgAnVPnamKcGw3ZkTj69ryBUCSIEGdb2i5NfhZgj0FX2hcK6ogQeFnYgNQ93juA373aiod//jr+9Pc2jCZlvzO58XkIyJKAK41BfDlzGqlCpGxjEtVvO/op9rR2jQNy/KKBAy3IDnQjQAAzIQJTzEbI6I8n8es/v48fPLcbR0/LqdjEJHgIED+nRXVs00+gikdslk8jLxW0YCoQaPujcQy+uwuhqiC0WVh49YCmiDjYcRbff+4tHOw4MyEJXgJkYGU6lkXiuF3v9mpBMEAtOJfTgokZdlIUP7wX5lAPgtEgAhzsJM1UNSH2ztjdTs5GfX5rRhBGqg/mu88je+ET1hh7nF4CODCjTINWHsD26ElU8SzRLG2Ahjc1LeDsJ4YxfHgXjKgBnacPJdblA8OdFSLx4vDE/oW5RCqDZDqrHKGzZsoMoDE6il/d9AFWR05h6MAfqXkXWMWfBI8higkYEVamL4hpw2jO9OC14RjCcuCaE3GIbcdsX7BVrQgTe9zRjr3ASC+C5Qw8uaSqkCLf4LhXC2GCf/7RZqT5nGjN0GgKR7ouYO/h0zjwUS8SyYwixgafwLMb2nB1xSCSZhjWYA9G2l7GopseJQdeEjwEyMzoigCpHMA91Z1oSTRi2DR45wRq4aU329G8rkmtEGNjYEiVHMbox7sRiEh31C6TyaN747TAgV9ZX+mqsHZlPR5sXo3WT87iN39txX/azyC2OIVfbDiEVZUDSGZtJ6MZYaROHUCq6VaEGjawDScGH0WUgemcJElWSENsURybKukLqFpOkRXh8PFzePvQKWZ7mXXWTRzfB3O4VxEQYLsa28UUfYA9cBm8O61btRR/eGILHv3qSjy95j2sqiiCz49BfEfiyD8ZPMgrA7e4UbFM48D0MNd8bhMkgene+lOoNlIeXyBD2fnmh7m4wN2wfcfZTw0jcfQttexpEvbRfAJBasD4nPk1NkaemIiOx791C9asuQEJ+oVS0fQgMn0dSJ/vYJG7Yy8BLM9rgNIC2t+Kyji2LOnx1YJDx86h5VCXp+H8IJIn9yEb74Emzov/ZBOqiHCPI1/9Iq8yFQYia74LvYJnO6aXBCubQar7HU/7HgKEIE1myJGynLV7G7pQHeSKYHlHLr7AGx3K7MeROMbZp7mIacnar9Z/2xV4BjO9DEYs4UpErt7KlcFLgBYwkPn0CKxsytWNPwFUVZmlfDIZacUqh7Glvpda4CZAfMEhrggtyhe42kaycz+yg920d0HOf3kSNNuO5e9MS6hxIwJlfIfr2GOoPti5OcLYQC2JxV59CVBbNGWvHHXuKpzefwPPkCrCaiNSbML+9ZL4goL9FW1fK91xc2D6ohrolZdTVcfYDpc2Pul7i462GkZVE/GXaAGdjpVJKBKczXkIEOeUV1XnNaOZWNVUja/fskIFIM5GJC4o9QXJTtr+EGdf6byjtplGcPmdDLTqmFkySEe16fzUK5dSe2kSDi1WfidAwtPy4rgo3jiAZaKqJc5SrT5ZLicPbVqNf+zvQJzBiApnC23Z0WHz+mUImqPK84vduYS2GYjWIxJrJvYDrqKZvIl36ejbn+Zq455fM52CEeMENBZ7KxkhC3K26k8AD0XqothOLZDlT3ZgeSloQVsvttS0K9uXIMQp4okjK5qhRaroqGZa/Ys9xU8Mor89xeW8mCe/TB6sLB2lP3KIm6J8AUlQBJRec+UP33UtaiojPr4ggJ2vv4MLH+2i3yuSox5Ttl+P8Io7c63MxoUDpl9J9narGKbUBCQSDVZXuTr2J8BVxXvTtLSSvmCljy/Q0HZyEHuPWQyPhb2iWLT9sMx+eDEzZ8P/230lensx0tlF+y+ZABJjRKMI14nvKcpFESCPKy2ooBbIeZVT6PRe6VyORIZrfz5fZp9OLxy7M58za9dP/92CzNAQNbjQu+rLzGYRabicGiD/zakoF0mABdGCe3y0IEhP+8Fni7HvbB2PvGwvb8/+Ji5Rszn7GkY7O3HujTfp/PIHpEWgYhpVN67lojQZH+B4bryfD22+FrW+vgB45WSTrQX0/HqUs0/1nz3RkBkYwPHf/t6efW7lXcLVSy8vR/UtN7uy5aakpqd8nAxqAbeoX7uZcUHJKW5BC87VI8QzpXBMZl+cT4m5jNP65IpEzTUkunvQ8cwvEf/4iO/sm6k0Fm9Yj/LlyzxjKPEUk+vWWevbm6/D3/57TB1IBhx2l6Zv2PnxZbj1iiTqZmT23TYtY5BZP//2PvS++hpS589zx8m9dqlQ9fXyCC6/75sskTbckzBNAmxf8NiOG3GIB5ByjO6UbLYR/SvuQP00Z98iiIH3W3mkPqKaT/f3Y+TECQx92I7EmbPKrn3Bs7aZSqHxvh2IXrWSd27w0tg0CZAmLDy8+XqV5M5fvB371/PLZQzPAKbzhRcxevq07cRo0zKbstSNBVxaMhNJLN64AQ0P3O/XsMqbAQKknekAHHNsrgKNnl3AlnpxVyXHjZlMYtE1VyP2+GMIhCUk9B/jDBHg6Hmuf1I7BHzl2jVY+cQPEaqV///hD16GOq8IMNPcADEEv+wb9+CK732Hx+9y/j42+HlBgDhIi8DFNCqvvw4NDz6AqnU3CjbK+OClhlcDGLZaWf7HarUnliq2WJkUDxnkpePMiLzUGOV5ftYRSotvy/L0WU5xS0W8uah20Qdo9Al8wVpbi4rrVqP2jjsY6a1huUDyPl/aXv7eQ0CgfAki12xneUmMxCNlozqWf27a1+0MoG6ILVFvnAuNcdwBRnGLuccoCg82eCRXv3ULMv0DPFjVua6XIVRTg0hjI8quvAJGRf6VuDw1efBSWyPbm3j9l9zYD3sDDrss/3dqHeSf8l6n2s949ac6pkJbd4kGcMciDeQzp9qYF9rkcqbaz1TrTzQKhTkrei4GPzuHcxONYU7LFeakEMBTQvWZyZwO59J3bn9aIwTIu2P3UemlH81c9CiYLwgBfTSBnrkYwdz2qTD3cQerPi1rndvBzEnvrYJdNEDkL/ZlQf1VmPME7KIjlM9IFgADglGwgphz4R5VYZTgn+Q9Y935TILCJhjlyzFidsS7zNjN+6ckc36SUJhY+XZQsCrJm4C6YYF8VOjQhMJDdu0v5F/BkJ95uL4ZHBMO9wcL99PZPCskQc6Rch9Pgx9PW42852cm6usS9+ln/qG5v8q+JvfxtMZ385jw4+lJ6TjJkP0pP65yfj7Pd18+xwlzw4FgNmQ/w33N1D6f/z9nGYh4iZaoUAAAAABJRU5ErkJggg==\");\n  --transition-fast: 150ms ease;\n  --transition-normal: 400ms cubic-bezier(0.08, 0.52, 0.52, 1);\n\n  color-scheme: dark;\n  background: var(--bg-app);\n  color: var(--text-primary);\n}\n\n.ss[data-theme=\"light\"] {\n  --color-primary: var(--brand-blue);\n  --color-primary-hover: color-mix(in srgb, var(--color-primary) 85%, black);\n  --color-action: var(--brand-blue);\n  --color-action-hover: color-mix(in srgb, var(--color-action) 85%, black);\n  --color-action-fg: #FFFFFF;\n\n  --bg-app: #F5F6F7;\n  --bg-surface: #FFFFFF;\n  --bg-surface-raised: #FFFFFF;\n  --bg-elevated: rgba(127, 127, 127, 0.08);\n  --bg-hover: rgba(0, 0, 0, 0.06);\n  --text-primary: #1C1E21;\n  --text-secondary: #606770;\n  --text-muted: #65707B;\n  --text-inverse: #FFFFFF;\n  --border-color: #DADDE1;\n  --border-color-strong: #BEC3C9;\n  --toolbar-bg: #FFFFFF;\n  --toolbar-button-hover: rgba(0, 0, 0, 0.06);\n  --toolbar-button-active: rgba(53, 120, 229, 0.12);\n  --tooltip-bg: #FFFFFF;\n  --tooltip-fg: var(--text-primary);\n  --tooltip-border: #A9AFB6;\n  --shadow-tooltip: 0 4px 14px rgba(0, 0, 0, 0.16);\n  --modal-btn-neutral-bg: #E4E6EB;\n  --modal-btn-neutral-hover: #D2D6DC;\n  --modal-btn-neutral-fg: #1C1E21;\n  /* The light theme's severity colours: the warning amber a shade darker\n     than the strong one, which marked at 2.67:1 on white, and every -text\n     variant a shade darker again, for 4.5:1 as text. */\n  --warning-color: #B47B1A;\n  --warning-text: #825913;\n  --danger-text: #B9272E;\n  --info-text: #1962AC;\n  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.1);\n  --shadow-md: 0 5px 40px rgba(0, 0, 0, 0.12);\n  --shadow-lg: 0 12px 28px 0 rgba(0, 0, 0, 0.2), 0 2px 4px 0 rgba(0, 0, 0, 0.1);\n  --shadow-dropdown: 0 14px 24px -10px rgba(0, 0, 0, 0.18);\n\n  /* The light theme's editor tokens at 4.5:1 or more on white: the keyword\n     and Data View blue as they are, the amber a step darker than the\n     strong one (2.67:1), the green a step darker than the brand green\n     (2.87:1), the operator grey a step darker than Monaco's (3.64:1), and\n     the second bracket pair's green a step darker than Monaco's (3.93:1). */\n  --editor-keyword: var(--color-primary);\n  --editor-function: #9E6C17;\n  --editor-string: #1E864A;\n  --editor-dataview: var(--brand-blue);\n  --editor-operator: #667788;\n  --editor-bracket-2: #2D872D;\n\n  color-scheme: light;\n}\n\n/* -------------------------------------------------------------------- */\n/* 2. Reset and base                                                     */\n/* -------------------------------------------------------------------- */\n.ss, .ss * {\n  box-sizing: border-box;\n}\n.ss {\n  position: relative;\n  display: flex;\n  flex-direction: column;\n  /* The viewport, not 100%: the Cloud Page gives html, body and #sqlstudio no height, so a\n     percentage resolved to auto there and the app grew with its content (a 100-row page made\n     it about 3,000px tall, scrolling the whole page instead of the grid). */\n  height: 100vh;\n  min-height: 640px;\n  font-family: var(--font-family);\n  font-size: var(--font-size-sm);\n  line-height: var(--line-height);\n}\n/* :where() keeps this reset at zero specificity, so every component's own\n   color rule (.ss-btn, .ss-toolbar__button, .ss-tab, ...) always wins\n   without needing !important or selector-weight tricks. */\n:where(.ss button, .ss input, .ss select, .ss textarea) {\n  font-family: inherit;\n  font-size: inherit;\n  color: inherit;\n}\n/* A page without a doctype renders in quirks mode, where tables do not inherit\n   the text colour or font: the results grid came out black on the dark theme\n   on the first org deployment. */\n:where(.ss table) {\n  color: inherit;\n  font-size: inherit;\n  font-weight: inherit;\n  font-style: inherit;\n  line-height: inherit;\n}\n.ss a {\n  color: var(--color-primary);\n}\n.ss svg {\n  fill: currentColor;\n}\n.ss :focus-visible {\n  outline: 2px solid var(--color-primary);\n  outline-offset: 1px;\n}\n.ss ul {\n  margin: 0;\n  padding: 0;\n  list-style: none;\n}\n.ss h1, .ss h2, .ss h3, .ss p {\n  margin: 0;\n}\n\n/* -------------------------------------------------------------------- */\n/* 3. Layout shell                                                       */\n/* -------------------------------------------------------------------- */\n.ss-toolbar__brand {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  text-decoration: none;\n  white-space: nowrap;\n  flex: 0 0 auto;\n  padding: 0 var(--spacing-xs);\n}\n.ss-toolbar__brand-logo {\n  width: 32px;\n  height: 32px;\n  flex: 0 0 auto;\n  border-radius: var(--border-radius-sm);\n  background-image: var(--logo-data-uri);\n  background-size: contain;\n  background-repeat: no-repeat;\n  background-position: center;\n}\n.ss-toolbar__brand-name {\n  font-size: 16px;\n  font-weight: 700;\n  letter-spacing: -0.3px;\n  color: var(--color-primary);\n}\n.ss-about-logo {\n  width: 64px;\n  height: 64px;\n  border-radius: var(--border-radius-md);\n  background-image: var(--logo-data-uri);\n  background-size: contain;\n  background-repeat: no-repeat;\n  background-position: center;\n}\n.ss-header__actions {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n}\n\n.ss-body {\n  display: flex;\n  flex: 1 1 auto;\n  min-height: 0;\n  position: relative;\n}\n\n.ss-sidebar {\n  display: flex;\n  flex-direction: column;\n  width: 280px;\n  min-width: 240px;\n  max-width: 480px;\n  flex: 0 0 auto;\n  position: relative;\n  border-left: 1px solid var(--border-color); /* the sidebar sits on the right, like Diagramforce's stencil */\n  background: var(--bg-elevated);\n  overflow: hidden;\n}\n.ss-sidebar.is-collapsed {\n  width: 0 !important;\n  min-width: 0;\n  border-left: none;\n}\n.ss-sidebar__resizer {\n  position: absolute;\n  top: 0;\n  bottom: 0;\n  left: 0;\n  width: 6px;\n  cursor: col-resize;\n  z-index: 5;\n}\n.ss-sidebar__search {\n  position: relative;\n  display: flex;\n  align-items: center;\n  height: var(--panel-header-height);\n  padding: 0 var(--spacing-sm);\n  border-bottom: 1px solid var(--border-color);\n}\n.ss-sidebar__search .ss-input {\n  padding-right: 26px;\n}\n.ss-sidebar__search-clear {\n  position: absolute;\n  right: 14px;\n  top: 50%;\n  transform: translateY(-50%);\n  border: none;\n  background: none;\n  padding: 2px;\n  color: var(--text-secondary);\n  cursor: pointer;\n  border-radius: var(--border-radius-sm);\n}\n.ss-sidebar__search-clear:hover {\n  color: var(--color-primary);\n  background: var(--bg-hover);\n}\n.ss-sidebar__tree {\n  flex: 1 1 auto;\n  overflow-y: auto;\n  overflow-x: hidden;\n  padding: var(--spacing-xs) 0;\n}\n.ss-tree__section-title {\n  padding: var(--spacing-sm) var(--spacing-md) 2px var(--spacing-sm);\n  font-size: var(--font-size-sm);\n  font-weight: 700;\n  color: var(--text-primary);\n  text-transform: uppercase;\n  letter-spacing: 0.03em;\n}\n/* What is under a section title starts one indent step in from it, as a folder's children do from the\n   folder, so the title reads as the outermost level: the title's caret is at the sidebar's left padding, a\n   top-level row's caret one step in and a subfolder's another. */\n.ss-tree__section-body {\n  padding-left: var(--spacing-lg);\n}\n/* The lines in a section body (the hint, a group title, a message, the footer) start in line with the carets\n   of its rows, not a step further in. */\n.ss-tree__section-body > .ss-tree__hint,\n.ss-tree__section-body > .ss-tree__group-title,\n.ss-tree__section-body > .ss-tree__empty,\n.ss-tree__section-body > .ss-tree__loading,\n.ss-tree__section-body > .ss-tree__list-status {\n  padding-left: var(--spacing-sm);\n}\n/* A section title as a button: pressing it collapses or expands the section, as a Data View group's\n   caret does. It keeps the title's type, and adds the caret and a hover. */\n.ss-tree__section-toggle {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  width: 100%;\n  border: none;\n  background: none;\n  line-height: var(--line-height);\n  text-align: left;\n  cursor: pointer;\n}\n.ss-tree__section-toggle:hover {\n  background: var(--bg-hover);\n}\n.ss-tree__section-caret {\n  flex: 0 0 auto;\n  width: 14px;\n  text-align: center;\n  color: var(--text-secondary);\n}\n/* The Snippets title holds its toggle and its save button side by side, as a table row holds its toggle and its actions, so\n   no control sits inside another. The toggle fills the row and the save button keeps the right end. */\n.ss-tree__section-head {\n  display: flex;\n  align-items: center;\n  padding-right: var(--spacing-xs);\n}\n.ss-tree__section-head > .ss-tree__section-toggle {\n  flex: 1 1 auto;\n  width: auto;\n  min-width: 0;\n}\n/* The app's own tooltip (UI._wireTips), for elements with a data-tip: it comes sooner than a title's. */\n.ss-tip {\n  position: absolute;\n  z-index: 300;\n  max-width: min(420px, calc(100% - 16px));\n  /* Its line breaks and the SQL's indentation are kept, as a snippet's and a tab's tip show SQL. */\n  white-space: pre-wrap;\n  tab-size: 4;\n  overflow-wrap: anywhere;\n  padding: 4px 8px;\n  border: 1px solid var(--tooltip-border);\n  border-radius: var(--border-radius-sm);\n  background: var(--tooltip-bg);\n  box-shadow: var(--shadow-tooltip);\n  font-size: var(--font-size-xs);\n  color: var(--tooltip-fg);\n  pointer-events: none;\n}\n.ss-tip[hidden] {\n  display: none;\n}\n/* The reload icon of a section's title turns while its list loads (UI._renderReloadButton). */\n.ss-tree__section-action.is-busy svg {\n  animation: ss-spin 0.8s linear infinite;\n}\n/* A line of a section's list state, under its hint: the pages of a first load, a list that stops short, a reload that failed. */\n.ss-tree__list-status {\n  padding: 2px var(--spacing-md) var(--spacing-xs);\n  color: var(--text-muted);\n  font-size: 11px;\n}\n.ss-tree__section-head > .ss-tree__section-action {\n  margin-top: var(--spacing-xs);\n}\n/* The section titles dock (1.2.0, the author's RC3 test, 2026-10-08: the Snippets section was out of sight below a long Data\n   Extension list until the others were collapsed). Each sticks to the top of the sidebar's scroll while its section scrolls\n   by, below the titles before it, and to the bottom while its section is further down, above the titles after it, so every\n   title is always in sight. Each title is one height (--ss-dock-h, the height the title had already), and\n   UI._dockSectionTitles gives each the number of titles above and below it, so they stack without a gap or an overlap,\n   whatever the sidebar's state when the tree is drawn. The background covers the rows that scroll under them: the sidebar's\n   own --bg-elevated is a see-through grey over the app's --bg-app, so the title lays the same two on each other. */\n.ss-tree__dock {\n  --ss-dock-h: 30px;\n  position: sticky;\n  z-index: 2;\n  /* Less the scroll's own padding, which sticky offsets start inside: rows showed through that strip above the top title. */\n  top: calc(var(--ss-dock-h) * var(--ss-dock-above, 0) - var(--spacing-xs));\n  bottom: calc(var(--ss-dock-h) * var(--ss-dock-below, 0) - var(--spacing-xs));\n  box-sizing: border-box;\n  height: var(--ss-dock-h);\n  background: linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-app);\n}\n/* The Data Views title is its own toggle, with no head around it: its hover lays --bg-hover over the same two, as the hover's\n   see-through grey alone let the rows under it show through (the author's RC10 test, 2026-10-09). */\n.ss-tree__dock.ss-tree__section-toggle:hover {\n  background: linear-gradient(var(--bg-hover), var(--bg-hover)), linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-app);\n}\n/* The line under a snippet's name in its dialog: what is saved, and who sees it. */\n.ss-snippet-note {\n  margin: var(--spacing-sm) 0;\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n}\n/* The SQL a new snippet saves, in the dialog that asks for its name: monospace, its lines kept, as tall as a dozen of them\n   before it scrolls. */\n.ss-snippet-preview {\n  max-height: 14em;\n  margin: 0;\n  padding: var(--spacing-sm);\n  overflow: auto;\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  background: var(--bg-app);\n  color: var(--text-primary);\n  font-family: var(--font-mono);\n  font-size: 12px;\n  white-space: pre;\n  user-select: text;\n  -webkit-user-select: text;\n}\n/* The line above the Data Extension tree that gives the totals and says to search. */\n.ss-tree__hint {\n  padding: 2px var(--spacing-md) var(--spacing-xs);\n  color: var(--text-muted);\n  font-size: 11px;\n}\n/* A folder of the Data Extension tree reads heavier than the Data Extensions beside it, which have no count. */\n.ss-tree__folder--de > .ss-tree__name {\n  font-weight: 600;\n}\n/* The made-up group of the Data Extensions in no loaded folder reads in italics, so it does not pass\n   for a real folder of that name. */\n.ss-tree__folder--made-up > .ss-tree__name {\n  font-style: italic;\n}\n/* The number of Data Extensions below a folder, at the right end of its row. */\n.ss-tree__count {\n  flex: 0 0 auto;\n  color: var(--text-muted);\n  font-size: 11px;\n}\n/* The \"Show N more\" button under a folder's first Data Extensions, in line with their names. It is\n   a .ss-tree__link too, which comes later in this file, hence the two classes. */\n.ss-tree__link.ss-tree__more {\n  display: block;\n  padding: 3px var(--spacing-sm) 3px 26px;\n  text-align: left;\n}\n/* Inline text link inside a sidebar/Save As hint row (Retry on a failed\n   Data Extension list load, Reload in the list-loaded footer). */\n.ss-tree__link {\n  display: inline;\n  border: none;\n  background: none;\n  padding: 0;\n  color: var(--color-primary);\n  cursor: pointer;\n  font: inherit;\n}\n.ss-tree__link:hover {\n  text-decoration: underline;\n}\n/* Shared DE name prefix, replacing the old SHARED badge. */\n.ss-tree__ent-prefix {\n  color: var(--text-muted);\n}\n/* A parent Business Unit Data Extension's folder path, on its own line under its row, in line with the name. */\n.ss-tree__path {\n  padding: 0 var(--spacing-sm) 3px 26px;\n  color: var(--text-muted);\n  font-size: 11px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n/* The \"Parent BU\" heading above the parent's shared and synchronized Data Extensions in a search. */\n.ss-tree__group-title {\n  padding: var(--spacing-sm) var(--spacing-md) 2px;\n  color: var(--text-secondary);\n  font-size: 11px;\n  font-weight: 700;\n  text-transform: uppercase;\n  letter-spacing: 0.03em;\n}\n.ss-sidebar-overlay-bg {\n  display: none;\n}\n\n.ss-main {\n  display: flex;\n  flex-direction: column;\n  flex: 1 1 auto;\n  min-width: 0;\n  min-height: 0;\n}\n\n/* -------------------------------------------------------------------- */\n/* 4. Buttons and form controls                                          */\n/* -------------------------------------------------------------------- */\n/* Neutral dialog/modal button: used for\n   Cancel and other non-primary actions in modals and dropdown panels. */\n.ss-btn {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  gap: var(--spacing-xs);\n  height: 28px;\n  padding: 0 var(--spacing-md);\n  border: 1px solid transparent;\n  border-radius: var(--border-radius-sm);\n  background: var(--modal-btn-neutral-bg);\n  color: var(--modal-btn-neutral-fg);\n  cursor: pointer;\n  white-space: nowrap;\n  line-height: 1;\n  transition: background-color var(--transition-fast);\n}\n.ss-btn:hover {\n  background: var(--modal-btn-neutral-hover);\n}\n.ss-btn:disabled {\n  opacity: 0.35;\n  cursor: not-allowed;\n}\n.ss-btn--primary {\n  background: var(--color-action);\n  border-color: var(--color-action);\n  color: var(--color-action-fg);\n}\n.ss-btn--primary:hover {\n  background: var(--color-action-hover);\n  border-color: var(--color-action-hover);\n}\n.ss-btn--icon {\n  width: 28px;\n  padding: 0;\n}\n.ss-btn--sm {\n  height: 24px;\n  padding: 0 var(--spacing-sm);\n  font-size: var(--font-size-sm);\n}\n.ss-btn--link {\n  border-color: transparent;\n  background: transparent;\n  color: var(--color-primary);\n  text-decoration: underline;\n}\n.ss-btn--link:hover {\n  background: transparent;\n  color: var(--color-primary-hover);\n}\n\n.ss-field {\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n  margin-bottom: var(--spacing-md);\n}\n.ss-label {\n  font-size: var(--font-size-sm);\n  font-weight: 600;\n  color: var(--text-secondary);\n}\n.ss-hint {\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n}\n/* The History dialog's line on where its entries are kept, between the search box and the list. */\n.ss .ss-history__where {\n  margin: 6px 0 8px;\n}\n.ss-input, .ss-select, .ss-textarea {\n  height: 30px;\n  padding: 0 var(--spacing-sm);\n  border: 1px solid var(--border-color-strong);\n  border-radius: var(--border-radius-sm);\n  background: var(--bg-surface-raised);\n  color: var(--text-primary);\n  width: 100%;\n}\n.ss-textarea {\n  height: auto;\n  padding: var(--spacing-sm);\n  resize: vertical;\n  font-family: var(--font-mono);\n}\n.ss-input:focus, .ss-select:focus, .ss-textarea:focus {\n  border-color: var(--color-primary);\n}\n.ss-radio-group {\n  display: flex;\n  flex-direction: column;\n  gap: var(--spacing-sm);\n}\n/* Three equal cards in one row (Save As update type). */\n.ss-radio-group--row {\n  flex-direction: row;\n}\n.ss-radio-group--row .ss-radio-option {\n  flex: 1 1 0;\n}\n.ss-radio-option {\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  padding: var(--spacing-sm);\n  cursor: pointer;\n  transition: border-color var(--transition-fast), outline-color var(--transition-fast);\n}\n.ss-radio-option.is-selected {\n  border-color: var(--color-action);\n  outline: 2px solid var(--color-action);\n  outline-offset: -1px;\n}\n.ss-radio-option strong {\n  display: block;\n}\n.ss-radio-option span {\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n}\n\n/* -------------------------------------------------------------------- */\n/* 5. Sidebar tree and search                                            */\n/* -------------------------------------------------------------------- */\n.ss-tree__row {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  padding: 3px var(--spacing-sm);\n  cursor: pointer;\n  border-radius: var(--border-radius-sm);\n  white-space: nowrap;\n  overflow: hidden;\n}\n.ss-tree__row:hover {\n  background: var(--bg-hover);\n}\n/* A table row holds its toggle and its actions side by side, so no control sits inside another. The\n   toggle, which opens and closes the fields, fills the row and has the row's padding, so its arrow and\n   name sit where a folder row has them and a click anywhere on the name's side of the row hits it. The\n   row does not clip, so the toggle's focus outline shows in full, as a focused row's did: the toggle cuts\n   the name short itself.\n   The actions, Insert name and Insert table query (SELECT with all fields), sit at the right end of the row. They take\n   no width of their own: hidden, they leave the whole row to the name, and shown, while the row is\n   hovered or the keyboard's focus is on its toggle or on one of them, they lie over the end of the row on\n   its own background (the sidebar's, made opaque, with the hover tint on a hovered row). So a long name\n   is cut only while they show, and nothing in the row moves. Their left edge fades, so what they cover\n   fades out instead of breaking off (the mask's colour only gives its opacity). Hidden, they stay in the\n   tab order and take no click. */\n.ss-tree__row--table {\n  position: relative;\n  padding: 0;\n  overflow: visible;\n}\n.ss-tree__toggle {\n  display: flex;\n  flex: 1 1 auto;\n  align-items: center;\n  gap: 4px;\n  min-width: 0;\n  padding: 3px var(--spacing-sm);\n  border-radius: var(--border-radius-sm);\n  overflow: hidden;\n}\n.ss-tree__actions {\n  position: absolute;\n  top: 0;\n  right: 0;\n  bottom: 0;\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  padding: 0 var(--spacing-xs) 0 var(--spacing-md);\n  /* The row's own corners, as the row does not clip them. */\n  border-top-right-radius: inherit;\n  border-bottom-right-radius: inherit;\n  background: linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-app);\n  -webkit-mask-image: linear-gradient(to right, transparent, var(--bg-app) var(--spacing-md));\n  mask-image: linear-gradient(to right, transparent, var(--bg-app) var(--spacing-md));\n  opacity: 0;\n  pointer-events: none;\n}\n.ss-tree__row:hover > .ss-tree__actions,\n.ss-field-item:hover > .ss-tree__actions {\n  background: linear-gradient(var(--bg-hover), var(--bg-hover)), linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-app);\n}\n.ss-tree__row:hover > .ss-tree__actions,\n.ss-tree__toggle:focus-visible ~ .ss-tree__actions,\n.ss-field-item:hover > .ss-tree__actions,\n.ss-field-row:focus-visible ~ .ss-tree__actions,\n.ss-tree__actions:focus-within {\n  opacity: 1;\n  pointer-events: auto;\n}\n/* One action: the toolbar icon-button style, scaled to 24px for the sidebar tree. */\n.ss-tree__action {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  flex: 0 0 auto;\n  width: 24px;\n  height: 24px;\n  padding: 0;\n  border: none;\n  border-radius: var(--border-radius-sm);\n  background: transparent;\n  color: var(--text-secondary);\n  cursor: pointer;\n  transition: background-color var(--transition-fast), color var(--transition-fast);\n}\n.ss-tree__action:hover {\n  background: var(--toolbar-button-hover);\n  color: var(--color-primary);\n}\n/* An action that is off, such as Join to the query while the query has no table: dimmed, with its title saying why. */\n.ss-tree__action:disabled {\n  opacity: 0.4;\n  cursor: default;\n}\n.ss-tree__action:disabled:hover {\n  background: transparent;\n  color: var(--text-secondary);\n}\n.ss-tree__caret {\n  flex: 0 0 auto;\n  width: 14px;\n  text-align: center;\n  color: var(--text-secondary);\n  background: none;\n  border: none;\n  padding: 0;\n  cursor: pointer;\n}\n.ss-tree__name {\n  flex: 1 1 auto;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n/* Object-kind marker: DE, SHARED, VIEW, QUERY. */\n.ss-type-badge {\n  flex: 0 0 auto;\n  font-size: 10px;\n  font-weight: 700;\n  text-transform: uppercase;\n  letter-spacing: 0.02em;\n  color: var(--color-primary);\n  border: 1px solid currentColor;\n  border-radius: 2px;\n  padding: 0 3px;\n}\n/* A badge in a folder tree row: smaller type and less space around it, so the name keeps the room. */\n.ss-type-badge--compact {\n  font-size: 9px;\n  letter-spacing: 0;\n  padding: 0 2px;\n}\n.ss-tree__children {\n  padding-left: var(--spacing-lg);\n}\n.ss-tree__fields {\n  padding-left: var(--spacing-xl);\n}\n/* A field holds its row and its Insert name button side by side, as a table row holds its toggle and its\n   actions: the button lies over the end of the row while the field is hovered or the keyboard's focus is\n   on the row or on the button, and takes no width while hidden. The hover tint is the holder's, so it\n   stays while the pointer is on the button. */\n.ss-field-item {\n  position: relative;\n  border-radius: var(--border-radius-sm);\n}\n.ss-field-item:hover {\n  background: var(--bg-hover);\n}\n.ss-field-row {\n  display: flex;\n  align-items: baseline;\n  gap: 6px;\n  padding: 2px var(--spacing-sm);\n  cursor: pointer;\n  border-radius: var(--border-radius-sm);\n  overflow: hidden;\n}\n/* A field row is shorter than a table row: its button fits it. */\n.ss-field-item .ss-tree__action {\n  width: 20px;\n  height: 20px;\n}\n.ss-field-row__name {\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.ss-field-row__type {\n  flex: 0 0 auto;\n  color: var(--text-secondary);\n  font-size: 11px;\n  font-family: var(--font-mono);\n}\n/* The primary key's mark: the SLDS key icon, as tall as the field's text, in the warning text colour, which reads at\n   4.5:1 on the sidebar in both themes. */\n.ss-field-row__key {\n  display: inline-flex;\n  flex: 0 0 auto;\n  align-self: center;\n  color: var(--warning-text);\n}\n.ss-field-row__key .ss-icon {\n  width: 12px;\n  height: 12px;\n}\n.ss-tree__empty, .ss-tree__loading {\n  padding: var(--spacing-md);\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n}\n/* A hint line in a dialog's list (\"Loading...\", \"Could not load: ...\"), padded as the list's empty and loading rows are. */\n.ss-list > .ss-hint {\n  padding: var(--spacing-md);\n}\n\n/* -------------------------------------------------------------------- */\n/* 6. Toolbar and problems strip                                         */\n/* -------------------------------------------------------------------- */\n/* Toolbar, sidebar tree and tab labels are controls, not text: a drag or a select-all never paints\n   them. The query, the grid, the Status messages and the run summary stay selectable. */\n.ss-toolbar,\n.ss-sidebar__tree,\n.ss-tab {\n  -webkit-user-select: none;\n  user-select: none;\n}\n\n.ss-toolbar {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n  height: var(--toolbar-height);\n  padding: 0 var(--spacing-sm);\n  background: var(--toolbar-bg);\n  border-bottom: 1px solid var(--border-color);\n  flex: 0 0 auto;\n  flex-wrap: nowrap;\n  min-width: 0;\n  overflow: visible;\n}\n.ss-icon {\n  width: 16px;\n  height: 16px;\n  flex: 0 0 auto;\n  fill: currentColor;\n}\n/* Toolbar buttons: transparent by default, icon (16px) + label. Run is the one filled/primary button. */\n.ss-toolbar__button {\n  display: inline-flex;\n  align-items: center;\n  gap: 5px;\n  min-height: 32px;\n  padding: var(--spacing-xs) 10px;\n  border: none;\n  border-radius: var(--border-radius-sm);\n  background: transparent;\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n  font-weight: 500;\n  white-space: nowrap;\n  cursor: pointer;\n  transition: background-color var(--transition-fast), color var(--transition-fast);\n}\n.ss-toolbar__button:hover {\n  background: var(--toolbar-button-hover);\n  color: var(--color-primary);\n}\n.ss-toolbar__button.is-active,\n.ss-toolbar__button[aria-expanded=\"true\"] {\n  background: var(--toolbar-button-active);\n  color: var(--color-primary);\n}\n.ss-toolbar__button:disabled {\n  opacity: 0.35;\n  cursor: not-allowed;\n}\n.ss-toolbar__button:disabled:hover {\n  background: transparent;\n  color: var(--text-secondary);\n}\n.ss-toolbar__button--primary {\n  background: var(--color-action);\n  color: var(--color-action-fg);\n}\n.ss-toolbar__button--primary:hover {\n  background: var(--color-action-hover);\n  color: var(--color-action-fg);\n}\n/* Focus rings on primary controls use --color-action too: amber in dark mode, blue in light mode, same as their fill. */\n.ss-toolbar__button--primary:focus-visible,\n.ss-btn--primary:focus-visible {\n  outline-color: var(--color-action);\n}\n.ss-toolbar__button--icon-only {\n  padding: var(--spacing-xs);\n  min-width: 32px;\n  justify-content: center;\n}\n/* Run while a run is in flight: a spinner in place of the play icon, at full\n   strength rather than the faded disabled look, so it reads as busy. */\n.ss-toolbar__button--primary.is-running:disabled,\n.ss-toolbar__button--primary.is-running:disabled:hover {\n  opacity: 1;\n  cursor: progress;\n  background: var(--color-action);\n  color: var(--color-action-fg);\n}\n/* Validate while Marketing Cloud Engagement checks the query: busy, not faded. */\n.ss-toolbar__button.is-running:disabled {\n  opacity: 1;\n  cursor: progress;\n}\n.ss-toolbar__button.is-running > svg {\n  display: none;\n}\n.ss-toolbar__button.is-running::before {\n  content: '';\n  width: 14px;\n  height: 14px;\n  box-sizing: border-box;\n  border: 2px solid currentColor;\n  border-right-color: transparent;\n  border-radius: 50%;\n  animation: ss-spin 0.8s linear infinite;\n  flex: 0 0 auto;\n}\n\n/* Monaco's hovers and suggestion details can sit outside .ss, so these rules are not scoped\n   to it. Tables there inherit the hover's colour and size, even in quirks mode, and read as a\n   compact list rather than bold oversized headers. */\n.monaco-hover table,\n.suggest-details table {\n  border-collapse: collapse;\n  margin: 4px 0;\n  color: inherit;\n  font-size: inherit;\n  line-height: inherit;\n}\n.monaco-hover th,\n.monaco-hover td,\n.suggest-details th,\n.suggest-details td {\n  padding: 1px 16px 1px 0;\n  text-align: left;\n  vertical-align: top;\n}\n.monaco-hover th,\n.suggest-details th {\n  font-weight: 600;\n  opacity: 0.7;\n  border-bottom: 1px solid rgba(128, 128, 128, 0.35);\n}\n\n/* Off-site links end with the arrow mateuszdabrowski.pl uses. Inline-block keeps the link's\n   underline off it. Monaco's hovers and suggestion details can sit outside .ss. */\n.monaco-hover a::after,\n.suggest-details a::after,\n.ss a[target=\"_blank\"]:not(.ss-btn):not(.ss-toolbar__brand)::after {\n  content: '\\2197';\n  display: inline-block;\n  margin-left: 0.3em;\n  font-size: 0.85em;\n  opacity: 0.6;\n  text-decoration: none;\n}\n\n/* The suggestion details panel and its list (Monaco's suggest widget, set up by Editor._watchSuggestDetails in\n   sqlstudio.js). The widget and the panel sit inside .ss, so the tokens reach them. The script says where the panel\n   is against the list with data-ss-details on both: right, left or below. */\n/* The border-box rule of the reset above reaches Monaco's own boxes. It sizes the panel by its content, so the panel\n   gets Monaco's content-box back, and its two border lines no longer cut off the last 2px of its text. */\n.ss .suggest-details {\n  box-sizing: content-box;\n}\n/* The tie between the focused row and the panel: the row's band (the theme's editorSuggestWidget.selectedBackground,\n   the same blue as --focus-band) goes on over the panel's header strip, and the panel has no border on the side that\n   faces the list. Monaco lays the panel 1px over the list's border on that side, so with no border of its own the\n   panel covers it, and the row and the strip meet with no line between them. At the list's left, Monaco stops the\n   panel 1px short of that border, so the panel moves 1px over it. */\n.ss .suggest-details-container[data-ss-details=\"right\"] .suggest-details {\n  border-left-width: 0;\n}\n.ss .suggest-details-container[data-ss-details=\"left\"] .suggest-details {\n  position: relative;\n  left: 1px;\n  border-right-width: 0;\n}\n.ss .suggest-details-container[data-ss-details=\"below\"] .suggest-details {\n  border-top-width: 0;\n}\n/* The card: Monaco keeps the panel at the list's top, wherever the focused row is, so the rest of the panel takes a\n   light tint of the band's blue, and the whole panel reads as the focused row's own. */\n.ss .suggest-details > .monaco-scrollable-element {\n  background: var(--focus-card);\n}\n/* The close button sits on the header strip in every panel, so it takes the strip's text colour. The selectors are as\n   long as Monaco's own, which load later and would win a tie. */\n.ss .suggest-details > .monaco-scrollable-element > .body > .header > .codicon-close,\n.ss .suggest-details > .monaco-scrollable-element > .body > .header > .codicon-close::before {\n  color: var(--focus-band-fg);\n}\n/* The header strip of any other item: Monaco's own header line, with the item's detail at full opacity, or, for an\n   item with none, the first line of its text, which runs under the close button to the panel's edge. */\n.ss .suggest-details:not(.no-type):not(.ss-join-details) > .monaco-scrollable-element > .body > .header {\n  color: var(--focus-band-fg);\n  background: var(--focus-band);\n}\n.ss .suggest-details:not(.no-type):not(.ss-join-details) > .monaco-scrollable-element > .body > .header > .type {\n  opacity: 1;\n}\n.ss .suggest-details.no-type:not(.ss-join-details) > .monaco-scrollable-element > .body > .docs.markdown-docs {\n  margin-right: 0;\n}\n.ss .suggest-details.no-type:not(.ss-join-details) > .monaco-scrollable-element > .body > .docs.markdown-docs > .rendered-markdown > p:first-child {\n  margin: -4px -5px 0;\n  padding: 4px 29px 4px 5px;\n  color: var(--focus-band-fg);\n  background: var(--focus-band);\n}\n/* A code block in any panel has the editor's own background, so its tokens read as they do in the editor. */\n.ss .suggest-details .rendered-markdown > div {\n  margin: 4px 0;\n  padding: 4px 8px;\n  border-radius: var(--border-radius-sm);\n  background: var(--editor-bg);\n}\n/* A recommended join (class set by the script): its label in bold on the first line, the key columns under it,\n   the SQL it writes in a block, and the note last, smaller and in the secondary text colour, which keeps 4.5:1 on\n   the card. The label takes the place of the panel's own header line, which would only repeat the key columns, so\n   the header keeps its close button alone. The label and the key columns are the header strip, out to the panel's\n   edges, the label clear of the close button. */\n.ss .suggest-details.ss-join-details .header > .type {\n  display: none;\n}\n.ss .suggest-details.ss-join-details > .monaco-scrollable-element > .body > .docs.markdown-docs > .rendered-markdown > p:first-child {\n  margin: -4px -5px 0;\n  padding: 4px 25px 2px 5px;\n  color: var(--focus-band-fg);\n  background: var(--focus-band);\n}\n.ss .suggest-details.ss-join-details > .monaco-scrollable-element > .body > .docs.markdown-docs > .rendered-markdown > p:nth-child(2) {\n  margin: 0 -5px 6px;\n  padding: 0 5px 6px;\n  color: var(--focus-band-fg);\n  font-size: var(--font-size-sm);\n  background: var(--focus-band);\n}\n.ss .suggest-details.ss-join-details .rendered-markdown > div {\n  margin: 6px 0;\n  padding: 6px 8px;\n}\n.ss .suggest-details.ss-join-details .rendered-markdown > div ~ p {\n  margin: 6px 0 0;\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n  line-height: 1.5;\n}\n\n/* Run summary parts that open a breakdown (UI.showHint): after a short hover, on focus, or pinned\n   by a click. */\n.ss-run-summary__hint {\n  text-decoration: underline dotted;\n  text-underline-offset: 3px;\n  cursor: help;\n}\n.ss-run-summary__hint:focus-visible {\n  outline: 2px solid var(--color-action);\n  outline-offset: 2px;\n}\n/* Temp DE when it links to Contact Builder: a click goes there instead of pinning the hint. It keeps the summary's own colour and\n   dotted underline, as the other parts with a hover do, so it does not read as a second red link beside Delete results. */\n.ss a.ss-run-summary__link {\n  cursor: pointer;\n  color: inherit;\n}\n/* The run summary's card (UI.showHint), with the quick tip's look. Only the card: as first written for every .ss-hint, the rule hid the\n   hint lines of the dialogs too, such as History's line on where it is kept and \"Could not load: ...\" (the author's RC12 test, 2026-10-09). */\n.ss-hint[role=\"tooltip\"] {\n  display: none;\n  position: absolute;\n  z-index: 150;\n  max-width: 380px;\n  padding: 10px 12px;\n  border: 1px solid var(--tooltip-border);\n  border-radius: var(--border-radius-sm);\n  background: var(--tooltip-bg);\n  box-shadow: var(--shadow-tooltip);\n  font-size: var(--font-size-xs);\n  color: var(--text-secondary);\n}\n.ss .ss-hint__title {\n  margin: 0 0 4px;\n  font-weight: 600;\n  color: var(--text-primary);\n}\n.ss .ss-hint__title:not(:first-child) {\n  margin-top: 10px;\n}\n/* The run's total split between calls through the API and through WSProxy, above the two tables. */\n.ss .ss-hint__split {\n  margin: 0 0 6px;\n  color: var(--text-primary);\n}\n.ss .ss-hint__line {\n  margin: 2px 0;\n}\n.ss-hint__table {\n  border-collapse: collapse;\n  width: 100%;\n}\n.ss-hint__table td {\n  padding: 2px 0;\n  vertical-align: top;\n}\n.ss-hint__table td + td {\n  padding-left: 16px;\n  text-align: right;\n  white-space: nowrap;\n  color: var(--text-primary);\n}\n/* The Status tab's first line during a run. */\n.ss-status-run-note {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  padding: var(--spacing-sm) var(--spacing-md);\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n  border-bottom: 1px solid var(--border-color);\n}\n\n/* Update notice: a small outlined pill next to the theme toggle. */\n.ss-update-badge {\n  margin-right: var(--spacing-sm);\n  padding: 2px 10px;\n  border: 1px solid var(--color-action);\n  border-radius: 12px;\n  background: transparent;\n  color: var(--color-action);\n  font-size: 12px;\n  font-weight: 600;\n  white-space: nowrap;\n  cursor: pointer;\n}\n.ss-update-badge:hover {\n  background: var(--color-action);\n  color: var(--color-action-fg);\n}\n.ss .ss-update-list {\n  margin: var(--spacing-sm) 0;\n  padding-left: 18px;\n  list-style: disc;\n}\n/* A link that looks like a button takes the button's text colour: `.ss a` gave it the link red, on the neutral grey and on the\n   amber of a primary button alike, in the update dialog's \"All changes\" and \"Update guide\" (the author, 2026-10-05). A link-style\n   button keeps the link colour it asks for. */\n.ss a.ss-btn {\n  text-decoration: none;\n  color: var(--modal-btn-neutral-fg);\n}\n.ss a.ss-btn.ss-btn--primary {\n  color: var(--color-action-fg);\n}\n.ss a.ss-btn.ss-btn--link {\n  color: var(--color-primary);\n}\n.ss .ss-update-list li {\n  margin: 4px 0;\n}\n\n/* Spinner. One turn takes 0.8 s: SPINNER_TURN_MS in sqlstudio.js must match. */\n@keyframes ss-spin {\n  to { transform: rotate(360deg); }\n}\n.ss-spinner {\n  display: inline-block;\n  width: 12px;\n  height: 12px;\n  box-sizing: border-box;\n  border: 2px solid currentColor;\n  border-right-color: transparent;\n  border-radius: 50%;\n  animation: ss-spin 0.8s linear infinite;\n  flex: 0 0 auto;\n}\n@media (prefers-reduced-motion: reduce) {\n  .ss-spinner,\n  .ss-toolbar__button.is-running::before {\n    animation: none;\n  }\n}\n\n/* Theme toggle icon: Diagramforce's\n   moon/sun swap, translated from df- to ss- and scoped to .ss. */\n.ss svg.ss-toolbar__icon--theme,\n.ss svg.ss-toolbar__icon--theme * {\n  /* Diagramforce draws the moon and sun as wire icons; the generic `.ss svg { fill }` rule must not apply. */\n  fill: none;\n  stroke: currentColor;\n  stroke-width: 2;\n  stroke-linecap: round;\n  stroke-linejoin: round;\n}\n.ss-toolbar__icon--theme {\n  width: 18px;\n  height: 18px;\n  fill: none;\n  stroke: currentColor;\n  stroke-width: 2;\n  stroke-linecap: round;\n  stroke-linejoin: round;\n}\n.ss[data-theme=\"dark\"] .ss-icon-sun { display: none; }\n.ss[data-theme=\"dark\"] .ss-icon-moon { display: inline; }\n.ss[data-theme=\"light\"] .ss-icon-sun { display: inline; }\n.ss[data-theme=\"light\"] .ss-icon-moon { display: none; }\n/* The system icon's right half is solid, which the wire-icon rule above would clear. */\n.ss svg.ss-toolbar__icon--theme .ss-icon-system__half { fill: currentColor; }\n.ss .ss-icon-system { display: none; }\n.ss[data-theme-choice=\"system\"] .ss-icon-sun,\n.ss[data-theme-choice=\"system\"] .ss-icon-moon { display: none; }\n.ss[data-theme-choice=\"system\"] .ss-icon-system { display: inline; }\n\n/* Help menu: Diagramforce's\n   ss-toolbar__menu, absolute under its button rather than the centred\n   dropdown-manager system (History keeps that; see section 9). */\n.ss-toolbar__dropdown {\n  position: relative;\n}\n.ss-toolbar__menu {\n  display: none;\n  position: absolute;\n  top: 100%;\n  right: 0;\n  margin-top: 4px;\n  min-width: 180px;\n  background: var(--toolbar-bg);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-md);\n  box-shadow: var(--shadow-md);\n  padding: 4px 0;\n  max-height: calc(100dvh - 64px);\n  overflow-y: auto;\n  z-index: 200;\n}\n.ss-toolbar__dropdown--open > .ss-toolbar__menu {\n  display: block;\n}\n.ss-toolbar__menu-item {\n  display: block;\n  width: 100%;\n  padding: 6px 14px;\n  border: none;\n  background: transparent;\n  color: var(--text-secondary);\n  font-weight: 500;\n  font-size: var(--font-size-sm);\n  font-family: var(--font-family);\n  text-align: left;\n  text-decoration: none;\n  cursor: pointer;\n  white-space: nowrap;\n}\n.ss-toolbar__menu-item:hover {\n  background: var(--toolbar-button-hover);\n  color: var(--text-primary);\n}\n.ss-toolbar__menu-item--icon {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n}\n.ss-toolbar__menu-icon {\n  flex-shrink: 0;\n  opacity: 0.7;\n}\n.ss-toolbar__menu-separator {\n  border-top: 1px solid var(--border-color);\n  margin: 4px 0;\n}\n\n.ss-toolbar__divider {\n  width: 1px;\n  height: 20px;\n  background: var(--border-color);\n  margin: 0 var(--spacing-xs);\n}\n.ss-toolbar__spacer {\n  flex: 1 1 auto;\n}\n/* Save and Disconnect, shown only while the tab on screen has a Query Activity open. */\n.ss-toolbar__group {\n  display: inline-flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n}\n.ss-toolbar__group[hidden] {\n  display: none;\n}\n/* Lint findings list, now inside the Status tab of the bottom panel (see\n   .ss-status-panel below); the whole panel scrolls as one unit, so the\n   list itself carries no height cap of its own. */\n/* The Status tab's Show filter: the size of the small buttons next to it. */\n.ss-select--sm {\n  width: auto;\n  height: 24px;\n  padding-top: 0;\n  padding-bottom: 0;\n  font-size: var(--font-size-sm);\n}\n.ss-problem-hidden-note {\n  padding: 3px var(--spacing-md);\n  border-top: 1px solid var(--border-color);\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n}\n.ss-problem {\n  display: flex;\n  gap: var(--spacing-sm);\n  padding: 3px var(--spacing-md);\n  cursor: pointer;\n  border-top: 1px solid var(--border-color);\n  font-size: var(--font-size-sm);\n  align-items: baseline;\n  flex-wrap: wrap;\n}\n.ss-problem:hover {\n  background: var(--bg-hover);\n}\n.ss-problem__loc {\n  color: var(--text-secondary);\n  font-family: var(--font-mono);\n  flex: 0 0 auto;\n}\n.ss-problem__id {\n  color: var(--text-secondary);\n  flex: 0 0 auto;\n}\n.ss-problem__message {\n  flex: 1 1 auto;\n  min-width: 160px;\n}\n/* One-click fix button on a lint row:\n   the neutral small button style, pushed to the row's right edge. A\n   \"changes results\" fix keeps the same neutral look plus a small accent\n   dot; the actual \"changes results\" wording lives only in the title\n   tooltip, never as visible row text. */\n.ss-problem__fix {\n  flex: 0 0 auto;\n  margin-left: auto;\n}\n.ss-problem__fix--changes-results::before {\n  content: '';\n  display: inline-block;\n  width: 6px;\n  height: 6px;\n  margin-right: var(--spacing-xs);\n  border-radius: 50%;\n  background: var(--brand-amber);\n}\n.ss[data-theme=\"light\"] .ss-problem__fix--changes-results::before {\n  background: var(--warning-color);\n}\n/* Beside Fix all, in the panel header: how many fixes it leaves, with the dot their buttons carry. */\n.ss-fix-review-note {\n  display: inline-flex;\n  align-items: center;\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n  white-space: nowrap;\n}\n.ss-fix-review-note::before {\n  content: '';\n  display: inline-block;\n  width: 6px;\n  height: 6px;\n  margin-right: var(--spacing-xs);\n  border-radius: 50%;\n  background: var(--brand-amber);\n}\n.ss[data-theme=\"light\"] .ss-fix-review-note::before {\n  background: var(--warning-color);\n}\n\n/* -------------------------------------------------------------------- */\n/* 7. Editor pane and split resizer                                       */\n/* -------------------------------------------------------------------- */\n.ss-split {\n  display: flex;\n  flex-direction: column;\n  flex: 1 1 auto;\n  min-height: 0;\n}\n/* The resizable column: the query tab strip (fixed height) above the editor pane, which fills\n   whatever is left. The split resizer/applyInitialSplit set this\n   element's height, not .ss-editor-pane's, so the strip's own height never eats into the ratio\n   the user dragged. */\n.ss-editor-column {\n  display: flex;\n  flex-direction: column;\n  flex: 0 0 auto;\n  height: 300px;\n  min-height: 120px;\n}\n.ss-editor-pane {\n  position: relative;\n  flex: 1 1 auto;\n  min-height: 0;\n}\n.ss-editor-container {\n  /* Plain wrapper only: it deliberately does not carry the \"monaco-editor\"\n     class, which would tie with this rule's specificity against Monaco's\n     own editor.main.css (loaded later) and lose the position:absolute. */\n  position: absolute;\n  inset: 0;\n}\n.ss-split-resizer {\n  height: 6px;\n  cursor: row-resize;\n  background: var(--bg-elevated);\n  border-top: 1px solid var(--border-color);\n  border-bottom: 1px solid var(--border-color);\n  flex: 0 0 auto;\n}\n.ss-split-resizer:hover {\n  background: var(--toolbar-button-active);\n}\n\n/* Query tab strip: 4 fixed tabs, always visible with their state, styled\n   after Diagramforce's css/tabs.css. The strip shares the editor's background. The tabs sit in a tinted\n   tray, as Diagramforce's ungrouped tray: an inactive tab shows the tray through it, and the active tab\n   is taller, takes the editor's background and outline, and runs into the editor with no line between. */\n.ss-querytabs {\n  display: flex;\n  align-items: center;\n  height: 36px;\n  padding: 0 4px;\n  background: var(--editor-bg);\n  flex: 0 0 auto;\n}\n.ss-querytabs__tray {\n  display: flex;\n  align-items: stretch;\n  gap: 2px;\n  flex: 1 1 auto;\n  min-width: 0;\n  height: 28px;\n  box-sizing: border-box;\n  padding-right: 3px;\n  border-radius: var(--border-radius-sm);\n  background: color-mix(in srgb, var(--text-muted) 9%, transparent);\n}\n.ss-querytab {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  flex: 1 1 0;\n  min-width: 0;\n  height: 28px;\n  box-sizing: border-box;\n  padding: 4px 10px;\n  border: 1px solid transparent;\n  border-bottom: none;\n  border-radius: var(--border-radius-sm) var(--border-radius-sm) 0 0;\n  background: transparent;\n  color: var(--text-muted);\n  font-size: var(--font-size-sm);\n  font-weight: 500;\n  white-space: nowrap;\n  cursor: pointer;\n  position: relative;\n  overflow: hidden;\n  /* A narrow tab drops the run time first, then the row count, and keeps its icon and name (below). */\n  container-type: inline-size;\n  transition: background var(--transition-fast), color var(--transition-fast);\n}\n.ss-querytab:hover {\n  background: color-mix(in srgb, var(--text-muted) 14%, transparent);\n  color: var(--text-secondary);\n}\n.ss-querytab.is-active {\n  align-self: flex-start;\n  height: 32px;\n  background: var(--editor-bg);\n  color: var(--text-primary);\n  border-color: var(--border-color);\n  font-weight: 600;\n  box-shadow: inset 0 2.5px 0 color-mix(in srgb, var(--text-muted) 30%, transparent);\n  z-index: 1;\n}\n.ss-querytab.is-active:hover {\n  background: color-mix(in srgb, var(--text-primary) 7%, var(--editor-bg));\n}\n/* The state icon at the left edge: a query glyph while idle, a spinner while the run is in flight,\n   a check once done, an error mark after a failure. */\n.ss-querytab__icon {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  width: 12px;\n  height: 12px;\n  flex: 0 0 auto;\n}\n.ss-querytab__icon .ss-icon {\n  width: 12px;\n  height: 12px;\n}\n.ss-querytab__icon--idle {\n  opacity: 0.6;\n}\n.ss-querytab__icon--done {\n  color: var(--brand-green);\n}\n.ss-querytab__icon--failed {\n  color: var(--color-danger);\n}\n.ss-querytab__label {\n  flex: 0 1 auto;\n  min-width: 3em;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  text-align: left;\n}\n/* An idle, never-run tab is muted: its glyph and label fade further. */\n.ss-querytab.is-empty:not(.is-active) .ss-querytab__label {\n  opacity: 0.75;\n}\n.ss-querytab__time {\n  flex: 0 0 auto;\n  font-weight: 500;\n  color: var(--text-muted);\n  font-variant-numeric: tabular-nums;\n}\n/* Unsaved changes to the tab's Query Activity: grey, apart from the orange dot of an unseen finish. */\n.ss-querytab__unsaved {\n  width: 6px;\n  height: 6px;\n  border-radius: 50%;\n  background: var(--text-muted);\n  flex: 0 0 auto;\n}\n.ss-querytab__meta {\n  margin-left: auto;\n  padding-left: 8px;\n  flex: 0 1 auto;\n  min-width: 0;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  font-weight: 500;\n  color: var(--text-muted);\n  font-variant-numeric: tabular-nums;\n}\n.ss-querytab__meta--failed {\n  color: var(--danger-text);\n}\n@container (max-width: 300px) {\n  .ss-querytab__time {\n    display: none;\n  }\n}\n@container (max-width: 190px) {\n  .ss-querytab__meta {\n    display: none;\n  }\n}\n/* A tab that finished or failed while another one was on screen, until it is opened. */\n.ss-querytab__dot {\n  width: 6px;\n  height: 6px;\n  border-radius: 50%;\n  background: var(--color-action);\n  flex: 0 0 auto;\n}\n.ss-editor-fallback {\n  width: 100%;\n  height: 100%;\n  border: none;\n  resize: none;\n  padding: var(--spacing-md);\n  font-family: var(--font-mono);\n  background: var(--editor-bg);\n  color: var(--editor-fg);\n}\n.ss-banner {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  padding: 6px var(--spacing-md);\n  background: var(--tint-warning);\n  color: var(--warning-text);\n  border-bottom: 1px solid var(--border-color);\n  font-size: var(--font-size-sm);\n  flex: 0 0 auto;\n}\n.ss-banner--error {\n  background: var(--tint-danger);\n  color: var(--danger-text);\n}\n.ss-banner__close {\n  margin-left: auto;\n  border: none;\n  background: none;\n  cursor: pointer;\n  color: inherit;\n}\n\n/* -------------------------------------------------------------------- */\n/* 8. Results grid, tabs, inspector                                       */\n/* -------------------------------------------------------------------- */\n.ss-results-pane {\n  display: flex;\n  flex-direction: column;\n  flex: 1 1 auto;\n  min-height: 120px;\n}\n/* Bottom panel header: the Status/Results tabs on the left, the run\n   summary next to them (shown on either tab), then the page filter and\n   Export CSV, shown only while Results is active (UI.setActiveTab). */\n.ss-results-header {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  height: var(--panel-header-height);\n  padding: 0 var(--spacing-md);\n  border-bottom: 1px solid var(--border-color);\n  background: var(--bg-elevated);\n  flex: 0 0 auto;\n  /* Lets the cost beside Export CSV shorten when the header has little room (.ss-export-cost, below). */\n  container-type: inline-size;\n}\n.ss-tabs {\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  flex: 0 0 auto;\n}\n.ss-tab {\n  display: inline-flex;\n  align-items: center;\n  gap: 6px;\n  height: 26px;\n  padding: 0 var(--spacing-sm);\n  border: none;\n  border-radius: var(--border-radius-sm);\n  background: transparent;\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n  font-weight: 600;\n  cursor: pointer;\n}\n.ss-tab:hover {\n  background: var(--toolbar-button-hover);\n}\n.ss-tab[aria-selected=\"true\"] {\n  background: var(--toolbar-button-active);\n  color: var(--color-primary);\n}\n.ss-tab__counts {\n  display: inline-flex;\n  align-items: center;\n  gap: 6px;\n}\n.ss-tab__count {\n  display: inline-flex;\n  align-items: center;\n  gap: 3px;\n  font-size: 11px;\n  font-weight: 600;\n}\n.ss-tab__count::before {\n  content: '';\n  display: inline-block;\n  width: 6px;\n  height: 6px;\n  border-radius: 50%;\n  background: currentColor;\n}\n.ss-tab__count--error {\n  color: var(--danger-text);\n}\n.ss-tab__count--warning {\n  color: var(--warning-text);\n}\n.ss-tab__count--info {\n  color: var(--info-text);\n}\n.ss-run-summary {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n/* The link takes no padding of its own: the summary's gap already spaces it, and since the WSProxy calls got their own\n   number (\"4 API calls · 2 WSProxy\") the summary is 7 px too long for a 1,280 px window with the sidebar open, which\n   the padding of a link button cut off. */\n.ss-run-summary__delete {\n  flex: 0 0 auto;\n  padding-left: 0;\n  padding-right: 0;\n}\n/* The page filter keeps its 180 px: in a tight header the run summary, which ends in an ellipsis, gives up room first,\n   as the cost beside Export CSV (below) takes some. */\n.ss-results-filter {\n  flex: 0 0 auto;\n}\n/* Beside Export CSV: what a click costs, said before the click (UI._syncExportCost). It never shrinks or wraps, so the\n   button stays on screen and the run summary gives up its room first. A header with little room shows the short form,\n   and with less still, nothing. The full text then stays for assistive technology (clipped out of sight, not removed)\n   and in the button's title. The widths are the header's own (its container), as the sidebar takes room from it. */\n.ss-export-cost {\n  position: relative;\n  flex: 0 0 auto;\n  color: var(--text-muted);\n  font-size: var(--font-size-sm);\n  white-space: nowrap;\n}\n.ss-export-cost__short {\n  display: none;\n}\n/* In a header of 1,100 px or less, as at 1,280 px with the sidebar open, the run summary's row count, which the Results tab\n   shows too, and Temp DE, a convenience, give way, so the two call counts and Delete results stay whole. */\n@container (max-width: 1100px) {\n  .ss-run-summary__rows,\n  .ss-run-summary__temp {\n    display: none;\n  }\n}\n@container (max-width: 640px) {\n  .ss-export-cost__full {\n    position: absolute;\n    width: 1px;\n    height: 1px;\n    overflow: hidden;\n    clip: rect(0 0 0 0);\n  }\n  .ss-export-cost__short {\n    display: inline;\n  }\n}\n@container (max-width: 540px) {\n  .ss-export-cost {\n    position: absolute;\n    width: 1px;\n    height: 1px;\n    overflow: hidden;\n    clip: rect(0 0 0 0);\n  }\n}\n/* Export CSV shows an export's progress itself (UI._syncExportButton): a spinner in place of the download icon, and\n   \"Exporting 1,200 of 2,715…\" in place of the label. The label is two layers in one grid cell, the text and a hidden copy of\n   its widest form (.ss-export-btn__sizer), so the button is as wide as the widest text and the header does not move on each\n   update. Tabular numbers make \"1,200\" as wide as \"2,715\". The button is disabled meanwhile, and keeps full strength as\n   Run does while it runs, so it reads as busy rather than as unavailable. */\n.ss-export-btn__label {\n  display: inline-grid;\n  font-variant-numeric: tabular-nums;\n}\n.ss-export-btn__label > * {\n  grid-area: 1 / 1;\n}\n.ss-export-btn__sizer {\n  visibility: hidden;\n}\n.ss-export-btn.is-exporting > svg {\n  display: none;\n}\n.ss-export-btn.is-exporting:disabled,\n.ss-export-btn.is-exporting:disabled:hover {\n  opacity: 1;\n  cursor: progress;\n  background: var(--modal-btn-neutral-bg);\n}\n/* Save to DE, beside Export CSV (UI._syncSaveButton). The header has room for its label only when it is wider than 1,280 px, which\n   is a window of about 1,560 px with the sidebar open. Below that it is the icon alone, 24 px wide, which keeps the run summary's\n   Delete results, the cost and Export CSV whole at 1,280 px with the sidebar open (the label stays for assistive technology, clipped\n   out of sight, and in the title). A header of 640 px or less has no room for the run summary, which was already cut to nothing,\n   so it goes, with the spacer that pushed the controls right, and the button and Export CSV fit as before. */\n.ss-save-btn {\n  position: relative;\n  flex: 0 0 auto;\n}\n@container (max-width: 1280px) {\n  .ss-save-btn {\n    width: 24px;\n    padding: 0;\n  }\n  .ss-save-btn__label {\n    position: absolute;\n    width: 1px;\n    height: 1px;\n    overflow: hidden;\n    clip: rect(0 0 0 0);\n  }\n}\n@container (max-width: 640px) {\n  .ss-results-header .ss-run-summary,\n  .ss-results-header .ss-toolbar__spacer {\n    display: none;\n  }\n}\n/* Where an export's progress is announced to a screen reader (aria-live), out of sight. */\n.ss-export-status {\n  position: absolute;\n  width: 1px;\n  height: 1px;\n  overflow: hidden;\n  clip: rect(0 0 0 0);\n  white-space: nowrap;\n}\n/* Status tab content: the lint findings list (.ss-problem, above), then\n   the error panel and the notice lines below it. The whole panel scrolls\n   as one unit; .ss-empty-state (shared with the grid) covers the \"no\n   problems\" case. */\n.ss-status-panel {\n  flex: 1 1 auto;\n  min-height: 0;\n  overflow-y: auto;\n}\n/* An MCE or validation error (red left border, the message, a Details\n   disclosure with the raw response); lives in Status, never in place of\n   the grid. */\n.ss-error-panel {\n  margin: var(--spacing-md);\n  padding: var(--spacing-md);\n  border-left: 3px solid var(--color-danger);\n  background: var(--tint-danger);\n  border-radius: 0 var(--border-radius-sm) var(--border-radius-sm) 0;\n}\n.ss-error-panel__message {\n  white-space: pre-wrap;\n  color: var(--text-primary);\n}\n.ss-error-panel__hint {\n  margin-top: var(--spacing-xs);\n  white-space: pre-wrap;\n  color: var(--text-secondary);\n}\n.ss-error-panel details {\n  margin-top: var(--spacing-sm);\n}\n.ss-error-panel summary {\n  cursor: pointer;\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n}\n.ss-error-panel pre {\n  margin-top: var(--spacing-xs);\n  padding: var(--spacing-sm);\n  background: var(--bg-elevated);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  font-family: var(--font-mono);\n  font-size: var(--font-size-xs);\n  white-space: pre-wrap;\n  word-break: break-word;\n  max-height: 30vh;\n  overflow-y: auto;\n}\n/* Each outcome notice (0 rows returned, sort rejected, setup results) is one muted line, with\n   nothing to dismiss: the next run or Validate in the tab replaces it. */\n.ss-notice {\n  margin: var(--spacing-xs) var(--spacing-md) 0;\n  padding: 2px 0 2px var(--spacing-sm);\n  border-left: 2px solid var(--border-color-strong);\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n}\n.ss-notice:last-child {\n  margin-bottom: var(--spacing-sm);\n}\n/* Results tab content: the grid and pager, hidden while Status is\n   active. */\n.ss-results-panel {\n  display: flex;\n  flex-direction: column;\n  flex: 1 1 auto;\n  min-height: 0;\n}\n.ss-grid-scroll {\n  flex: 1 1 auto;\n  min-width: 0;\n  overflow: auto;\n  position: relative;\n}\n.ss-grid {\n  border-collapse: collapse;\n  table-layout: fixed;\n  font-size: var(--font-size-sm);\n}\n.ss-grid thead th {\n  position: sticky;\n  top: 0;\n  z-index: 2;\n  /* The same tint as before, laid over the app background so the sticky header is opaque:\n     --bg-elevated alone is 8% grey, and scrolled rows showed through it. */\n  background: linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-app);\n  border-bottom: 1px solid var(--border-color-strong);\n  border-right: 1px solid var(--border-color);\n  padding: 0;\n  text-align: left;\n}\n.ss-grid th button.ss-grid__sort {\n  width: 100%;\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  padding: 4px var(--spacing-sm);\n  border: none;\n  background: transparent;\n  cursor: pointer;\n  font-weight: 600;\n  overflow: hidden;\n  white-space: nowrap;\n  text-overflow: ellipsis;\n}\n/* Active sort column gets the --color-action accent. */\n.ss-grid__sort.is-sorted {\n  color: var(--color-action);\n}\n.ss-grid__resize-handle {\n  position: absolute;\n  right: 0;\n  top: 0;\n  bottom: 0;\n  width: 6px;\n  cursor: col-resize;\n}\n.ss-grid td {\n  padding: 3px var(--spacing-sm);\n  border-bottom: 1px solid var(--border-color);\n  border-right: 1px solid var(--border-color);\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  max-width: 480px;\n  cursor: default;\n}\n.ss-grid tbody tr:hover td {\n  background: var(--bg-hover);\n}\n.ss-grid__cell--null {\n  color: var(--text-secondary);\n  font-style: italic;\n}\n.ss-grid__cell--empty {\n  color: var(--text-secondary);\n  font-style: italic;\n}\n.ss-grid__spacer-row td {\n  border: none;\n  padding: 0;\n}\n/* Cell popover: replaces the old\n   inspector pane. Positioned absolutely within .ss (see\n   UI.openCellPopover), closes on Escape or a click outside. */\n.ss-cell-popover {\n  position: absolute;\n  z-index: 120;\n  width: 280px;\n  max-width: 90vw;\n  background: var(--bg-surface);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-md);\n  box-shadow: var(--shadow-dropdown);\n  padding: var(--spacing-sm);\n}\n.ss-cell-popover__value {\n  white-space: pre-wrap;\n  word-break: break-word;\n  font-family: var(--font-mono);\n  background: var(--bg-elevated);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  padding: var(--spacing-sm);\n  margin-bottom: var(--spacing-sm);\n  max-height: 40vh;\n  overflow-y: auto;\n}\n/* Pager, one row under the grid: page\n   size select on the left, prev/range/next centred, \"Page [n] of N\" on the\n   right. No first/last or Go buttons. */\n.ss-pager {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: var(--spacing-sm);\n  padding: var(--spacing-sm) var(--spacing-md);\n  border-top: 1px solid var(--border-color);\n  flex: 0 0 auto;\n  font-size: var(--font-size-sm);\n}\n.ss-pager__left,\n.ss-pager__center,\n.ss-pager__right {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  flex: 1 1 0;\n}\n.ss-pager__center {\n  justify-content: center;\n}\n.ss-pager__right {\n  justify-content: flex-end;\n}\n.ss-pager__range {\n  white-space: nowrap;\n  color: var(--text-secondary);\n}\n.ss-pager__page-input {\n  width: 56px;\n  text-align: center;\n}\n.ss-pager__page-input:focus {\n  border-color: var(--color-action);\n}\n.ss-pager__page-of {\n  color: var(--text-secondary);\n  white-space: nowrap;\n}\n.ss-message-item {\n  padding: var(--spacing-sm);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  margin-bottom: var(--spacing-sm);\n}\n.ss-message-item--error {\n  border-color: var(--color-danger);\n  background: var(--tint-danger);\n}\n.ss-message-item--warning {\n  border-color: var(--warning-color);\n  background: var(--tint-warning);\n}\n.ss-message-item--info {\n  background: var(--bg-elevated);\n}\n.ss-empty-state {\n  padding: var(--spacing-xl);\n  text-align: center;\n  color: var(--text-secondary);\n}\n.ss-empty-state--running {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: var(--spacing-sm);\n}\n.ss-empty-state--running p {\n  margin: 0;\n}\n.ss-empty-state__title {\n  color: var(--text-primary);\n  font-weight: 500;\n}\n/* A finished run whose rows did not load: what happened, the error's own text, where the rows are, and the button that\n   reads them again. */\n.ss-empty-state--unread {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: var(--spacing-sm);\n}\n.ss-empty-state--unread p {\n  margin: 0;\n  max-width: 70ch;\n}\n.ss-unread-page__error {\n  color: var(--text-primary);\n  white-space: pre-wrap;\n}\n.ss-unread-page__detail {\n  font-size: var(--font-size-sm);\n}\n.ss-unread-page__button {\n  display: inline-flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n}\n\n/* -------------------------------------------------------------------- */\n/* 9. Dialogs, dropdown managers and modal                                */\n/* -------------------------------------------------------------------- */\n/* Above the anchored panels (.ss-dropdown-mount, 101): a dialog opened from one, such as History's Clear all or Open's question on\n   unsaved changes, drew under the panel where the two met (2026-10-09). */\n.ss-modal-overlay {\n  position: absolute;\n  inset: 0;\n  background: rgba(0, 0, 0, 0.45);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  z-index: 110;\n  padding: var(--spacing-lg);\n}\n.ss-modal {\n  background: var(--bg-surface);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-md);\n  box-shadow: var(--shadow-md);\n  width: 100%;\n  max-width: 480px;\n  max-height: 100%;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n}\n.ss-modal--wide {\n  max-width: 640px;\n}\n.ss-modal__header {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  padding: var(--spacing-md) var(--spacing-lg);\n  border-bottom: 1px solid var(--border-color);\n}\n.ss-modal__title {\n  font-size: var(--font-size-md);\n  font-weight: 700;\n  flex: 1 1 auto;\n}\n.ss-modal__close {\n  border: none;\n  background: none;\n  cursor: pointer;\n  font-size: 16px;\n  color: var(--text-secondary);\n  padding: 4px;\n  border-radius: var(--border-radius-sm);\n}\n.ss-modal__close:hover {\n  background: var(--bg-hover);\n  color: var(--color-primary);\n}\n.ss-modal__body {\n  padding: var(--spacing-sm) var(--spacing-lg);\n  overflow-y: auto;\n  flex: 1 1 auto;\n}\n.ss-modal__status {\n  margin: var(--spacing-sm) 0 0;\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n}\n.ss-modal__status:empty {\n  display: none;\n}\n.ss-modal__footer {\n  display: flex;\n  justify-content: flex-end;\n  gap: var(--spacing-sm);\n  padding: var(--spacing-md) var(--spacing-lg);\n  border-top: 1px solid var(--border-color);\n  flex: 0 0 auto;\n}\n\n/* Dropdown managers (History, Runs, Settings, Help): anchored under their\n   toolbar button, not centred. Plain anchored, with --shadow-dropdown. */\n.ss-dropdown-scrim {\n  position: absolute;\n  inset: 0;\n  z-index: 100;\n  background: transparent;\n}\n.ss-dropdown-mount {\n  position: absolute;\n  z-index: 101;\n}\n/* --toolbar-bg, not --bg-surface: History\n   keeps its own toolbar button and anchored panel, but uses the same menu\n   surface as the Help ss-toolbar__menu. */\n.ss-dropdown-panel {\n  background: var(--toolbar-bg);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-md);\n  box-shadow: var(--shadow-dropdown);\n  width: 300px;\n  max-height: 70vh;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n}\n.ss-dropdown-panel--wide {\n  width: 420px;\n}\n/* Open: the width its rows had as a centred dialog (.ss-modal--wide). UI.openDropdown caps it at the app's width less 16px. */\n.ss-dropdown-panel--xwide {\n  width: 640px;\n}\n/* About dialog: Diagramforce's df-about layout,\n * translated to ss-. .ss-about is the flex column all its children sit in;\n * .ss-about__separator is the thin full-width rule (there are exactly two:\n * before the links row and before the licence line), and .ss-about__meta /\n * __signed-in / __license are plain centred text rows, not bordered\n * individually, so the muted signed-in line can sit directly under the\n * links row with no rule between them. */\n.ss-about {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  text-align: center;\n  gap: var(--spacing-md);\n  padding: var(--spacing-sm) 0;\n}\n.ss .ss-about__name {\n  margin: 0;\n  font-size: 20px;\n  font-weight: 700;\n  color: var(--text-primary);\n}\n.ss .ss-about__tagline {\n  margin: 2px 0 0;\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n}\n.ss .ss-about__info {\n  margin: 0;\n  max-width: 440px;\n  font-size: 13px;\n  line-height: var(--line-height);\n  color: var(--text-secondary);\n}\n/* Label and value rows, left-aligned in a quiet panel. */\n.ss-about__details {\n  display: grid;\n  grid-template-columns: max-content 1fr;\n  gap: 6px var(--spacing-md);\n  width: 100%;\n  margin: 0;\n  padding: 10px 14px;\n  box-sizing: border-box;\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  background: var(--bg-elevated);\n  text-align: left;\n  font-size: var(--font-size-xs);\n}\n.ss-about__details dt {\n  color: var(--text-muted);\n}\n.ss-about__details dd {\n  margin: 0;\n  color: var(--text-secondary);\n  overflow-wrap: anywhere;\n}\n.ss-about__links {\n  display: flex;\n  flex-wrap: wrap;\n  justify-content: center;\n  gap: var(--spacing-sm);\n}\n.ss-about__pill {\n  padding: 4px 12px;\n  border: 1px solid var(--border-color);\n  border-radius: 14px;\n  color: var(--color-primary);\n  font-size: var(--font-size-xs);\n  text-decoration: none;\n}\n.ss-about__pill:hover {\n  background: var(--bg-hover);\n}\n.ss-about__link {\n  color: var(--color-primary);\n  text-decoration: none;\n}\n.ss-about__link:hover {\n  text-decoration: underline;\n}\n.ss .ss-about__credits {\n  margin: 0;\n  font-size: var(--font-size-xs);\n  color: var(--text-muted);\n  text-align: center;\n}\n.ss .ss-about__credits p {\n  margin: 0 0 2px;\n}\n.ss-about__license {\n  width: 100%;\n  padding-top: var(--spacing-md);\n  border-top: 1px solid var(--border-color);\n  font-size: var(--font-size-xs);\n  color: var(--text-muted);\n}\n.ss .ss-about__license p {\n  margin: 0;\n}\n.ss .ss-about__license p + p {\n  margin-top: 2px;\n}\n.ss-list {\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  max-height: 320px;\n  overflow-y: auto;\n}\n.ss-list-row {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-md);\n  padding: var(--spacing-sm) var(--spacing-md);\n  border-bottom: 1px solid var(--border-color);\n  cursor: pointer;\n}\n.ss-list-row:last-child {\n  border-bottom: none;\n}\n.ss-list-row:hover {\n  background: var(--bg-hover);\n}\n/* The Save As target the user picked. */\n.ss-list-row.is-selected {\n  background: var(--toolbar-button-active);\n}\n.ss-list-row__main {\n  flex: 1 1 auto;\n  min-width: 0;\n  overflow: hidden;\n}\n.ss-list-row__title {\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.ss-list-row__meta {\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.ss-list-row__sql {\n  font-family: var(--font-mono);\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.ss-check-target {\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  padding: var(--spacing-md);\n  margin-top: var(--spacing-sm);\n}\n.ss-check-target table {\n  width: 100%;\n  border-collapse: collapse;\n  font-size: var(--font-size-sm);\n}\n.ss-check-target th, .ss-check-target td {\n  text-align: left;\n  padding: 3px var(--spacing-sm);\n  border-bottom: 1px solid var(--border-color);\n}\n\n/* -------------------------------------------------------------------- */\n/* 10. Toasts                                                            */\n/* -------------------------------------------------------------------- */\n/* Centred just below the toolbar, where the user is looking after pressing a\n   toolbar button, not in a corner. The column lets clicks through between toasts. */\n.ss-toasts {\n  position: absolute;\n  top: calc(var(--toolbar-height) + var(--spacing-md));\n  left: 50%;\n  transform: translateX(-50%);\n  display: flex;\n  flex-direction: column;\n  align-items: stretch;\n  gap: var(--spacing-sm);\n  z-index: 200;\n  width: min(480px, calc(100% - 32px));\n  pointer-events: none;\n}\n.ss-toast {\n  pointer-events: auto;\n  display: flex;\n  align-items: flex-start;\n  gap: var(--spacing-sm);\n  padding: var(--spacing-sm) var(--spacing-md);\n  border-radius: var(--border-radius-sm);\n  border: 1px solid var(--border-color);\n  background: var(--bg-surface-raised);\n  box-shadow: var(--shadow-md);\n}\n.ss-toast--success {\n  border-color: var(--brand-green);\n}\n.ss-toast--error {\n  border-color: var(--color-danger);\n}\n.ss-toast--warning {\n  border-color: var(--warning-color);\n}\n.ss-toast__body {\n  flex: 1 1 auto;\n  font-size: var(--font-size-sm);\n}\n.ss-toast__close {\n  border: none;\n  background: none;\n  cursor: pointer;\n  color: var(--text-secondary);\n}\n\n/* -------------------------------------------------------------------- */\n/* 11. Misc: badges, scrollbars, focus, responsive                       */\n/* -------------------------------------------------------------------- */\n.ss-badge {\n  display: inline-flex;\n  align-items: center;\n  gap: 3px;\n  padding: 1px 6px;\n  border-radius: 10px;\n  font-size: 11px;\n  font-weight: 600;\n  background: var(--bg-elevated);\n  color: var(--text-secondary);\n}\n.ss-badge--error {\n  background: var(--tint-danger);\n  color: var(--danger-text);\n}\n.ss-badge--warning {\n  background: var(--tint-warning);\n  color: var(--warning-text);\n}\n.ss-badge--info {\n  background: var(--tint-info);\n  color: var(--info-text);\n}\n\n.ss * ::-webkit-scrollbar {\n  width: 10px;\n  height: 10px;\n}\n.ss ::-webkit-scrollbar-thumb {\n  background: var(--border-color-strong);\n  border-radius: 6px;\n}\n.ss ::-webkit-scrollbar-track {\n  background: transparent;\n}\n\n@media (max-width: 1023px) {\n  .ss-sidebar {\n    position: absolute;\n    top: 0;\n    bottom: 0;\n    right: 0;\n    z-index: 50;\n    box-shadow: var(--shadow-md);\n  }\n  .ss-sidebar.is-collapsed {\n    display: none;\n  }\n  .ss-sidebar-overlay-bg {\n    display: block;\n    position: absolute;\n    inset: 0;\n    background: rgba(0, 0, 0, 0.3);\n    z-index: 40;\n  }\n}\n\n/* Narrow windows: toolbar buttons drop their labels (icon only) except the primary Run button,\n   so the single-row toolbar never wraps. Titles carry the label for tooltips. */\n@media (max-width: 1100px) {\n  .ss .ss-toolbar__button--secondary > span { display: none; }\n  .ss .ss-toolbar__button--secondary { padding: 4px 6px; }\n}\n@media (max-width: 900px) {\n  .ss .ss-toolbar__button:not(.ss-toolbar__button--primary) > span { display: none; }\n  .ss .ss-toolbar__button:not(.ss-toolbar__button--primary) { padding: 4px 6px; }\n}\n\n/* Menu links look like menu buttons (Diagramforce): text colour, not link colour. */\n.ss a.ss-toolbar__menu-item {\n  color: var(--text-secondary);\n  text-decoration: none;\n}\n.ss a.ss-toolbar__menu-item:hover {\n  color: var(--text-primary);\n}\n\n/* -------------------------------------------------------------------- */\n/* 12. Save to DE                                                        */\n/* -------------------------------------------------------------------- */\n/* The overlay (SaveToDe in sqlstudio.js) needs the width of a table of fields. */\n.ss-modal--xwide {\n  max-width: 1080px;\n}\n/* A toast's link has a line of its own, as wide as its words, so the off-site arrow stays beside them, in the toast's own text colour\n   rather than the link red (the author's RC7 test, 2026-10-09: the red link wrapped and left its arrow on a line alone). */\n.ss .ss-toast__link {\n  display: table;\n  margin-top: 2px;\n  color: var(--text-primary);\n  text-decoration: underline;\n  white-space: nowrap;\n}\n.ss .ss-toast__link:hover {\n  color: var(--color-primary);\n}\n/* The line beside Close while the rows move: the Data Extension is made, and the window can close. */\n.ss-save__moving {\n  flex: 1 1 auto;\n  margin: 0;\n  align-self: center;\n  font-size: var(--font-size-sm);\n  color: var(--text-primary);\n}\n.ss-save__moving:empty {\n  display: none;\n}\n/* The warnings under the fields table (saveFieldWarnings): a field with no length, a length too short for the values on screen. */\n.ss-save__warnings {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n  margin-top: var(--spacing-xs);\n}\n.ss-save__warnings:empty {\n  display: none;\n}\n/* The line under a failed move's message: the Data Extension's fields are set, so the form's are locked. */\n.ss-save__locked {\n  margin-top: 4px;\n}\n.ss-save__moving-line {\n  display: block;\n}\n.ss-save__top {\n  display: grid;\n  grid-template-columns: repeat(3, minmax(0, 1fr));\n  gap: var(--spacing-md);\n}\n/* The folder picker: the input, and under it the list of folders that opens over the fields table. Its rows are the Save As\n   list's (.ss-list-row), the active one (the arrow keys) marked by a bar and the chosen one by a tint. */\n.ss-combo {\n  position: relative;\n}\n.ss-combo__popup {\n  position: absolute;\n  top: 100%;\n  left: 0;\n  right: 0;\n  z-index: 10;\n  margin-top: 2px;\n  max-height: 320px;\n  overflow-y: auto;\n  overscroll-behavior: contain;\n  border: 1px solid var(--border-color-strong);\n  border-radius: var(--border-radius-sm);\n  background: var(--bg-surface-raised);\n  box-shadow: var(--shadow-dropdown);\n}\n.ss-combo__option {\n  padding: 5px var(--spacing-md);\n  line-height: 1.4;\n}\n.ss-combo__option.is-active {\n  background: var(--bg-hover);\n  box-shadow: inset 3px 0 0 var(--color-primary);\n}\n.ss-combo__list:not(:empty) + .ss-combo__note {\n  border-top: 1px solid var(--border-color);\n}\n/* Beside the other two fields the list is wider than its input, to the left, so a long path shows whole. */\n@media (min-width: 801px) {\n  .ss-combo__popup {\n    left: auto;\n    width: 520px;\n  }\n}\n.ss-save__notice:empty {\n  display: none;\n}\n.ss-save__note {\n  margin: 0 0 var(--spacing-sm);\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n}\n.ss-save__table-wrap {\n  max-height: 36vh;\n  overflow: auto;\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  margin-bottom: var(--spacing-md);\n}\n.ss-save__table {\n  width: 100%;\n  border-collapse: collapse;\n  font-size: var(--font-size-sm);\n}\n.ss-save__table th {\n  position: sticky;\n  top: 0;\n  z-index: 1;\n  padding: 4px;\n  text-align: left;\n  font-weight: 600;\n  color: var(--text-secondary);\n  background: var(--bg-elevated);\n  border-bottom: 1px solid var(--border-color);\n}\n.ss-save__table td {\n  padding: 3px 4px;\n  vertical-align: top;\n}\n.ss-save__table tr.has-error td {\n  background: var(--tint-danger);\n}\n/* The column's name on the line of its inputs: one line as tall as an input (26px) keeps the text at their middle, and the cell stays\n   at the top, so a line of error under an input leaves it where it is (the author's RC13 test, 2026-10-09). */\n.ss-save__source {\n  max-width: 150px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  line-height: 26px;\n  color: var(--text-secondary);\n}\n.ss-save__table .ss-input,\n.ss-save__table .ss-select {\n  height: 26px;\n}\n.ss-save__number {\n  width: 72px;\n  text-align: right;\n}\n/* Key and Null: the box at the middle of its column, under its centred heading, and at the middle of the line of the inputs. */\n.ss .ss-save__table .ss-save__check {\n  text-align: center;\n}\n.ss-save__check-box {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  height: 26px;\n}\n.ss-save__check-box > input {\n  margin: 0;\n}\n.ss-save__error {\n  margin-top: 2px;\n  font-size: 11px;\n  color: var(--danger-text);\n}\n.ss-save__error:empty {\n  display: none;\n}\n.ss .ss-input.is-invalid {\n  border-color: var(--color-danger);\n}\n.ss-save__group {\n  margin-bottom: var(--spacing-sm);\n}\n.ss-save__line {\n  display: flex;\n  flex-wrap: wrap;\n  align-items: center;\n  gap: var(--spacing-sm);\n}\n.ss-save__line .ss-select,\n.ss-save__line .ss-input {\n  width: auto;\n}\n.ss-save__inline {\n  display: inline-flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n}\n.ss-save__cost,\n.ss-save__fix {\n  margin: var(--spacing-xs) 0 0;\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n}\n.ss-save__cost:empty,\n.ss-save__fix:empty {\n  display: none;\n}\n/* The line on what the save does, under the overlay's title, with the gap a field group has before the Name. */\n.ss-modal__body > [data-save=\"hint\"] {\n  margin-bottom: var(--spacing-md);\n}\n/* The cost sits in the footer, left of Cancel and Save, as Export CSV's label sits by its button (the author's RC12 test, 2026-10-09).\n   While a save runs it is empty, and the line on the move takes its place. */\n.ss-modal__footer > .ss-save__cost {\n  flex: 1 1 auto;\n  margin: 0;\n  align-self: center;\n}\n.ss-save__fix {\n  color: var(--danger-text);\n}\n.ss-save__link {\n  display: inline-block;\n  margin-top: var(--spacing-xs);\n  color: var(--color-primary);\n}\n.ss-save__primary .ss-spinner {\n  margin-right: var(--spacing-xs);\n}\n@media (max-width: 800px) {\n  .ss-save__top {\n    grid-template-columns: minmax(0, 1fr);\n  }\n}\n";
 
 
 /* ========================================================= sqlstudio.js == */
@@ -12976,6 +13515,9 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
 
     var MONACO_TIMEOUT_MS = 15000;
     var LINT_DEBOUNCE_MS = 400;
+    /* The sidebar's Join to the query buttons follow the query on screen: this long after the last edit, tab switch or field load, each
+     * is set to what the query offers its table (UI._refreshJoinButtons). */
+    var JOIN_REFRESH_MS = 250;
     /* A list of recommended joins asked for while a Data Extension's fields were on their way can still be opening when they
     come, as Monaco shows the list a moment after the provider answers. The editor then looks for it every
     JOIN_LIST_SHOW_WAIT_MS, JOIN_LIST_SHOW_TRIES times, and asks again once it shows. */
@@ -13062,7 +13604,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
     run's rows end it as soon as they appear. After it the run asks isrunning, as a run without a task ID does. */
     var TASK_ROW_WAIT_MS = 5 * 60 * 1000;
     /* The app's own version: a build test keeps it equal to the Backend's appVersion. */
-    var APP_VERSION = '1.1.1';
+    var APP_VERSION = '1.2.0';
     /* The public repository's release manifest, written at each release. Checked once a day. */
     var UPDATE_CHECK_URL = 'https://raw.githubusercontent.com/MateuszDabrowski/sqlstudio/main/latest.json';
     var UPDATE_CHECK_EVERY_MS = 24 * 60 * 60 * 1000;
@@ -13191,6 +13733,10 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             activeRun: null,        /* { runId, deKey, deName, deId, queryId, slot, startedAt, pollMs, columns, retentionApplied, taskId, taskSig } */
             runnerState: 'idle',
             results: null,          /* { columns, rows, count, page, pageSize, orderBy, deKey } */
+            /* A finished run whose page 1 could not be read (QueryRunner._keepRunWithoutPage): { run, message, details, triedAt,
+             * isReading }, read through unreadPageOf, which ends it when the tab's run changes. The run is done, its rows are in its
+             * temporary Data Extension, and results is null until the page reads. */
+            unreadPage: null,
             /* The last SQL text Marketing Cloud Engagement's query check accepted for this tab
              * (Editor.markServerAccepted/withServerVerdict), saved/restored on every tab switch. */
             serverAcceptedText: null,
@@ -13805,6 +14351,13 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
      * ==================================================================== */
     var ICON_SPRITE_SVG = '<symbol viewBox="0 0 520 520" id="play"><path d="M80 437V83c0-10 13-17 22-9l332 173c8 6 8 19 0 25L102 447c-9 7-22 1-22-10"/></symbol><symbol viewBox="0 0 520 520" id="stop"><path d="M80 80h360v360H80z"/></symbol><symbol viewBox="0 0 520 520" id="check"><path d="M191 425L26 259c-6-6-6-16 0-22l22-22c6-6 16-6 22 0l124 125a10 10 0 0015 0L452 95c6-6 16-6 22 0l22 22c6 6 6 16 0 22L213 425c-6 7-16 7-22 0"/></symbol><symbol viewBox="0 0 520 520" id="magicwand"><path d="M282 210a10 10 0 00-14 0L29 449a29 29 0 000 42c12 12 30 12 42 0l239-239c4-4 4-10 0-14zm70 0l32-32c6-6 6-15 0-21l-21-21c-6-6-15-6-21 0l-32 32a10 10 0 000 14l28 28c4 4 10 4 14 0m-248-94a120 120 0 0180 80c2 6 10 6 12 0a120 120 0 0180-80c6-2 6-10 0-12a120 120 0 01-80-80 6 6 0 00-12 0 120 120 0 01-80 80c-5 2-5 10 0 12m392 189a110 110 0 01-71-71 6 6 0 00-11 0 110 110 0 01-71 71c-5 2-5 9 0 11a110 110 0 0171 71c2 5 9 5 11 0a110 110 0 0171-71c5-2 5-10 0-11M383 84c26 8 45 27 53 53 1 4 7 4 8 0a78 78 0 0153-53c4-1 4-7 0-8a78 78 0 01-53-53c-1-4-7-4-8 0a78 78 0 01-53 53c-4 1-4 7 0 8"/></symbol><symbol viewBox="0 0 520 520" id="save"><path d="M371 40v136c0 10-8 19-19 19H139c-10 0-19-8-19-19V40H80a40 40 0 00-40 40v360a40 40 0 0040 40h360a40 40 0 0040-40V112l-72-72zm70 381c0 10-8 19-19 19H99c-10 0-19-8-19-19V254c0-10 8-19 19-19h323c10 0 19 8 19 19zM248 136c0 10 8 19 19 19h46c10 0 19-8 19-19V40h-83z"/></symbol><symbol viewBox="0 0 520 520" id="open_folder"><path d="M460 140H233c-14 0-27-8-35-20l-35-60a40 40 0 00-35-20H60a40 40 0 00-40 40v360a40 40 0 0040 40h400a40 40 0 0040-40V180a40 40 0 00-40-40m0-80H219c-4 0-6 4-4 7l16 27q3 6 9 6h220c11 0 22 2 31 6 4 2 9-1 9-6a40 40 0 00-40-40"/></symbol><symbol viewBox="0 0 520 520" id="clock"><path d="M260 20C128 20 20 128 20 260s108 240 240 240 240-108 240-240S392 20 260 20m0 420c-99 0-180-81-180-180S161 80 260 80s180 81 180 180-81 180-180 180m34-178c-3-3-4-7-4-11v-96c0-8-7-15-15-15h-30c-8 0-15 7-15 15v121c0 4 2 8 4 11l74 74c6 6 15 6 21 0l21-21c6-6 6-15 0-21z"/></symbol><symbol viewBox="0 0 520 520" id="clear"><path d="M260 20a240 240 0 100 480 240 240 0 100-480m49 248l78 78c4 4 4 10 0 14l-28 28a10 10 0 01-14 0l-78-78a10 10 0 00-14 0l-78 78a10 10 0 01-14 0l-28-28a10 10 0 010-14l78-78c4-4 4-10 0-14l-79-79a10 10 0 010-14l28-28a10 10 0 0114 0l79 79c4 4 10 4 14 0l78-78a10 10 0 0114 0l28 28c4 4 4 10 0 14l-78 78c-3 4-3 10 0 14"/></symbol><symbol viewBox="0 0 520 520" id="download"><path d="M485 310h-30c-8 0-15 7-15 15v100c0 8-7 15-15 15H95c-8 0-15-7-15-15V325c0-8-7-15-15-15H35c-8 0-15 7-15 15v135a40 40 0 0040 40h400a40 40 0 0040-40V325c0-8-7-15-15-15m-235 66c6 6 15 6 21 0l135-135c6-6 6-15 0-21l-21-21c-6-6-15-6-21 0l-56 56c-6 6-17 2-17-7V35c-1-8-9-15-16-15h-30c-8 0-15 7-15 15v212c0 9-11 13-17 7l-56-56c-6-6-15-6-21 0l-21 22c-6 6-6 15 0 21z"/></symbol><symbol viewBox="0 0 520 520" id="close"><path d="M310 254l130-131c6-6 6-15 0-21l-20-21c-6-6-15-6-21 0L268 212a10 10 0 01-14 0L123 80c-6-6-15-6-21 0l-21 21c-6 6-6 15 0 21l131 131c4 4 4 10 0 14L80 399c-6 6-6 15 0 21l21 21c6 6 15 6 21 0l131-131a10 10 0 0114 0l131 131c6 6 15 6 21 0l21-21c6-6 6-15 0-21L310 268a10 10 0 010-14"/></symbol><symbol viewBox="0 0 520 520" id="refresh"><path d="M465 40h-30c-8 0-15 7-15 15v70c0 9-5 13-12 7l-10-10a210 210 0 10-12 309c7-6 7-16 1-22l-21-21c-5-5-14-6-20-1a152 152 0 01-172 14 152 152 0 0177-281 150 150 0 01118 58c3 8-4 12-13 12h-70c-8 0-15 7-15 15v31c0 8 6 14 14 14h183c7 0 13-6 13-13V55c-1-8-8-15-16-15"/></symbol><symbol viewBox="0 0 520 520" id="database"><path d="M454 90c0-38-87-69-194-69S66 52 66 90v24c0 38 87 69 194 69s194-31 194-69zM66 170c0 30 87 54 194 54s194-24 194-54v49c0 38-87 69-194 69S66 257 66 219z"/><path d="M66 170c0 30 87 54 194 54s194-24 194-54v49c0 38-87 69-194 69S66 257 66 219zm0 105c0 30 87 54 194 54s194-24 194-54v49c0 38-87 69-194 69S66 363 66 325zm0 106c0 30 87 54 194 54s194-24 194-54v49c0 38-87 69-194 69S66 468 66 430z"/></symbol><symbol viewBox="0 0 520 520" id="table"><path d="M465 20H55c-8 0-15 7-15 15v50c0 8 7 15 15 15h410c8 0 15-7 15-15V35c0-8-7-15-15-15M145 140H55c-8 0-15 7-15 15v30c0 8 7 15 15 15h90c8 0 15-7 15-15v-30c0-8-7-15-15-15m160 0h-90c-8 0-15 7-15 15v30c0 8 7 15 15 15h90c8 0 15-7 15-15v-30c0-8-7-15-15-15m160 0h-90c-8 0-15 7-15 15v30c0 8 7 15 15 15h90c8 0 15-7 15-15v-30c0-8-7-15-15-15M145 240H55c-8 0-15 7-15 15v30c0 8 7 15 15 15h90c8 0 15-7 15-15v-30c0-8-7-15-15-15m160 0h-90c-8 0-15 7-15 15v30c0 8 7 15 15 15h90c8 0 15-7 15-15v-30c0-8-7-15-15-15m160 0h-90c-8 0-15 7-15 15v30c0 8 7 15 15 15h90c8 0 15-7 15-15v-30c0-8-7-15-15-15M145 340H55c-8 0-15 7-15 15v30c0 8 7 15 15 15h90c8 0 15-7 15-15v-30c0-8-7-15-15-15m160 0h-90c-8 0-15 7-15 15v30c0 8 7 15 15 15h90c8 0 15-7 15-15v-30c0-8-7-15-15-15m160 0h-90c-8 0-15 7-15 15v30c0 8 7 15 15 15h90c8 0 15-7 15-15v-30c0-8-7-15-15-15M145 440H55c-8 0-15 7-15 15v30c0 8 7 15 15 15h90c8 0 15-7 15-15v-30c0-8-7-15-15-15m160 0h-90c-8 0-15 7-15 15v30c0 8 7 15 15 15h90c8 0 15-7 15-15v-30c0-8-7-15-15-15m160 0h-90c-8 0-15 7-15 15v30c0 8 7 15 15 15h90c8 0 15-7 15-15v-30c0-8-7-15-15-15"/></symbol><symbol viewBox="0 0 520 520" id="add"><path d="M300 290h165c8 0 15-7 15-15v-30c0-8-7-15-15-15H300c-6 0-10-4-10-10V55c0-8-7-15-15-15h-30c-8 0-15 7-15 15v165c0 6-4 10-10 10H55c-8 0-15 7-15 15v30c0 8 7 15 15 15h165c6 0 10 4 10 10v165c0 8 7 15 15 15h30c8 0 15-7 15-15V300c0-6 4-10 10-10"/></symbol><symbol viewBox="0 0 520 520" id="key"><path d="M65 120a8 8 0 0114 5v4a160 160 0 00158 163h7a15 15 0 0115 10l45 128a21 21 0 01-1 12l-24 55a8 8 0 01-10 4l-53-25a8 8 0 01-5-10l6-26a8 8 0 00-4-10l-18-8a9 9 0 01-4-10l7-25a8 8 0 00-4-11l-12-6a8 8 0 01-4-10l8-23a8 8 0 00-4-10l-24-12a8 8 0 01-4-4l-6-15a111 111 0 01-54-22 117 117 0 01-42-125 102 102 0 0113-29m56 25A113 113 0 01238 20a114 114 0 01100 76 106 106 0 012 65l127 133a14 14 0 015 12v58a8 8 0 01-8 8h-60a8 8 0 01-8-6l-4-26a8 8 0 00-8-8h-20a8 8 0 01-8-6l-4-26a8 8 0 00-8-8h-13a8 8 0 01-8-7l-3-25a8 8 0 00-8-8h-27a7 7 0 01-5-2l-11-12a112 112 0 01-149-93zm95-69a40 40 0 1040 40 40 40 0 00-40-40"/></symbol><symbol viewBox="0 0 520 520" id="chevronright"><path d="M179 44l207 205c6 6 6 16 0 22L179 476c-6 6-16 6-22 0l-22-22c-6-6-6-16 0-22l163-161c6-6 6-16 0-22L136 88c-6-6-6-16 0-22l22-22c6-5 15-5 21 0"/></symbol><symbol viewBox="0 0 520 520" id="chevrondown"><path d="M476 178L271 385c-6 6-16 6-22 0L44 178c-6-6-6-16 0-22l22-22c6-6 16-6 22 0l161 163c6 6 16 6 22 0l161-162c6-6 16-6 22 0l22 22c5 6 5 15 0 21"/></symbol><symbol viewBox="0 0 520 520" id="chevronleft"><path d="M342 477L134 272c-6-6-6-16 0-22L342 45c6-6 16-6 22 0l22 22c6 6 6 16 0 22L221 250c-6 6-6 16 0 22l163 161c6 6 6 16 0 22l-22 22c-5 5-14 5-20 0"/></symbol><symbol viewBox="0 0 520 520" id="warning"><path d="M514 425L285 55a28 28 0 00-50 0L6 425c-14 23 0 55 25 55h458c25 0 40-32 25-55m-254-25c-17 0-30-13-30-30s13-30 30-30 30 13 30 30-13 30-30 30m30-90c0 6-4 10-10 10h-40c-6 0-10-4-10-10V180c0-6 4-10 10-10h40c6 0 10 4 10 10z"/></symbol><symbol viewBox="0 0 520 520" id="error"><path d="M260 20C128 20 20 128 20 260s108 240 240 240 240-108 240-240S392 20 260 20M80 260a180 180 0 01284-147L113 364a176 176 0 01-33-104m180 180c-39 0-75-12-104-33l251-251a180 180 0 01-147 284"/></symbol><symbol viewBox="0 0 520 520" id="info"><path d="M260 20a240 240 0 100 480 240 240 0 100-480m0 121c17 0 30 13 30 30s-13 30-30 30-30-13-30-30 13-30 30-30m50 210c0 5-4 9-10 9h-80c-5 0-10-3-10-9v-20c0-5 4-11 10-11 5 0 10-3 10-9v-40c0-5-4-11-10-11-5 0-10-3-10-9v-20c0-5 4-11 10-11h60c5 0 10 5 10 11v80c0 5 4 9 10 9 5 0 10 5 10 11z"/></symbol><symbol viewBox="0 0 52 52" id="copy"><path d="M44 2H18a4 4 0 00-4 4v2h24a4 4 0 014 4v28h2a4 4 0 004-4V6a4 4 0 00-4-4"/><path d="M38 16a4 4 0 00-4-4H8a4 4 0 00-4 4v30a4 4 0 004 4h26a4 4 0 004-4zm-18 7c0 .6-.4 1-1 1h-8c-.6 0-1-.4-1-1v-2c0-.6.4-1 1-1h8c.6 0 1 .4 1 1zm8 16c0 .6-.4 1-1 1H11c-.6 0-1-.4-1-1v-2c0-.6.4-1 1-1h16c.6 0 1 .4 1 1zm4-8c0 .6-.4 1-1 1H11c-.6 0-1-.4-1-1v-2c0-.6.4-1 1-1h20c.6 0 1 .4 1 1z"/></symbol><symbol viewBox="0 0 520 520" id="sort"><path d="M275 160c6-6 6-15 0-21L161 24c-6-6-15-6-21 0L25 139c-6 6-6 15 0 21l21 21c6 6 15 6 21 0l36-36c6-6 17-2 17 7v212c0 8 7 15 15 15h30c8 0 15-8 15-15V152c0-9 11-13 17-7l36 36c6 6 15 6 21 0zm220 200l-21-20c-6-6-15-6-21 0l-36 36c-6 6-17 2-17-7V155c0-8-7-15-15-15h-30c-8 0-15 8-15 15v212c0 9-11 13-17 7l-36-36c-6-6-15-6-21 0l-21 22c-6 6-6 15 0 21l115 115c6 6 15 6 21 0l115-115c5-6 5-16-1-21"/></symbol><symbol viewBox="0 0 520 520" id="filterList"><path d="M483 40H39c-15 0-22 17-13 28l194 227c6 7 9 17 9 26v144c0 8 8 15 16 15h30c8 0 14-7 14-15V321c0-10 4-19 11-26L496 68c9-11 2-28-13-28"/></symbol><symbol viewBox="0 0 520 520" id="search"><path d="M496 453L362 320a189 189 0 10-340-92 190 190 0 00298 135l133 133a14 14 0 0021 0l21-21a17 17 0 001-22M210 338a129 129 0 11130-130 129 129 0 01-130 130"/></symbol><symbol viewBox="0 0 520 520" id="side_list"><path d="M485 40H215c-8 0-15 7-15 15v410c0 8 7 15 15 15h270c8 0 15-7 15-15V55c0-8-7-15-15-15m-340 0H35c-8 0-15 7-15 15v50c0 8 7 15 15 15h110c8 0 15-7 15-15V55c0-8-7-15-15-15m0 120H35c-8 0-15 7-15 15v50c0 8 7 15 15 15h110c8 0 15-7 15-15v-50c0-8-7-15-15-15m0 120H35c-8 0-15 7-15 15v50c0 8 7 15 15 15h110c8 0 15-7 15-15v-50c0-8-7-15-15-15m0 120H35c-8 0-15 7-15 15v50c0 8 7 15 15 15h110c8 0 15-7 15-15v-50c0-8-7-15-15-15"/></symbol><symbol viewBox="0 0 520 520" id="new_window"><path d="M487 20H296c-8 0-16 5-16 13v30c0 8 7 17 16 17h79c9 0 14 10 7 16L212 266c-6 6-6 15 0 21l21 21c6 6 15 6 21 0l170-170c6-6 16-2 16 7v79c0 8 8 17 16 17h29c8 0 15-9 15-17V34c0-9-5-14-13-14M363 255l-34 35q-9 9-9 21v114c0 8-7 15-15 15H95c-8 0-15-7-15-15V215c0-8 7-15 15-15h115c8 0 16-3 21-9l34-34c6-6 2-17-7-17H60a40 40 0 00-40 40v280a40 40 0 0040 40h280a40 40 0 0040-40V262c0-9-11-13-17-7"/></symbol>';
 
+    /* Icons added to the sprite after it was first made, on a line of their own, each taken from the same file, unchanged. left_join is the
+     * sidebar's "Join to the query" action: the action writes a LEFT JOIN. */
+    var ICON_SPRITE_SVG_MORE = '<symbol viewBox="0 0 520 520" id="left_join"><path d="M167.5 408.1c29.1 0 57.5-8.6 81.7-24.8s43-39.1 54.2-66c11.1-26.9 14-56.5 8.4-85s-19.7-54.7-40.3-75.3-46.8-34.6-75.3-40.3-58.1-2.8-85 8.4c-26.9 11.1-49.9 30-66 54.2A147 147 0 0020.4 261c0 39 15.5 76.4 43.1 104s65 43.1 104 43.1m0-34.8c-22-.1-43.5-6.8-61.7-19.1a111.5 111.5 0 01-40.7-50.1c-8.3-20.4-10.4-42.8-6-64.3 4.4-21.6 15.1-41.4 30.7-56.9a112 112 0 0157.1-30.3c21.6-4.2 44-2 64.3 6.5s37.7 22.8 49.8 41.1 18.7 39.9 18.6 61.9c0 14.7-2.9 29.2-8.5 42.7s-13.9 25.8-24.3 36.2a112 112 0 01-36.3 24 112 112 0 01-42.8 8.2z"/><path d="M353.3 408.1c29.1 0 57.5-8.6 81.7-24.8s43-39.1 54.2-66 14-56.5 8.4-85-19.7-54.7-40.3-75.3-46.8-34.6-75.3-40.3-58.1-2.8-85 8.4c-26.9 11.1-49.9 30-66 54.2a147 147 0 00-24.8 81.7c0 39 15.5 76.4 43.1 104s65 43.1 104 43.1m0-34.8c-22-.1-43.5-6.8-61.7-19.1a111.5 111.5 0 01-40.7-50.1c-8.3-20.4-10.4-42.8-6-64.3 4.4-21.6 15.1-41.4 30.7-56.9a112 112 0 0157.1-30.3c21.6-4.2 44-2 64.3 6.5s37.7 22.8 49.8 41.1c12.2 18.3 18.7 39.9 18.6 61.9 0 14.7-2.9 29.2-8.5 42.7S443 330.6 432.6 341a111 111 0 01-36.4 24 112 112 0 01-42.8 8.2z"/><path d="M20.4 259c0-81.2 65.9-147.1 147.1-147.1S314.6 177.8 314.6 259s-65.9 147.1-147.1 147.1S20.4 340.2 20.4 259"/><path d="M260.4 373c9.4-7.6 17.8-16.4 25-26.1-9.9-7.5-18.5-16.7-25.5-27.1a111 111 0 01-18.6-61.9c0-14.7 2.9-29.2 8.5-42.7s13.9-25.8 24.3-36.2c3.3-3.3 6.8-6.3 10.4-9.1-7-9.2-15.2-17.6-24.2-25a147.6 147.6 0 00-43 57.8 148 148 0 00-8.4 85 147.3 147.3 0 0051.4 85.3z"/></symbol>' +
+        /* edit and delete, for a snippet's rename and delete, taken from the same file, unchanged. */
+        '<symbol viewBox="0 0 520 520" id="edit"><path d="M95 334l89 89c4 4 10 4 14 0l222-223c4-4 4-10 0-14l-88-88a10 10 0 00-14 0L95 321c-4 4-4 10 0 13M361 57a10 10 0 000 14l88 88c4 4 10 4 14 0l25-25a38 38 0 000-55l-47-47a40 40 0 00-57 0zM21 482c-2 10 7 19 17 17l109-26c4-1 7-3 9-5l2-2c2-2 3-9-1-13l-90-90c-4-4-11-3-13-1l-2 2a20 20 0 00-5 9z"/></symbol>' +
+        '<symbol viewBox="0 0 52 52" id="delete"><path d="M45.5 10H33V6a4 4 0 00-4-4h-6a4 4 0 00-4 4v4H6.5c-.8 0-1.5.7-1.5 1.5v3c0 .8.7 1.5 1.5 1.5h39c.8 0 1.5-.7 1.5-1.5v-3c0-.8-.7-1.5-1.5-1.5M23 7c0-.6.4-1 1-1h4c.6 0 1 .4 1 1v3h-6zm18.5 13h-31c-.8 0-1.5.7-1.5 1.5V45a5 5 0 005 5h24a5 5 0 005-5V21.5c0-.8-.7-1.5-1.5-1.5M23 42c0 .6-.4 1-1 1h-2c-.6 0-1-.4-1-1V28c0-.6.4-1 1-1h2c.6 0 1 .4 1 1zm10 0c0 .6-.4 1-1 1h-2c-.6 0-1-.4-1-1V28c0-.6.4-1 1-1h2c.6 0 1 .4 1 1z"/></symbol>';
+
     /**
      * @function injectIconSprite
      * @description Parses the bundled ICON_SPRITE_SVG markup once and injects its <symbol>
@@ -13827,7 +14380,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         /* The sprite markup is our own bundled, static asset (never user or API
          * data), so parsing it once via DOMParser and importing the symbols is
          * safe and keeps every other DOM write in this file textContent-only. */
-        var doc = new DOMParser().parseFromString('<svg xmlns="http://www.w3.org/2000/svg">' + ICON_SPRITE_SVG + '</svg>', 'image/svg+xml');
+        var doc = new DOMParser().parseFromString('<svg xmlns="http://www.w3.org/2000/svg">' + ICON_SPRITE_SVG + ICON_SPRITE_SVG_MORE + '</svg>', 'image/svg+xml');
         var symbols = doc.documentElement.childNodes;
         for (var i = 0; i < symbols.length; i++) {
             var imported = document.importNode(symbols[i], true);
@@ -13974,7 +14527,8 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
          * @param {string} message
          * @param {string} [kind] - 'success' | 'info' | 'warning' | 'error', defaults to 'info'
          * @param {Object} [opts] - { sticky: boolean } to keep the toast until manually dismissed,
-         *        { duration: number } to close it after that many milliseconds, errors included
+         *        { duration: number } to close it after that many milliseconds, errors included,
+         *        { link: { text, href } } to end it with a link to an https address
          * @returns {Function} a function that removes the toast immediately
          */
         show: function (message, kind, opts) {
@@ -13982,9 +14536,13 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             kind = kind || 'info';
             if (!this._container) return function () { /* nothing to remove */ };
             var isSticky = !!opts.sticky;
+            /* A link the toast carries, as { text, href }: it opens in a new tab, and only an https address is made one. */
+            var link = (opts.link && /^https:\/\//.test(String(opts.link.href))) ? h('a', {
+                class: 'ss-toast__link', href: String(opts.link.href), target: '_blank', rel: 'noopener noreferrer'
+            }, String(opts.link.text)) : null;
             var toast = h('div', { class: 'ss-toast ss-toast--' + kind, role: 'status' }, [
                 icon(kind === 'success' ? 'check' : kind === 'warning' ? 'warning' : kind === 'error' ? 'error' : 'info'),
-                h('div', { class: 'ss-toast__body' }, String(message)),
+                h('div', { class: 'ss-toast__body' }, link ? [String(message), ' ', link] : String(message)),
                 h('button', {
                     class: 'ss-toast__close', type: 'button', 'aria-label': 'Dismiss',
                     onclick: function () { removeToast(); }
@@ -14044,10 +14602,14 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
     /* ======================================================================
      * 5. api
      * ==================================================================== */
+    /* The actions that may go out more than once: after an HTTP 429, a network failure, or a renewal that replaced their session
+     * (Api._send). The snippets' list is a read, and a delete names its snippet by id, so a second one deletes nothing more: the
+     * Backend answers NOT_FOUND, and the list is read again. A snippet's save is not here: one with no id makes a new snippet each
+     * time it is sent. */
     var IDEMPOTENT_ACTIONS = {
         whoami: true, getWorkspace: true, listFolders: true, listDataExtensions: true, listParentDataExtensions: true, getDataExtensionFields: true,
         getDataExtensionDetails: true, validateQuery: true, getRunStatus: true, getRunOutcome: true, getResults: true, listRuns: true, listQueryActivities: true, getQueryActivity: true,
-        listHistory: true, clearHistory: true
+        listHistory: true, clearHistory: true, listSnippets: true, deleteSnippet: true
     };
     /* The schema reads: the Data Extension list and its folders, the parent's list, and a Data Extension's fields and details. The sidebar,
      * completion, hover, lint and Save As ask for them, often from a click or a keystroke that is hard to repeat, and nothing
@@ -14100,6 +14662,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
     var BACKEND_BU_ACTIONS = {
         getRunStatus: true,
         runQuery: true,
+        moveToDataExtension: true,
         deleteRun: true,
         listRuns: true,
         exportRows: true
@@ -14342,8 +14905,9 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             };
 
             /* finishSetup's steps create Data Extensions through WSProxy, which was slow on the first org
-             * deployment: they get the same long budget as runQuery, just under MCE's own limit. */
-            var timeoutMs = (action === 'runQuery' || action === 'finishSetup') ? RUNQUERY_TIMEOUT_MS : API_TIMEOUT_MS;
+             * deployment: they get the same long budget as runQuery, just under MCE's own limit. So does the
+             * move of Save to DE, which finds, updates and starts a Query Activity in one request. */
+            var timeoutMs = (action === 'runQuery' || action === 'finishSetup' || action === 'moveToDataExtension') ? RUNQUERY_TIMEOUT_MS : API_TIMEOUT_MS;
             var controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
             var timer = setTimeout(function () { if (controller) controller.abort(); }, timeoutMs);
 
@@ -14686,7 +15250,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
     };
 
     var Session = {
-        data: { userName: '', userEmail: '', userKey: '', identitySource: null, mid: null, backendMid: null, stackKey: null, tokenSecondsLeft: 0, backendVersion: '', historyEnabled: false },
+        data: { userName: '', userEmail: '', userKey: '', identitySource: null, mid: null, midSig: null, backendMid: null, stackKey: null, tokenSecondsLeft: 0, backendVersion: '', historyEnabled: false, snippetsEnabled: false },
         syncedAt: 0,
         _expired: false,
         _recovery: null,
@@ -15327,6 +15891,8 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         _detailQueue: {},     /* tableKey -> table, waiting for the next getDataExtensionDetails call (_queueDetails) */
         _detailTimer: null,
         _detailFailures: {},  /* tableKey -> true for a details read that failed, for the session, until Reload */
+        _detailsInFlight: {}, /* tableKey -> true while the getDataExtensionDetails call that asks for it is out (_flushDetails) */
+        _detailWaits: {},     /* tableKey -> { table, promise, settle }: what waits for a table's details (details) */
         _isDetailsUnsupported: false, /* an older Backend has no getDataExtensionDetails: on-use details stop for the session */
         _deListSaveTimer: null,
         _deListPromise: null,
@@ -15438,10 +16004,12 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
          * message names, and isParentDataExtensionListLoaded says a child session has the parent's list
          * to check an ENT. name against (isParentListLoaded). The index holds every Data Extension of the
          * list, the ones the sidebar hides too (the names that start with an underscore, the ones in no
-         * loaded folder) and the ones named like a Data View, which buildIndex keeps under the Data View.
+         * loaded folder) and the ones named like a Data View, which buildIndex keeps under the Data View. isDetailsPending(table)
+         * tells the joins which Data Extensions' send relationships are still on their way (isDetailsPending).
          * @returns {Object} the schema index
          */
         getIndex: function () {
+            var self = this;
             var isComplete = this.isDeListComplete();
             return {
                 tables: this._allTables,
@@ -15449,7 +16017,14 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 isDataExtensionListLoaded: this._deListSavedAt !== null,
                 isDataExtensionListComplete: isComplete,
                 dataExtensionListLoadedAt: this._deListSavedAt,
-                isParentDataExtensionListLoaded: isComplete && this.isParentListLoaded()
+                isParentDataExtensionListLoaded: isComplete && this.isParentListLoaded(),
+                /**
+                 * @function isDetailsPending
+                 * @description Schema.isDetailsPending, for the SQL tools, which call it on the index.
+                 * @param {Object} table - a schema table entry
+                 * @returns {boolean}
+                 */
+                isDetailsPending: function (table) { return self.isDetailsPending(table); }
             };
         },
 
@@ -15593,6 +16168,127 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
          * @returns {boolean}
          */
         areDeFoldersLoading: function () { return this._deFolderState === 'loading'; },
+
+        /**
+         * @method deFolderPaths
+         * @description The path of every Data Extension folder the sidebar's tree has loaded, of any content type (the Business Unit's
+         * own, shared and synchronized), by its id as text, from its top folder: "Data Extensions / Marketing / Sent". A folder whose
+         * parent is not loaded starts its path. Empty while the folders are loading or after their load failed.
+         * @returns {Object<string, string>}
+         */
+        deFolderPaths: function () {
+            var folders = (this._deFolderState === 'loaded' && Array.isArray(this._deFolders)) ? this._deFolders : [];
+            var byId = {};
+            folders.forEach(function (f) { if (f && f.id !== null && f.id !== undefined) byId[String(f.id)] = f; });
+            var paths = {};
+            Object.keys(byId).forEach(function (id) {
+                var names = [];
+                var seen = {};
+                var node = byId[id];
+                /* A folder met twice, as in a loop of parents, ends the path. */
+                while (node && !seen[String(node.id)]) {
+                    seen[String(node.id)] = true;
+                    names.unshift(String(node.name === null || node.name === undefined ? '' : node.name));
+                    node = (node.parentId === null || node.parentId === undefined) ? null : byId[String(node.parentId)];
+                };
+                paths[id] = names.join(' / ');
+            });
+            return paths;
+        },
+
+        /**
+         * @method ownFolderChoices
+         * @description The folders the Save to DE overlay offers for a new Data Extension: the Business Unit's own Data Extension folders
+         * (content type dataextension, never a shared or a synchronized one, which a user does not create in) that the sidebar's tree
+         * has loaded, each with its path from the top folder, such as "Data Extensions / Marketing / Sent", and the top folder itself as
+         * root, which the overlay offers first and uses by default. Nothing but the root while the folders are still loading or the load
+         * failed.
+         * @returns {{root: ?Object, choices: Array<{id: number, path: string, name: string, parent: string}>}} root is { id, name } or
+         * null. The choices leave out the root and are sorted by path, without regard to case. Each has its own name and the path of
+         * the folder above it ('' when that folder is not loaded), so the name needs no cutting from a path whose own names may hold
+         * a slash.
+         */
+        ownFolderChoices: function () {
+            var folders = (this._deFolderState === 'loaded' && Array.isArray(this._deFolders)) ? this._deFolders : [];
+            var byId = {};
+            folders.forEach(function (f) { if (f && f.id !== null && f.id !== undefined) byId[String(f.id)] = f; });
+            var isTop = function (f) { return f.parentId === null || f.parentId === undefined || String(f.parentId) === '' || String(f.parentId) === '0'; };
+            var own = folders.filter(function (f) { return f && f.id !== null && f.id !== undefined && String(f.contentType) === 'dataextension'; });
+            var topFolder = own.filter(isTop)[0] || null;
+            var namesOf = function (f) {
+                var names = [];
+                var seen = {};
+                var node = f;
+                /* A folder met twice, as in a loop of parents, ends the path. */
+                while (node && !seen[String(node.id)]) {
+                    seen[String(node.id)] = true;
+                    names.unshift(String(node.name === null || node.name === undefined ? '' : node.name));
+                    node = isTop(node) ? null : byId[String(node.parentId)];
+                };
+                return names;
+            };
+            var choices = own.filter(function (f) { return !isTop(f); }).map(function (f) {
+                var names = namesOf(f);
+                return {
+                    id: f.id,
+                    path: names.join(' / '),
+                    name: names[names.length - 1],
+                    parent: names.slice(0, -1).join(' / ')
+                };
+            });
+            choices.sort(function (a, b) { return a.path.toLowerCase() < b.path.toLowerCase() ? -1 : (a.path.toLowerCase() > b.path.toLowerCase() ? 1 : 0); });
+            return {
+                root: topFolder ? { id: topFolder.id, name: String(topFolder.name) } : null,
+                choices: choices
+            };
+        },
+
+        /**
+         * @method addCreatedDataExtension
+         * @description Adds a Data Extension that Save to DE just created to the list, as an entry of the Business Unit's own, so the
+         * sidebar, completion, hover and the lint know it at once: in its folder (the one chosen, else the top Data Extension folder),
+         * with its send relationship and its fields as the Backend answers them, hasDetails true, and the list's cache written. One
+         * the list already has, by key, is left as it is.
+         * @param {Object} made - { objectId, key, name }, the createDataExtension answer
+         * @param {Object} model - the Save to DE model it was made from
+         */
+        addCreatedDataExtension: function (made, model) {
+            var lowerKey = String(made.key).toLowerCase();
+            var isKnown = this.deList.some(function (t) { return !!t && !t.isShared && String(t.key).toLowerCase() === lowerKey; });
+            if (isKnown) return;
+            var folders = this.ownFolderChoices();
+            var categoryId = model.folderId !== '' ? Number(model.folderId) : (folders.root ? folders.root.id : null);
+            var sendableField = model.sendable.isOn ? saveSendableField(model) : null;
+            /* The subscriber field as a Retrieve of the list answers it (_SubscriberKey), though the Create writes "Subscriber Key":
+             * subscriberFieldKind reads both. */
+            var entry = ownListEntry({
+                name: made.name,
+                key: made.key,
+                objectId: made.objectId,
+                categoryId: categoryId,
+                isSendable: !!sendableField,
+                sendableField: sendableField ? sendableField.name.trim() : null,
+                sendableSubscriberField: sendableField ? (model.sendable.kind === 'emailAddress' ? 'Email Address' : '_SubscriberKey') : null
+            });
+            entry.hasDetails = true;
+            entry.fields = model.fields.map(function (f, i) {
+                return {
+                    name: f.name.trim(),
+                    type: f.type,
+                    length: f.type === 'Text' ? (f.length.trim() !== '' ? parseInt(f.length, 10) : null) : (f.type === 'Decimal' ? parseInt(f.precision, 10) || SAVE_DECIMAL_DEFAULT_PRECISION : null),
+                    scale: f.type === 'Decimal' ? (f.scale.trim() !== '' ? parseInt(f.scale, 10) : SAVE_DECIMAL_DEFAULT_SCALE) : null,
+                    isPrimaryKey: f.isPrimaryKey,
+                    isNullable: f.isNullable,
+                    ordinal: i + 1,
+                    defaultValue: f.defaultValue !== '' ? f.defaultValue : null
+                };
+            });
+            this.deList.push(entry);
+            this._rebuildIndex();
+            this._scheduleDeListSave();
+            UI.renderSidebarTree();
+            this._relintForList();
+        },
 
         /**
          * @method _readExtrasStore
@@ -15759,6 +16455,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 if (left.length) self._rememberExtrasUnavailable(left, res.extrasError, res.extrasUnnamed, false);
                 if (loadNumber !== self._deLoadNumber) {
                     queueWaiting();
+                    self._settleDetailWaits();
                     return;
                 };
                 var byKey = {};
@@ -15770,10 +16467,12 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 self._saveDeList();
                 UI.renderSidebarTree();
                 queueWaiting();
+                self._settleDetailWaits();
                 if (typeof console !== 'undefined') console.info('[SQL Studio] The details of the list\'s ' + count + ' Data Extensions came in ' + fmtSeconds(Date.now() - startedAt) + '.');
             }, function (err) {
                 if (self._listDetailsLoadNumber === loadNumber) self._isListDetailsLoading = false;
                 queueWaiting();
+                self._settleDetailWaits();
                 if (typeof console !== 'undefined') console.info('[SQL Studio] The details of the list\'s ' + count + ' Data Extensions did not come, after ' + fmtSeconds(Date.now() - startedAt) + ' (' + (err && err.message ? err.message : String(err)) + '). Each Data Extension reads its own when it is used.');
             });
         },
@@ -15789,8 +16488,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
          */
         _queueDetails: function (table) {
             var self = this;
-            if (!table || table.kind !== 'de' || table.hasDetails === true || self._isDetailsUnsupported) return;
-            if (self._readExtrasUnavailable().length >= DE_LIST_EXTRAS.length) return;
+            if (!self._canReadDetails(table)) return;
             /* A small list's details call covers its own tables: one used meanwhile waits for it. */
             if (self._isListDetailsLoading && !table.isShared) {
                 if (!self._detailsWaiting) self._detailsWaiting = [];
@@ -15798,9 +16496,74 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 return;
             };
             var lookupKey = self.tableKey(table);
-            if (self._detailFailures[lookupKey]) return;
+            /* A call that asks for it is out already: its answer serves this use too. */
+            if (self._detailsInFlight[lookupKey]) return;
             self._detailQueue[lookupKey] = table;
             if (self._detailTimer === null) self._detailTimer = setTimeout(function () { self._flushDetails(); }, DE_DETAILS_GATHER_MS);
+        },
+
+        /**
+         * @method _canReadDetails
+         * @description Tells whether a call can still bring a table's details: it is a Data Extension without them, the Backend has the
+         * action, not all four extras were refused, and its read has not failed this session.
+         * @param {Object} table - a schema table entry
+         * @returns {boolean}
+         */
+        _canReadDetails: function (table) {
+            if (!table || table.kind !== 'de' || table.hasDetails === true || this._isDetailsUnsupported) return false;
+            if (this._readExtrasUnavailable().length >= DE_LIST_EXTRAS.length) return false;
+            return !this._detailFailures[this.tableKey(table)];
+        },
+
+        /**
+         * @method isDetailsPending
+         * @description Tells whether a Data Extension's send relationship is still on its way: it is sendable, the list gave it no
+         * details (a list of more than DE_LIST_DETAILS_MAX gives them on use, and a small one a moment after it comes), and a call can
+         * still bring them (_canReadDetails). Its sendable field joins before any field of its name, so Join to the query and the
+         * recommended joins wait for it (getIndex hands this to the SQL tools). One whose details cannot come joins on what its fields show.
+         * @param {Object} table - a schema table entry
+         * @returns {boolean}
+         */
+        isDetailsPending: function (table) {
+            return !!table && table.kind === 'de' && table.isSendable === true && table.hasDetails === false && this._canReadDetails(table);
+        },
+
+        /**
+         * @method details
+         * @description Waits for a Data Extension's details while they are pending (isDetailsPending): it asks for them (_queueDetails),
+         * or waits for the call that asks for them already, and settles once that call has ended, whatever its answer, and never with
+         * an error. A table whose details are not pending settles at once. No table is asked for twice at the same time.
+         * @param {Object} table - a schema table entry
+         * @returns {Promise} settles with no value
+         */
+        details: function (table) {
+            var self = this;
+            if (!self.isDetailsPending(table)) return Promise.resolve();
+            var lookupKey = self.tableKey(table);
+            var wait = self._detailWaits[lookupKey];
+            if (!wait) {
+                wait = { table: table };
+                wait.promise = new Promise(function (resolve) { wait.settle = resolve; });
+                self._detailWaits[lookupKey] = wait;
+            };
+            self._queueDetails(table);
+            return wait.promise;
+        },
+
+        /**
+         * @method _settleDetailWaits
+         * @description Settles what waits for details (details): the waits of the keys a details call asked for, once it has ended,
+         * and every wait whose table has its details now, or can no longer get them.
+         * @param {string[]} [keys] - the tableKeys of a details call that has ended
+         */
+        _settleDetailWaits: function (keys) {
+            var self = this;
+            Object.keys(self._detailWaits).forEach(function (key) {
+                var wait = self._detailWaits[key];
+                if ((keys || []).indexOf(key) === -1 && self.isDetailsPending(wait.table)) return;
+                delete self._detailWaits[key];
+                wait.settle();
+            });
         },
 
         /**
@@ -15808,8 +16571,9 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
          * @description Sends the queued tables' getDataExtensionDetails call, up to DE_DETAILS_BATCH_MAX at a time, and gives each table
          * its details (applyDeDetails). A table the answer lists as missing gets none and is not asked for again. A Backend without
          * the action (UNKNOWN_ACTION, a 1.1.0 one) stops them for the session. Any other failure marks the tables failed for the
-         * session, until Reload. The list's cache is written once a moment later (_scheduleDeListSave). One console line gives the
-         * time and the count of each call.
+         * session, until Reload. The list's cache is written once a moment later (_scheduleDeListSave). Whatever the answer, what
+         * waits for the details of these tables goes on (_settleDetailWaits), and the sidebar's Join to the query buttons follow what
+         * the details show (UI._scheduleJoinRefresh). One console line gives the time and the count of each call.
          * @returns {Promise} settles once the call has
          */
         _flushDetails: function () {
@@ -15821,7 +16585,18 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             keys.forEach(function (key) {
                 tables[key] = self._detailQueue[key];
                 delete self._detailQueue[key];
+                self._detailsInFlight[key] = true;
             });
+            /**
+             * @function ended
+             * @description Ends the call for its tables: a later use may ask for them again (_queueDetails), what waits for them goes
+             * on, and the Join to the query buttons are set again.
+             */
+            var ended = function () {
+                keys.forEach(function (key) { delete self._detailsInFlight[key]; });
+                self._settleDetailWaits(keys);
+                UI._scheduleJoinRefresh();
+            };
             if (Object.keys(self._detailQueue).length) self._detailTimer = setTimeout(function () { self._flushDetails(); }, 0);
             var skipped = self._readExtrasUnavailable();
             var payload = { keys: keys };
@@ -15838,17 +16613,18 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                     if (tables[String(key)]) tables[String(key)].hasDetails = true;
                 });
                 self._scheduleDeListSave();
+                ended();
                 if (typeof console !== 'undefined') console.info('[SQL Studio] The details of ' + keys.length + ' Data Extension' + (keys.length === 1 ? '' : 's') + ' came in ' + fmtSeconds(Date.now() - startedAt) + '.');
             }, function (err) {
                 if (err && err.code === 'UNKNOWN_ACTION') {
                     self._isDetailsUnsupported = true;
                     self._detailQueue = {};
-                    return;
+                } else if (!err || (err.code !== 'SESSION_EXPIRED' && err.code !== 'SESSION_INVALID')) {
+                    /* An ended session is not a failure of the read, as for fields: a renewal that works sends this call again by itself
+                     * (SCHEMA_READ_ACTIONS), and one that fails ends in the sign-in page, whose new page load reads the details on use. */
+                    keys.forEach(function (key) { self._detailFailures[key] = true; });
                 };
-                /* An ended session is not a failure of the read, as for fields: a renewal that works sends this call again by itself
-                 * (SCHEMA_READ_ACTIONS), and one that fails ends in the sign-in page, whose new page load reads the details on use. */
-                if (err && (err.code === 'SESSION_EXPIRED' || err.code === 'SESSION_INVALID')) return;
-                keys.forEach(function (key) { self._detailFailures[key] = true; });
+                ended();
             });
         },
 
@@ -15946,6 +16722,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 self._markSynchronized();
                 if (!self._deListLoading && !self._deListError && self._deListSavedAt) self._saveDeList();
                 UI.renderSidebarTree();
+                if (UI._saveAsTargetRefresh) UI._saveAsTargetRefresh();
             };
             Api.call('listFolders', { contentTypes: DE_FOLDER_TYPES }).then(function (res) {
                 settle((res.items || []).map(function (f) {
@@ -16253,6 +17030,8 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 table.fields = res.fields || [];
                 delete self._fieldPromises[lookupKey];
                 delete self._fieldFailures[lookupKey];
+                /* With the fields in, the sidebar's Join to the query buttons may know a relationship they did not. */
+                UI._scheduleJoinRefresh();
                 return table.fields;
             }).catch(function (err) {
                 delete self._fieldPromises[lookupKey];
@@ -16419,7 +17198,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         _deListLoadTriggered: false,
         _joinLabels: {},       /* label -> true for each recommended join the completion has offered, so the details panel can tell a join's text from any other item's (section 8.5) */
         _isJoinListStale: false,  /* true while the last list of recommended joins was built without the fields of a Data Extension it waits for */
-        _onlyJoinsAt: null,    /* the offset where the space typed after ON asked for the recommended joins alone (section 8.4), while the cursor stays there, so a list asked for again there stays that list */
+        _onlyJoinsAt: null,    /* the offset where the space typed after ON, or after the = of a condition, asked for the recommended joins alone (section 8.4), while the cursor stays there and a join is there to show or on its way, so a list asked for again there stays that list */
         _suggestDetailsMemory: null,  /* the user's own choice for the details panel, kept in memory for a browser whose storage fails (section 8.5) */
 
         /**
@@ -16437,6 +17216,8 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             /* Loads fields for a Data Extension named in the SQL, once 1.5 s of typing has
             passed, so lint and SELECT * expansion do not wait on it later (section 7.3). */
             this.onDidChangeContent(debounce(function (text) { self._loadReferencedFields(text); }, DE_FIELD_AUTOLOAD_DEBOUNCE_MS));
+            /* The sidebar's Join to the query buttons are on or off by what the query holds. */
+            this.onDidChangeContent(function () { UI._scheduleJoinRefresh(); });
             this._ready = new Promise(function (resolve) {
                 var isSettled = false;
                 var timer = setTimeout(function () {
@@ -16936,32 +17717,6 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         },
 
         /**
-         * @method applyEdits
-         * @description Applies a set of { start, end, text } offset-based edits to the
-         * whole document at once (used by the formatter and alias-fix quick
-         * actions), applying them back-to-front so earlier offsets stay valid.
-         * @param {Array} edits - array of { start, end, text }
-         */
-        applyEdits: function (edits) {
-            if (!edits || !edits.length) return;
-            var current = this.getValue();
-            var out = current;
-            edits.slice().sort(function (a, b) { return b.start - a.start; }).forEach(function (e) {
-                out = out.slice(0, e.start) + e.text + out.slice(e.end);
-            });
-            if (this.mode === 'monaco' && this.instance) {
-                var startPos = this.model.getPositionAt(0);
-                var endPos = this.model.getPositionAt(current.length);
-                var range = new this.monaco.Range(startPos.lineNumber, startPos.column, endPos.lineNumber, endPos.column);
-                this.instance.executeEdits('ss', [{ range: range, text: out }]);
-            } else {
-                this.setValue(out, false);
-            };
-            this._onContentChanged();
-            this._runLint();
-        },
-
-        /**
          * @method applyFixEdits
          * @description Applies one lint finding's fix edits (or a "Fix all" replacement) as a
          * single undo step - pushUndoStop(), executeEdits('ss-fix', ...),
@@ -17256,7 +18011,19 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             if (self._deListLoadTriggered) return;
             self._deListLoadTriggered = true;
             Schema.loadDataExtensionList().then(function () {
-                self._retriggerSuggest();
+                /* Only while the cursor still asks for a table in the focused editor: an ask anywhere else could find nothing and
+                 * show Monaco's "No suggestions." box (final review, 2026-10-07). */
+                if (self.mode !== 'monaco' || !self.instance || !self.instance.hasTextFocus()) return;
+                var model = self.instance.getModel();
+                var ctx;
+                try {
+                    ctx = Tools.completionContext(model.getValue(), model.getOffsetAt(self.instance.getPosition()), Schema.getIndex());
+                } catch (e) {
+                    return;
+                };
+                if (ctx.kind !== 'table') return;
+                if (document.querySelector('.suggest-widget.visible')) self._reopenSuggest();
+                else self._retriggerSuggest();
             }).catch(function () { /* the sidebar/Save As Retry link covers a failed load */ });
         },
 
@@ -17468,7 +18235,12 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 'editorSuggestWidget.selectedBackground': v('--focus-band', '#1D73C9'),
                 'editorSuggestWidget.selectedForeground': v('--focus-band-fg', '#FFFFFF'),
                 'editorSuggestWidget.selectedIconForeground': v('--focus-band-fg', '#FFFFFF'),
-                'editorSuggestWidget.focusHighlightForeground': v('--focus-band-fg', '#FFFFFF')
+                'editorSuggestWidget.focusHighlightForeground': v('--focus-band-fg', '#FFFFFF'),
+                /* The hover card of a table, a column or a finding: the quick tip's look (sqlstudio.css), so every tip of the app reads
+                 * the same (the author's RC12 test, 2026-10-09). */
+                'editorHoverWidget.background': v('--tooltip-bg', base === 'vs-dark' ? '#333437' : '#FFFFFF'),
+                'editorHoverWidget.foreground': v('--tooltip-fg', base === 'vs-dark' ? '#F5F6F7' : '#1C1E21'),
+                'editorHoverWidget.border': v('--tooltip-border', base === 'vs-dark' ? '#6A6D72' : '#A9AFB6')
             };
             /* The second level of bracket pair colours: Monaco's light green reads at 3.93:1 on white, so the light theme sets
              * its own (sqlstudio.css). The dark theme keeps Monaco's three, which read at 6:1 and more. */
@@ -18151,8 +18923,14 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                     addFields(ctx.table);
                 } else {
                     ctx.tablesInScope.forEach(function (e) { addFields(e.table); });
-                    (SQLData.functions || []).forEach(function (f) { items.push(functionItem(f, range)); });
-                    (SQLData.keywords || []).forEach(function (k) { if (k.name.indexOf(' ') === -1) items.push(keywordItem(k, range)); });
+                    /* Functions and keywords show only for a word they start, as keywords do where an alias can go: Monaco matches
+                     * loosely, and SELECT ID then Enter wrote ISDATE, by its I and its D (a user's feedback on 1.1.0, 2026-10-06).
+                     * Columns keep the loose match, so SK still finds SubscriberKey. The provider answers this list as incomplete,
+                     * so the rule meets each keystroke. */
+                    var typed = String(ctx.prefix || '').toUpperCase();
+                    var isStartedBy = function (name) { return !typed || String(name).toUpperCase().indexOf(typed) === 0; };
+                    (SQLData.functions || []).forEach(function (f) { if (isStartedBy(f.name)) items.push(functionItem(f, range)); });
+                    (SQLData.keywords || []).forEach(function (k) { if (k.name.indexOf(' ') === -1 && isStartedBy(k.name)) items.push(keywordItem(k, range)); });
                 };
                 return items;
             });
@@ -18165,8 +18943,9 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
          * @function joinItem
          * @description Builds a Monaco completion item for one recommended join from
          * Tools.joinCompletions: after JOIN, a related Data View or a Data Extension with its alias
-         * and whole ON clause, after ON, the conditions to one earlier table. It sorts above every
-         * other item, replaces the typed word, and carries the edits that keep the earlier tables'
+         * and whole ON clause, after ON, the conditions to one earlier table, and after the = of
+         * alias.column = in an ON, the other side of that condition: a column of the other table of the join.
+         * It sorts above every other item, replaces the typed word, and carries the edits that keep the earlier tables'
          * AS lined up, as additionalTextEdits, so the join arrives as the formatter lays it out.
          * A Data Extension picked after JOIN starts its field load at once, as the table list's
          * item does (prefetchFields): the conditions after a typed ON need the fields.
@@ -18188,11 +18967,15 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 var b = model.getPositionAt(end);
                 return new monacoNS.Range(a.lineNumber, a.column, b.lineNumber, b.column);
             };
-            var sqlLines = item.conditions.map(function (condition, i) { return (i === 0 ? 'ON ' : 'AND ') + condition; });
+            var isSide = item.mode === 'side';
+            /* The other side of a typed condition writes the column alone: the panel shows the whole condition it completes. */
+            var sqlLines = isSide ? item.conditions : item.conditions.map(function (condition, i) { return (i === 0 ? 'ON ' : 'AND ') + condition; });
             if (item.mode === 'join') sqlLines.unshift(item.table + ' AS ' + item.alias);
-            /* The details panel names its row: the label in bold, the key columns under it, the SQL the item writes, and the note last. */
-            var lines = ['**' + mdEscape(item.label) + '**', ''];
-            if (item.detail) lines.push(mdEscape(item.detail), '');
+            /* The details panel names its row: the label in bold, the key columns under it, the SQL the item writes, and the note last.
+             * The other side's row is named by the match it belongs to, as its own label is the column, with the left side typed under it. */
+            var lines = ['**' + mdEscape(isSide ? item.detail : item.label) + '**', ''];
+            if (isSide) lines.push(mdEscape('The other side of ' + item.left), '');
+            else if (item.detail) lines.push(mdEscape(item.detail), '');
             lines.push('```' + JOIN_FENCE_LANGUAGE, sqlLines.join('\n'), '```');
             if (item.note) lines.push('', mdEscape(item.note));
             self._joinLabels[item.label] = true;
@@ -18203,7 +18986,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             var joinedTable = item.mode === 'join' ? Tools.lookupTable(Schema.byName, item.table) : null;
             var completion = {
                 label: item.label,
-                kind: item.mode === 'join' ? (joinedTable && joinedTable.kind === 'dataview' ? kinds.Module : kinds.Class) : kinds.Operator,
+                kind: item.mode === 'join' ? (joinedTable && joinedTable.kind === 'dataview' ? kinds.Module : kinds.Class) : (isSide ? kinds.Field : kinds.Operator),
                 detail: item.detail,
                 documentation: { value: lines.join('\n') },
                 insertText: item.insertText,
@@ -18241,7 +19024,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
          * @returns {Array} Monaco CompletionItems
          */
         function joinSuggestions(ctx, sql, offset, model) {
-            if (!(ctx.kind === 'table' && ctx.afterJoin) && !(ctx.kind === 'column' && ctx.afterOn)) return [];
+            if (!(ctx.kind === 'table' && ctx.afterJoin) && !(ctx.kind === 'column' && (ctx.afterOn || ctx.afterOnEquals))) return [];
             var found;
             try {
                 /* isParentBusinessUnit is null until whoami answers: only a known child gets Ent. before _Subscribers. */
@@ -18261,24 +19044,29 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
          * @function loadJoinFields
          * @description Starts the on-demand field load of the Data Extensions a recommended join waits for, the one
          * Schema.autoFields makes anyway: 1 API call each, cached for the session, and shared with a load already under
-         * way, such as the lint's. It never blocks the list. When the fields are in, and the cursor still sits right after
-         * a JOIN or an ON in the focused editor, an open suggest widget asks again (_reopenSuggest), so their items show
-         * without another key. A Data Extension whose load failed is not tried again until Reload (Schema.autoFields keeps
-         * the failures for the lint, completion and hover alike), so a failed load costs one call, not one per key, and when
-         * every load failed the list stays as it is. Fields that come before Monaco shows the list wait for it (refreshJoinList).
+         * way, such as the lint's. A sendable one whose details are on their way waits for them too (Schema.details: the
+         * field load asks for them, in one call for the tables of one moment, and a table is asked for once). It never blocks
+         * the list. When they are in, and the cursor still sits right after a JOIN or an ON in the focused editor, an open
+         * suggest widget asks again (_reopenSuggest), so their items show without another key. A Data Extension whose load failed
+         * is not tried again until Reload (Schema.autoFields keeps the failures for the lint, completion and hover alike), so a
+         * failed load costs one call, not one per key, and when every load failed the list stays as it is. Fields that come before
+         * Monaco shows the list wait for it (refreshJoinList).
          * @param {Array} tables - the schema tables from Tools.joinCompletions' pendingTables
          * @param {Object} model - the Monaco text model the list was asked for
          */
         function loadJoinFields(tables, model) {
             var toLoad = (tables || []).filter(function (t) {
                 var key = Schema.tableKey(t).toLowerCase();
-                if (t.fields || joinFieldWaits[key] || Schema.hasFieldLoadFailed(t)) return false;
+                if (joinFieldWaits[key]) return false;
+                if (t.fields ? !Schema.isDetailsPending(t) : Schema.hasFieldLoadFailed(t)) return false;
                 joinFieldWaits[key] = true;
                 return true;
             });
             if (!toLoad.length) return;
             Promise.all(toLoad.map(function (t) {
-                return Schema.autoFields(t).then(function () { return true; }, function () { return false; });
+                return Schema.autoFields(t).then(function () {
+                    return Schema.details(t).then(function () { return true; });
+                }, function () { return false; });
             })).then(function (loaded) {
                 toLoad.forEach(function (t) { delete joinFieldWaits[Schema.tableKey(t).toLowerCase()]; });
                 if (loaded.indexOf(true) === -1) return;
@@ -18309,24 +19097,46 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             } catch (e) {
                 return;
             };
-            if (!((ctx.kind === 'table' && ctx.afterJoin) || (ctx.kind === 'column' && ctx.afterOn))) return;
+            if (!((ctx.kind === 'table' && ctx.afterJoin) || (ctx.kind === 'column' && (ctx.afterOn || ctx.afterOnEquals)))) return;
             if (document.querySelector('.suggest-widget.visible')) {
                 self._reopenSuggest();
                 return;
             };
             if (self._onlyJoinsAt === offset) {
-                self._retriggerSuggest();
+                /* Asked again only when a join applies now. An explicit ask that finds nothing shows Monaco's "No suggestions." box, and
+                 * while it shows Ctrl+Space toggles the details instead of asking, so the usual columns never came (final review,
+                 * 2026-10-07). With nothing to offer and nothing still loading, the place is forgotten and Ctrl+Space lists the columns. */
+                if (joinSuggestions(ctx, model.getValue(), offset, model).length) self._retriggerSuggest();
+                else if (!self._isJoinListStale) self._onlyJoinsAt = null;
                 return;
             };
             if (tries > 0) global.setTimeout(function () { refreshJoinList(model, tries - 1); }, JOIN_LIST_SHOW_WAIT_MS);
+        };
+        /**
+         * @function onlyJoinSuggestions
+         * @description Lists the recommended joins alone, as the space after ON, or after the = of a condition of it, asks for
+         * them. The offset is remembered (_onlyJoinsAt) while there is a join to show there or one waits for the fields or the
+         * send relationship of a table (refreshJoinList asks again there when they come), so a list asked for again at that place
+         * is this list. With nothing to offer it is forgotten, so Ctrl+Space there lists the usual columns, as anywhere else, and
+         * so does Ctrl+Space while a join still waits.
+         * @param {Object} ctx - the completion context from Tools.completionContext
+         * @param {string} sql - the editor text
+         * @param {number} offset - the cursor offset
+         * @param {Object} model - the Monaco text model
+         * @returns {Array} Monaco CompletionItems
+         */
+        function onlyJoinSuggestions(ctx, sql, offset, model) {
+            var items = joinSuggestions(ctx, sql, offset, model);
+            self._onlyJoinsAt = (items.length || self._isJoinListStale) ? offset : null;
+            return items;
         };
         /**
          * @function onSpaceJoinSuggestions
          * @description Lists the recommended joins for the space typed right after ON, which opens the list with the joins alone
          * when one applies to the join being written, so Enter takes the first. When none applies it gives nothing, no list opens,
          * and Enter starts a new line as anywhere else. Where the join waits for the fields of the table just joined, which
-         * start to load when it is picked, it gives nothing for now and refreshJoinList opens the list once they are in. The
-         * offset is remembered (_onlyJoinsAt) so that a list asked for again at the same place, as the fields arrive, is this list.
+         * start to load when it is picked, it gives nothing for now and refreshJoinList opens the list once they are in
+         * (onlyJoinSuggestions).
          * @param {Object} model - the Monaco text model
          * @param {Object} position - the cursor position, right after the space
          * @returns {Array} Monaco CompletionItems
@@ -18344,8 +19154,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 self._onlyJoinsAt = null;
                 return [];
             };
-            self._onlyJoinsAt = offset;
-            return joinSuggestions(ctx, sql, offset, model);
+            return onlyJoinSuggestions(ctx, sql, offset, model);
         };
         /**
          * @function joinKeywordSuggestions
@@ -18430,7 +19239,8 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                  * recommended joins come with the first character typed after it. The space
                  * after ON opens the recommended joins alone when one applies to the join being
                  * written, as there is one to take with Enter, and nothing otherwise, so Enter
-                 * there starts a new line as before (onSpaceJoinSuggestions). */
+                 * there starts a new line as before (onSpaceJoinSuggestions). The space after the =
+                 * of alias.column = in that ON does the same with the other side of the condition. */
                 var isValueTrigger = !!context && context.triggerKind === monacoNS.languages.CompletionTriggerKind.TriggerCharacter && context.triggerCharacter !== '.';
                 if (isValueTrigger) {
                     var lineBefore = model.getLineContent(position.lineNumber).slice(0, position.column - 1).replace(/\s+$/, '');
@@ -18460,7 +19270,16 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 if (ctx.kind === 'value') {
                     return { suggestions: valueSuggestions(ctx.field, range) };
                 };
-                if (isValueTrigger) return { suggestions: [] };
+                if (isValueTrigger) {
+                    /* The space after the = of alias.column = in a join's ON, or in an AND of it, opens the other side of the condition
+                     * alone when the join's relationship has one for that column, so Enter takes it, and nothing otherwise. A typed
+                     * character then lists it first, with the columns after it, as after ON, and with no other side Ctrl+Space lists
+                     * the usual columns (onlyJoinSuggestions). */
+                    if (context.triggerCharacter === ' ' && ctx.kind === 'column' && ctx.afterOnEquals && ctx.prefix === '') {
+                        return { suggestions: onlyJoinSuggestions(ctx, sql, offset, model) };
+                    };
+                    return { suggestions: [] };
+                };
                 if (ctx.kind === 'table') {
                     /* Table completion after FROM/JOIN loads the Business Unit's Data
                      * Extension list, once per session, and returns whatever is known
@@ -18473,8 +19292,12 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 };
                 if (ctx.kind === 'column') {
                     /* Asked for again where the space after ON asked for the joins alone, as when the fields of the table just joined
-                     * arrive or the list is reopened: the same list, with no column or function among the joins. */
-                    if (ctx.afterOn && ctx.prefix === '' && self._onlyJoinsAt === offset) return { suggestions: joinSuggestions(ctx, sql, offset, model) };
+                     * arrive or the list is reopened: the same list, with no column or function among the joins. With no join to show,
+                     * refreshJoinList does not ask, and Ctrl+Space lists the usual columns below. */
+                    if ((ctx.afterOn || ctx.afterOnEquals) && ctx.prefix === '' && self._onlyJoinsAt === offset) {
+                        var joinsAlone = onlyJoinSuggestions(ctx, sql, offset, model);
+                        if (joinsAlone.length) return { suggestions: joinsAlone };
+                    };
                     /* Async: field lists can still be loading. Bail out quietly if
                      * Monaco already cancelled this request (the model changed or
                      * the widget closed) instead of resolving into a torn-down
@@ -18482,8 +19305,12 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                      * state and threw "getItemsByProvider" during manual testing. */
                     return columnSuggestions(ctx, range).then(function (list) {
                         if (token && token.isCancellationRequested) return { suggestions: [] };
-                        /* Right after ON, the conditions to a related earlier table come first. */
-                        return { suggestions: joinSuggestions(ctx, sql, offset, model).concat(list) };
+                        /* Right after ON, the conditions to a related earlier table come first. A bare column list is incomplete, so
+                         * Monaco asks again as the word grows and only the functions and keywords it starts stay (columnSuggestions). */
+                        return {
+                            suggestions: joinSuggestions(ctx, sql, offset, model).concat(list),
+                            incomplete: !ctx.alias
+                        };
                     }, function () { return { suggestions: [] }; });
                 };
                 /* After LEFT, LEFT OUTER and the like only the rest of a join keyword fits: any other keyword would
@@ -19012,6 +19839,45 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
     };
 
     /**
+     * @function isPageReadRefusal
+     * @description Whether a failed read of a finished run's page says nothing about the run's rows: Marketing Cloud
+     * Engagement refused it with HTTP 429 after the tries Api._afterRateLimit makes (RATE_LIMITED), or it ended with a
+     * network error or a timeout (NETWORK, which holds both). The rows are in the run's temporary Data Extension then, so the
+     * run is kept and the page is read again later (QueryRunner._keepRunWithoutPage). Any other error is MCE's answer about the
+     * read itself, and keeps the handling it had.
+     * @param {?Object} err - the error getResults failed with
+     * @returns {boolean}
+     */
+    function isPageReadRefusal(err) {
+        return !!err && (err.code === 'RATE_LIMITED' || err.code === 'NETWORK');
+    };
+
+    /**
+     * @function unreadPageOf
+     * @description The record of a tab's finished run whose last page read failed, or null when the tab has none: the run
+     * is done, has no page loaded, and the record belongs to the run the tab holds now (a new run, a deleted run and a
+     * restore each put another run in the tab, which ends the record without anything clearing it).
+     * @param {Object} tabState - a tab's state
+     * @returns {?{run: Object, message: string, details: *, triedAt: number, isReading: boolean}} the record
+     */
+    function unreadPageOf(tabState) {
+        var unread = tabState.unreadPage;
+        if (!unread || tabState.runnerState !== 'done' || tabState.results || tabState.activeRun !== unread.run) return null;
+        return unread;
+    };
+
+    /**
+     * @function knownRowCount
+     * @description The rows a run's last status check counted, for a run whose page has not loaded: its summary says them.
+     * A count of 0 or none is not known to be true (the free count can be behind the rows), so it says nothing.
+     * @param {?Object} run - a tab's activeRun
+     * @returns {?number} null when the count is not known
+     */
+    function knownRowCount(run) {
+        return (run && typeof run.lastRowCount === 'number' && run.lastRowCount > 0) ? run.lastRowCount : null;
+    };
+
+    /**
      * @function runBlockingFindings
      * @description The lint findings that stop a run: every error except MCE010 and MCE011 (unnamed
      * and duplicate columns), which the alias dialog offers to fix instead.
@@ -19364,58 +20230,114 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
     };
 
     /**
+     * @function tallyRunCalls
+     * @description What a run's calls add up to, as the run summary's hint draws it and as a tab saves it: the calls through
+     * the API and the calls through WSProxy, each summed by action in the order the actions first made one, and the number
+     * of row count checks and results pages read without a call. This is small whatever the length of the run, as a run
+     * makes the same few calls again and again (the status checks). A free entry may stand for several (its `times`),
+     * as in a tally restored by restoredRunCalls.
+     * @param {Array<Object>} entries - the calls of one run, as Api.recordCall gives them
+     * @returns {{api: Array<Array>, wsproxy: Array<Array>, freeCounts: number, freePages: number}} api and wsproxy hold
+     * [action, calls] pairs
+     */
+    function tallyRunCalls(entries) {
+        var tally = {
+            api: [],
+            wsproxy: [],
+            freeCounts: 0,
+            freePages: 0
+        };
+        var add = function (pairs, action, calls) {
+            for (var i = 0; i < pairs.length; i++) {
+                if (pairs[i][0] === action) {
+                    pairs[i][1] += calls;
+                    return;
+                };
+            };
+            pairs.push([action, calls]);
+        };
+        entries.forEach(function (entry) {
+            if (entry.wsproxyCalls) add(tally.wsproxy, entry.action, entry.wsproxyCalls);
+            if (entry.isFree) {
+                if (entry.action === 'getRunStatus') tally.freeCounts += entry.times || 1;
+                if (entry.action === 'getResults') tally.freePages += entry.times || 1;
+                return;
+            };
+            if (entry.apiCalls) add(tally.api, entry.action, entry.apiCalls);
+        });
+        return tally;
+    };
+
+    /* The most actions a saved tally is read for, each way. A run has about ten, so more is a damaged save. */
+    var SAVED_CALL_ACTIONS_MAX = 40;
+
+    /**
+     * @function restoredRunCalls
+     * @description A run's calls from the tally its tab saved (tallyRunCalls), as the list a run keeps (Runner._calls), so
+     * the summary counts them and draws their hint as it did for the run itself, and a later export adds its calls to it.
+     * What a save holds is read with care, as the storage can be edited or damaged: a part that is not what a tally has is
+     * left out. A tab saved by 1.1.x has no tally, and this answers null for it, which the summary reads as no counts.
+     * @param {*} saved - the tab's saved runCalls
+     * @returns {?Array<Object>} null when there is no tally, [] for a tally of a run that made no call
+     */
+    function restoredRunCalls(saved) {
+        if (!saved || typeof saved !== 'object' || !Array.isArray(saved.api) || !Array.isArray(saved.wsproxy)) return null;
+        var calls = [];
+        var callEntry = function (action, apiCalls, wsproxyCalls, isFree, times) {
+            var entry = {
+                action: action,
+                apiCalls: apiCalls,
+                wsproxyCalls: wsproxyCalls,
+                isFree: isFree
+            };
+            if (times) entry.times = times;
+            return entry;
+        };
+        var countOf = function (n) { return (typeof n === 'number' && isFinite(n) && n >= 1) ? Math.floor(n) : 0; };
+        var addPairs = function (pairs, isWsproxy) {
+            pairs.slice(0, SAVED_CALL_ACTIONS_MAX).forEach(function (pair) {
+                var n = Array.isArray(pair) ? countOf(pair[1]) : 0;
+                if (!n || typeof pair[0] !== 'string' || !pair[0] || pair[0].length > 60) return;
+                calls.push(callEntry(pair[0], isWsproxy ? 0 : n, isWsproxy ? n : 0, false));
+            });
+        };
+        addPairs(saved.api, false);
+        addPairs(saved.wsproxy, true);
+        /* The free ones are not calls: one entry says how many there were. */
+        if (countOf(saved.freeCounts)) calls.push(callEntry('getRunStatus', 0, 0, true, countOf(saved.freeCounts)));
+        if (countOf(saved.freePages)) calls.push(callEntry('getResults', 0, 0, true, countOf(saved.freePages)));
+        return calls;
+    };
+
+    /**
      * @function runCallsHint
      * @description Where a run's API calls went: a line splitting the total between calls through the API and
      * calls through WSProxy inside Marketing Cloud Engagement, then a table for each, then what the run did
      * without any call. The run summary's total counts both kinds, since whether Salesforce's API limit counts
      * WSProxy is not confirmed.
-     * @param {Array<Object>} entries - Api.callLog entries since the run started
+     * @param {Array<Object>} entries - the run's own calls (Runner._calls)
      * @returns {?HTMLElement} null when nothing was recorded
      */
     function runCallsHint(entries) {
-        var paid = {};
-        var order = [];
-        var proxied = {};
-        var proxiedOrder = [];
-        var freeCounts = 0;
-        var freePages = 0;
-        entries.forEach(function (entry) {
-            if (entry.wsproxyCalls) {
-                if (proxied[entry.action] === undefined) {
-                    proxied[entry.action] = 0;
-                    proxiedOrder.push(entry.action);
-                };
-                proxied[entry.action] += entry.wsproxyCalls;
-            };
-            if (entry.isFree) {
-                if (entry.action === 'getRunStatus') freeCounts++;
-                if (entry.action === 'getResults') freePages++;
-                return;
-            };
-            if (!entry.apiCalls) return;
-            if (paid[entry.action] === undefined) {
-                paid[entry.action] = 0;
-                order.push(entry.action);
-            };
-            paid[entry.action] += entry.apiCalls;
-        });
+        var tally = tallyRunCalls(entries);
         var parts = [];
-        var paidTotal = order.reduce(function (sum, action) { return sum + paid[action]; }, 0);
-        var proxiedTotal = proxiedOrder.reduce(function (sum, action) { return sum + proxied[action]; }, 0);
+        var sumOf = function (pairs) { return pairs.reduce(function (sum, pair) { return sum + pair[1]; }, 0); };
+        var paidTotal = sumOf(tally.api);
+        var proxiedTotal = sumOf(tally.wsproxy);
         if (proxiedTotal) {
             parts.push(h('p', { class: 'ss-hint__split' }, apiCallsText(paidTotal) + ' through the API, and ' + wsproxyCallsText(proxiedTotal) + ' through WSProxy inside Marketing Cloud Engagement, which Salesforce is said not to count against the API limit'));
         };
-        if (order.length) {
+        if (tally.api.length) {
             parts.push(h('p', { class: 'ss-hint__title' }, 'Through the API'));
-            parts.push(hintTable(order.map(function (action) { return [CALL_LABELS[action] || action, apiCallsText(paid[action])]; })));
+            parts.push(hintTable(tally.api.map(function (pair) { return [CALL_LABELS[pair[0]] || pair[0], apiCallsText(pair[1])]; })));
         };
-        if (proxiedOrder.length) {
+        if (tally.wsproxy.length) {
             parts.push(h('p', { class: 'ss-hint__title' }, 'Through WSProxy'));
-            parts.push(hintTable(proxiedOrder.map(function (action) { return [WSPROXY_CALL_LABELS[action] || CALL_LABELS[action] || action, wsproxyCallsText(proxied[action])]; })));
+            parts.push(hintTable(tally.wsproxy.map(function (pair) { return [WSPROXY_CALL_LABELS[pair[0]] || CALL_LABELS[pair[0]] || pair[0], wsproxyCallsText(pair[1])]; })));
         };
         var freeRows = [];
-        if (freeCounts) freeRows.push(['Row count checks', fmtNumber(freeCounts)]);
-        if (freePages) freeRows.push(['Results pages', fmtNumber(freePages)]);
+        if (tally.freeCounts) freeRows.push(['Row count checks', fmtNumber(tally.freeCounts)]);
+        if (tally.freePages) freeRows.push(['Results pages', fmtNumber(tally.freePages)]);
         if (freeRows.length) {
             parts.push(h('p', { class: 'ss-hint__title' }, 'Done without any call'));
             parts.push(hintTable(freeRows));
@@ -19501,8 +20423,9 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
 
     /**
      * @function pollInterval
-     * @description Returns the status polling interval for a run that has been polled for
-     * elapsed milliseconds: 3 s in the first minute, 10 s until five minutes, then 20 s.
+     * @description Returns the status polling interval where each poll is an API call, for a run, or the move of a save,
+     * that has been polled for elapsed milliseconds: a fifth of the time so far (POLL_WAIT_SHARE), never less than
+     * POLL_FAST_MS (3 s) and never more than POLL_SLOW_MS (30 s).
      * @param {number} elapsed
      * @returns {number} milliseconds until the next poll
      */
@@ -19674,6 +20597,18 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
     var runStartQueue = Promise.resolve();
 
     /**
+     * @function isFolderRefusal
+     * @description Whether a run's start or a save's move was refused for its query folder (MCE_ERROR naming a category or a
+     * folder), as when an admin deleted the SQL Studio folder after the page cached it. The caller then forgets that answer
+     * (Schema.forgetWorkspace) and, when it came from the cache, looks the folders up and sends the request once more.
+     * @param {Object} err - the Api error
+     * @returns {boolean}
+     */
+    function isFolderRefusal(err) {
+        return !!err && err.code === 'MCE_ERROR' && /categor|folder/i.test(String(err.message) + ' ' + String(err.details || ''));
+    };
+
+    /**
      * @constructor QueryRunner
      * @description One tab's run state machine: every method below runs
      * asynchronously for a specific run, so it must never read the module-level `state`/`Runner`
@@ -19779,7 +20714,8 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         var entry = {
             id: uid(), sql: this.currentRunSql, startedAt: new Date(startedAt).toISOString(),
             durationMs: (this.currentRunFinishedAt || Date.now()) - startedAt,
-            rowCount: status === 'done' && this.tab.state.results ? this.tab.state.results.count : 0,
+            /* A run whose page did not load (_keepRunWithoutPage) records the rows its last status check counted. */
+            rowCount: status === 'done' ? (this.tab.state.results ? this.tab.state.results.count : (knownRowCount(run) || 0)) : 0,
             status: status, deKey: run ? run.deKey : null
         };
         History.add(entry);
@@ -19834,6 +20770,11 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         /* A new run deletes the Data Extension of the results this tab is exporting, and its rows with it. */
         if (tab.activeExport) {
             Toast.show('This tab is exporting its results. Run again when the export has ended.', 'info');
+            return;
+        };
+        /* The same for a save: its move reads this Data Extension. */
+        if (tab.activeSave) {
+            Toast.show('This tab is saving its results to a Data Extension. Run again when the save has ended.', 'info');
             return;
         };
         this.messages = [];
@@ -20383,7 +21324,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 return;
             };
             /* A folder deleted since it was cached: look the folders up again and run once more. */
-            if (err && err.code === 'MCE_ERROR' && /categor|folder/i.test(String(err.message) + ' ' + String(err.details || '')) && Schema.forgetWorkspace()) {
+            if (isFolderRefusal(err) && Schema.forgetWorkspace()) {
                 self._create(sql, columns, hasRetriedSession, columnTypes);
                 return;
             };
@@ -20885,11 +21826,37 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
      */
     QueryRunner.prototype._fetch = function () {
         var self = this;
-        var tab = self.tab;
         var attempt = self.attempt;
         self.setState('fetching');
+        var first = self._readFirstPage();
+        first.read.then(function (res) {
+            if (attempt !== self.attempt) return;
+            self._applyResults(res, first.isEmptyEnd);
+        }).catch(function (err) {
+            if (attempt !== self.attempt) return;
+            if (self._isWaitingForRenewal(err)) return;
+            /* The run is done and its rows are in its temporary Data Extension: a read that Marketing Cloud Engagement refused
+             * with HTTP 429 after the tries, or that met a network error or a timeout, does not fail the run. */
+            if (isPageReadRefusal(err)) {
+                self._keepRunWithoutPage(err);
+                return;
+            };
+            self._fail('error', 'Could not fetch results: ' + err.message, err.details);
+        });
+    };
+
+    /**
+     * @method _readFirstPage
+     * @description Starts the read of page 1 of the run's results, as the end of the run does (_fetch) and as the button of a
+     * run whose page did not load does (readResultsAgain): the same request and the same check, so a second read costs what
+     * the first would have. A run that counted no rows asks for REST (1 API call). One that counted rows reads for free, checked
+     * against that count (readCheckedPage), and a free page that disagrees is read once more through REST, which decides.
+     * @returns {{read: Promise, isEmptyEnd: boolean}} the read's promise, and whether the run ended with no rows counted
+     */
+    QueryRunner.prototype._readFirstPage = function () {
+        var self = this;
+        var run = self.tab.state.activeRun;
         var pageSize = Settings.data.pageSize || 100;
-        var run = tab.state.activeRun;
         var isEmptyEnd = !(run.lastRowCount > 0);
         var request = {
             deKey: run.deKey,
@@ -20902,14 +21869,125 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             return self._api('getResults', payload);
         };
         /* One REST page of its own, as the grid's chunks start empty with the results (Grid.setData). */
-        var read = isEmptyEnd ? sendFirstPage(request) : readCheckedPage(sendFirstPage, request, run.lastRowCount, 'Page 1', sendFirstPage);
-        read.then(function (res) {
-            if (attempt !== self.attempt) return;
-            self._applyResults(res, isEmptyEnd);
+        return {
+            read: isEmptyEnd ? sendFirstPage(request) : readCheckedPage(sendFirstPage, request, run.lastRowCount, 'Page 1', sendFirstPage),
+            isEmptyEnd: isEmptyEnd
+        };
+    };
+
+    /**
+     * @method _keepRunWithoutPage
+     * @description Ends a run whose page 1 could not be read (isPageReadRefusal) as done, without the page: its rows are in its
+     * temporary Data Extension, so the run is not failed. Its summary shows as for any done run, with the rows when a status
+     * check counted them. The results area says the rows did not load, with the error's text, and offers to read the page again
+     * (UI._buildUnreadPage, readResultsAgain). The tab saves the run, so a reload reads the page as it reads any saved run's
+     * (QueryTabs.snapshot, restoreResults).
+     * @param {Object} err - the error the read failed with
+     */
+    QueryRunner.prototype._keepRunWithoutPage = function (err) {
+        var tab = this.tab;
+        var run = tab.state.activeRun;
+        run.finishedAt = Date.now();
+        this.currentRunFinishedAt = run.finishedAt;
+        if (typeof console !== 'undefined') {
+            console.info('[SQL Studio] The first page of the results could not be read (' + (err.code || 'no code') + '), so the run stays done and its rows stay in ' + run.deKey + '. The results area offers to read the page again.');
+        };
+        tab.state.results = null;
+        Grid.setData(tab, null);
+        tab.state.unreadPage = {
+            run: run,
+            message: err.message || 'No message',
+            details: err.details || null,
+            triedAt: Date.now(),
+            isReading: false
+        };
+        this.setState('done');
+        this._finish();
+    };
+
+    /**
+     * @method readResultsAgain
+     * @description The "Read the results again" button of a run whose page did not load (_keepRunWithoutPage): reads page 1 as
+     * the end of the run did (_readFirstPage), for 1 API call or none on the free read, counted in the run's calls. When it
+     * reads, the results show as a first read shows them, and the tab saves them. A refusal or a network error leaves the run as
+     * it was, with the new error's text. A temporary Data Extension that is gone ends the results as a restore ends them
+     * (RESULTS_GONE_TEXT). An ended session waits for the background renewal and reads again, as the end of a run does
+     * (_isWaitingForRenewal), and when the dialog takes over, the saved run is read after the sign-in.
+     */
+    QueryRunner.prototype.readResultsAgain = function () {
+        var self = this;
+        var tab = self.tab;
+        var unread = unreadPageOf(tab.state);
+        if (!unread || unread.isReading) return;
+        var attempt = self.attempt;
+        /* The button is drawn again, off, while the page is read, and a focused button that goes off loses the focus: a keyboard
+         * user gets it back on the new button when the read fails. */
+        var focused = document.activeElement;
+        var hadFocus = !!focused && !!focused.classList && focused.classList.contains('ss-unread-page__button');
+        var restoreFocus = function () {
+            var again = hadFocus ? document.querySelector('.ss-unread-page__button') : null;
+            if (again && !again.disabled) again.focus();
+        };
+        unread.isReading = true;
+        if (tab === QueryTabs.active()) UI.renderResults();
+        /* Whether the record still stands: a new run, a delete or a restore has replaced it meanwhile. */
+        var isCurrent = function () { return attempt === self.attempt && unreadPageOf(tab.state) === unread; };
+        var first = self._readFirstPage();
+        first.read.then(function (res) {
+            if (!isCurrent()) return;
+            self._setFirstPage(res, first.isEmptyEnd);
+            tab.state.unreadPage = null;
+            /* A page of no rows brings the notice a run's end gives, and the messages are routed again. */
+            var messageCount = self.messages.length;
+            self._addEmptyNotice(tab.state.activeRun);
+            if (self.messages.length > messageCount) UI.reportRunOutcome(self);
+            /* No new state: the run was done already, and the user may be on the Status tab. What follows the rows is drawn
+             * again: the summary, the Results tab count, Export, and the tab strip. */
+            if (tab === QueryTabs.active()) {
+                UI.renderRunSummary();
+                UI._syncExportCost();
+            };
+            QueryTabs.markChanged(tab);
+            QueryTabs.render();
         }).catch(function (err) {
-            if (attempt !== self.attempt) return;
-            if (self._isWaitingForRenewal(err)) return;
-            self._fail('error', 'Could not fetch results: ' + err.message, err.details);
+            if (!isCurrent()) return;
+            unread.isReading = false;
+            var isSessionError = !!err && (err.code === 'SESSION_EXPIRED' || err.code === 'SESSION_INVALID');
+            var recovery = isSessionError ? Session.recovery() : null;
+            if (recovery) {
+                recovery.then(function () {
+                    if (isCurrent()) self.readResultsAgain();
+                }, function () { /* the dialog has taken over */ });
+                if (tab === QueryTabs.active()) UI.renderResults();
+                return;
+            };
+            if (isSessionError && Session._expired) {
+                if (tab === QueryTabs.active()) UI.renderResults();
+                return;
+            };
+            if (isDataExtensionGoneError(err)) {
+                QueryTabs._dropResults(tab);
+                if (tab === QueryTabs.active()) {
+                    UI.addStatusNotice(RESULTS_GONE_TEXT);
+                    UI.setActiveTab('status');
+                } else {
+                    tab.state.statusNotices.push(RESULTS_GONE_TEXT);
+                    tab.state.bottomPanel = 'status';
+                };
+                QueryTabs.markChanged(tab);
+                return;
+            };
+            unread.message = (err && err.message) || 'No message';
+            unread.details = (err && err.details) || null;
+            unread.triedAt = Date.now();
+            if (tab === QueryTabs.active()) {
+                UI.renderResults();
+                restoreFocus();
+                /* The read may have cost a call, which the summary counts. */
+                UI.renderRunSummary();
+                Toast.show('Could not read the results again: ' + unread.message, 'error');
+            };
+            QueryTabs.render();
         });
     };
 
@@ -20917,6 +21995,22 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
     page, renders the grid (only when this tab is on screen) and moves to 'done'. isEmptyEnd comes from
     _fetch: the run ended with no rows counted, so page 1 was asked for through REST. */
     QueryRunner.prototype._applyResults = function (res, isEmptyEnd) {
+        var tab = this.tab;
+        tab.state.activeRun.finishedAt = Date.now();
+        this.currentRunFinishedAt = tab.state.activeRun.finishedAt;
+        this._setFirstPage(res, isEmptyEnd);
+        this.setState('done');
+        this._finish();
+    };
+
+    /**
+     * @method _setFirstPage
+     * @description Stores page 1 of a run's results in the tab and draws it when the tab is on screen: the part of the end of a
+     * run (_applyResults) that the read after a failed one (readResultsAgain) shares.
+     * @param {Object} res - the getResults answer
+     * @param {boolean} [isEmptyEnd] - the run ended with no rows counted, so page 1 was asked for through REST (_fetch)
+     */
+    QueryRunner.prototype._setFirstPage = function (res, isEmptyEnd) {
         var run = this.tab.state.activeRun;
         if (res && res.readPath && typeof console !== 'undefined') {
             /* A count of 0 sends page 1 to REST on purpose. A count that could not be read is the free read not
@@ -20929,8 +22023,6 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         };
         withDisplayDates(res, run.columnTypes);
         var tab = this.tab;
-        tab.state.activeRun.finishedAt = Date.now();
-        this.currentRunFinishedAt = tab.state.activeRun.finishedAt;
         tab.state.results = {
             columns: res.columns,
             rows: res.rows,
@@ -20950,8 +22042,6 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             freeReadFailed: !!(res && res.readPath === 'rest' && run.hasRowMark && Tools.isFreeReadPage(1, res.pageSize))
         };
         Grid.setData(tab, tab.state.results);
-        this.setState('done');
-        this._finish();
     };
 
     /**
@@ -20966,6 +22056,21 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         var run = self.tab.state.activeRun;
         if (!run) return;
         self._recordHistory('done');
+        self._addEmptyNotice(run);
+        if (!run.retentionApplied) {
+            self.addMessage('detail', 'This org does not allow retention on API-created Data Extensions. SQL Studio sweeps up leftovers automatically after a few hours.');
+        };
+        UI.reportRunOutcome(self);
+    };
+
+    /**
+     * @method _addEmptyNotice
+     * @description Queues the notice for a run whose results hold 0 rows, in the words that fit what is known of why. Nothing
+     * for results with rows, and nothing for a run whose page has not loaded.
+     * @param {Object} run - the tab's activeRun
+     */
+    QueryRunner.prototype._addEmptyNotice = function (run) {
+        var self = this;
         if (self.tab.state.results && self.tab.state.results.count === 0) {
             /* A query that fails while it runs, such as JSON_VALUE on invalid JSON, also ends with 0 rows.
              * With a taskId, getRunOutcome (QueryRunner._checkRunOutcome) already
@@ -20983,10 +22088,6 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             };
             self.addMessage('info', zeroRowText);
         };
-        if (!run.retentionApplied) {
-            self.addMessage('detail', 'This org does not allow retention on API-created Data Extensions. SQL Studio sweeps up leftovers automatically after a few hours.');
-        };
-        UI.reportRunOutcome(self);
     };
 
     /**
@@ -21003,6 +22104,8 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         this.currentRunSql = restoreEntry.runSql || '';
         this.currentRunStartedAt = restoreEntry.runStartedAt || restoreEntry.activeRun.pollStartedAt;
         this.currentRunFinishedAt = null;
+        /* The calls the run made before the renewal, which its polls from here add to. A run saved by 1.1.x counts none. */
+        this._calls = restoredRunCalls(restoreEntry.runCalls);
         this.setState('running');
         this._scheduleNext(0);
         Poller.ensureRunning();
@@ -21038,6 +22141,9 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         tab.state.activeRun = run;
         /* Until the page arrives, a save keeps this entry's results (see QueryTabs.snapshot). */
         tab._restoringEntry = restoreEntry;
+        /* The page read below is not part of the run, so it is counted in no list: the run's own calls are put back when the page
+         * has come, and a list from an earlier run of this tab, replaced by another window's results, is not the run's. */
+        self._calls = null;
         self.currentRunSql = restoreEntry.runSql || '';
         self.currentRunStartedAt = restoreEntry.runStartedAt || run.pollStartedAt;
         self.currentRunFinishedAt = restoreEntry.runFinishedAt || run.finishedAt;
@@ -21051,6 +22157,9 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             orderBy: saved.orderBy || undefined,
             columns: run.columns
         };
+        /* A run whose page did not load, and had counted no rows, saves that its first read went through REST (QueryTabs.snapshot):
+         * a free read of it may be as far behind as the count was. */
+        if (saved.restOnly === true) request.restOnly = true;
         /* Saved before the count went with the results, an entry has none to compare. */
         var savedCount = typeof saved.count === 'number' ? saved.count : null;
         var isReadAgain = false;
@@ -21065,6 +22174,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         return readCheckedPage(sendRestore, request, savedCount, 'The restored page', readRestoreAgain).then(function (res) {
             if (attempt !== self.attempt) return; /* a new run started meanwhile */
             tab._restoringEntry = null;
+            tab.state.unreadPage = null;
             withDisplayDates(res, run.columnTypes);
             tab.state.results = {
                 columns: res.columns,
@@ -21088,6 +22198,9 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             };
             Grid.setData(tab, tab.state.results);
             Grid.showSortOf(tab, saved.orderBy);
+            /* The summary counts the run's calls as it did before the reload. A tab saved by 1.1.x has none, so the summary
+             * leaves the counts out (restoredRunCalls). */
+            self._calls = restoredRunCalls(restoreEntry.runCalls);
             self.setState('done');
             scheduleSaveTabs();
         }).catch(function (err) {
@@ -21836,7 +22949,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             if (!this.data) return;
             /* One export at a time in a tab: its button is disabled while one runs, and this keeps a second call from anywhere else
              * from reading the same rows twice. */
-            if (QueryTabs.active().activeExport) return;
+            if (QueryTabs.active().activeExport || QueryTabs.active().activeSave) return;
             /* The active tab at the moment Export CSV is clicked (it acts on the active tab): every value this export needs is captured into local variables
              * right here, before any await, so a later tab switch while a multi-page export is still
              * walking pages can never change what it downloads or names the file. */
@@ -22420,6 +23533,19 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
          * tab keeps its own, so each tab shows its own progress when it is on screen, and what would replace or delete the
          * results being read waits for it (QueryRunner.run, QueryTabs.clearResults, UI._deleteCurrentRun). */
         this.activeExport = null;
+        /* The save of this tab's results into a new Data Extension while one runs (SaveToDe._start): { phase: 'checking', 'creating' or
+         * 'moving', name, rowCount, slot, made, sentAt, task }, else null. It holds the same things an export does: the tab's run, Delete
+         * results, Open, a History load and Export, and the Save to DE button. Its slot is the query activity its move uses, which no other
+         * tab's run or save takes meanwhile (QueryTabs.pickSlot). From the time its move's request went (sentAt), the save goes into the
+         * tab's snapshot, with its task once the request has answered (SaveToDe.snapshotOf). */
+        this.activeSave = null;
+        /* The query activities of this tab's moves that ended unconfirmed, each held until POLL_MAX_MS after its move started:
+         * [{ slot, until }]. Such a move may still wait in Marketing Cloud Engagement's queue, which reads as not running, so no run or
+         * save of this window, this tab's own included, takes the slot meanwhile (QueryTabs.pickSlot). The tab's snapshot keeps them. */
+        this.slotHolds = [];
+        /* The model of the Save to DE overlay for the tab's current run (SaveToDe), which keeps what the user set when the overlay closes, a
+         * create is refused, or a move fails and the Data Extension is kept. */
+        this.saveModel = null;
         /* When this tab last changed (text, run or results), so with two windows open the later
          * change to each tab wins when both save (see QueryTabs.persist). */
         this.changedAt = 0;
@@ -22493,17 +23619,27 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         /**
          * @method pickSlot
          * @description The lowest pool slot (1..QUERY_SLOT_COUNT) none of forTab's *other* running
-         * tabs in this window is using, so every tab can run at once.
+         * or saving tabs in this window is using, and no tab holds for a move that ended unconfirmed
+         * (slotHolds, forTab's own included), so every tab can run at once. When every slot is used or
+         * held, the hold that ends first gives way, as its move is the likeliest to be over.
          * The Backend may still move a run to a higher slot when another browser window holds this
          * one's; the response's own `slot` is what gets cached (see QueryRunner._create).
-         * @param {Object} forTab - the tab about to start a run
+         * @param {Object} forTab - the tab about to start a run, or the move of a save (SaveToDe._move)
          * @returns {number} 1..QUERY_SLOT_COUNT
          */
         pickSlot: function (forTab) {
             var used = {};
+            var heldUntil = {};
+            var now = Date.now();
             for (var i = 0; i < this._tabs.length; i++) {
                 var t = this._tabs[i];
+                (t.slotHolds || []).forEach(function (hold) {
+                    if (hold.until > now && !(heldUntil[hold.slot] >= hold.until)) heldUntil[hold.slot] = hold.until;
+                });
                 if (t === forTab) continue;
+                /* A tab that saves holds its move's slot until the move ends (SaveToDe._move): a move waiting in Marketing Cloud
+                 * Engagement's queue reads as not running, so the Backend would let a run take its query activity. */
+                if (t.activeSave && t.activeSave.slot) used[t.activeSave.slot] = true;
                 /* A tab still starting holds the slot it asked for. Before its runQuery answers, its
                  * activeRun is still the previous run, whose slot says nothing. */
                 if (t.runner.pendingSlot) {
@@ -22514,9 +23650,49 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 if (isRunInFlight(t.state.runnerState) && t.runner.hasRunStarted && run && run.slot) used[run.slot] = true;
             };
             for (var slot = 1; slot <= QUERY_SLOT_COUNT; slot++) {
-                if (!used[slot]) return slot;
+                if (!used[slot] && !heldUntil[slot]) return slot;
             };
-            return 1; /* unreachable with QUERY_SLOT_COUNT tabs sharing a QUERY_SLOT_COUNT-slot pool */
+            var soonest = null;
+            for (var held = 1; held <= QUERY_SLOT_COUNT; held++) {
+                if (!used[held] && (soonest === null || heldUntil[held] < heldUntil[soonest])) soonest = held;
+            };
+            return soonest !== null ? soonest : 1; /* every slot used: unreachable with QUERY_SLOT_COUNT tabs sharing a QUERY_SLOT_COUNT-slot pool */
+        },
+
+        /**
+         * @method holdSlot
+         * @description Holds a query activity for a tab whose move ended unconfirmed, until the given time (SaveToDe._settle), so
+         * pickSlot keeps every run and save of this window off it, the tab's own included.
+         * @param {Object} tab
+         * @param {number} slot - 1..QUERY_SLOT_COUNT
+         * @param {number} until - the time the hold ends, as Date.now() counts it
+         */
+        holdSlot: function (tab, slot, until) {
+            tab.slotHolds = this._liveHolds(tab.slotHolds).filter(function (hold) { return hold.slot !== slot; });
+            tab.slotHolds.push({
+                slot: slot,
+                until: until
+            });
+        },
+
+        /**
+         * @method _liveHolds
+         * @description The holds of a list that have not ended, as stored or kept: each a slot of the pool and a time to come. Anything
+         * else, as a list from older storage, is left out.
+         * @param {*} holds
+         * @returns {Array<{slot: number, until: number}>}
+         */
+        _liveHolds: function (holds) {
+            var now = Date.now();
+            if (!Array.isArray(holds)) return [];
+            return holds.filter(function (hold) {
+                return !!hold && typeof hold.slot === 'number' && hold.slot >= 1 && hold.slot <= QUERY_SLOT_COUNT && typeof hold.until === 'number' && hold.until > now;
+            }).map(function (hold) {
+                return {
+                    slot: hold.slot,
+                    until: hold.until
+                };
+            });
         },
 
         /**
@@ -22580,6 +23756,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             state = incoming.state;
             Runner = incoming.runner;
             Editor._loadTab(incoming); /* re-lints incoming, which also repaints the Problems list */
+            UI._scheduleJoinRefresh();
             UI.renderOpenedQueryBadge();
             UI.renderToolbarState(incoming.state.runnerState);
             UI.renderRunSummary();
@@ -22656,7 +23833,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
          * @param {Object} tab
          */
         clearResults: function (tab) {
-            if (isRunInFlight(tab.state.runnerState) || tab.activeExport) return;
+            if (isRunInFlight(tab.state.runnerState) || tab.activeExport || tab.activeSave) return;
             if (!tab.state.activeRun && !tab.state.results && tab.state.runnerState === 'idle') return;
             tab.runner._deleteRunDe(tab.state.activeRun);
             this._dropResults(tab);
@@ -22679,7 +23856,10 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             if (justFinished && tab !== this.active()) {
                 tab.hasUnseenFinish = true;
                 var label = this.labelFor(tab);
-                if (tab.state.runnerState === 'done') {
+                if (tab.state.runnerState === 'done' && unreadPageOf(tab.state)) {
+                    /* Its rows are safe in the temporary Data Extension, and the tab offers to read them again. */
+                    Toast.show(label + ' finished, but its rows did not load', 'warning');
+                } else if (tab.state.runnerState === 'done') {
                     Toast.show(label + ' finished: ' + fmtRows(tab.state.results ? tab.state.results.count : 0), 'success');
                 } else {
                     Toast.show(label + ' failed', 'error');
@@ -22715,14 +23895,14 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
 
         /**
          * @method hasUnsavedOrRunningWork
-         * @description Whether any tab is dirty or has a run in flight (beforeunload guard: warns when any tab is dirty or running, as it did for the single
-         * query before tabs).
+         * @description Whether any tab is dirty, has a run in flight or saves its results to a Data Extension (beforeunload guard: warns
+         * when any tab is dirty, running or saving, as it did for the single query before tabs).
          * @returns {boolean}
          */
         hasUnsavedOrRunningWork: function () {
             for (var i = 0; i < this._tabs.length; i++) {
                 var st = this._tabs[i].state;
-                if (st.dirty || isRunInFlight(st.runnerState)) return true;
+                if (st.dirty || isRunInFlight(st.runnerState) || this._tabs[i].activeSave) return true;
             };
             return false;
         },
@@ -22732,7 +23912,11 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
          * @description Builds the storage payload shared by the always-on ss.tabs entry
          * (QueryTabs.persist) and the expiry/renew restore snapshot (Session._saveRestoreState):
          * every tab's text, openedQuery and finished-results position, plus - only when
-         * includeActiveRun is true - a still-running run to resume polling for after Renew.
+         * includeActiveRun is true - a still-running run to resume polling for after Renew. A save whose
+         * move's request has gone goes into both (SaveToDe.snapshotOf), so a reload or Renew follows it on,
+         * or ends it unconfirmed when the request had not answered, and keeps its query activity from the
+         * runs (SaveToDe.resume), and so do the tab's holds of the activities of moves that ended
+         * unconfirmed (slotHolds), with the hold of a request not answered yet (SaveToDe.unansweredHoldOf).
          * @param {boolean} includeActiveRun
          * @returns {Object} { activeIndex, sidebarCollapsed?, savedAt, tabs: [...] }
          */
@@ -22741,8 +23925,20 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             for (var i = 0; i < this._tabs.length; i++) {
                 var tab = this._tabs[i];
                 var st = tab.state;
+                var save = SaveToDe.snapshotOf(tab);
+                /* Left out when there are none, so an entry without them reads as it did. A move whose request has gone and not
+                 * answered holds its slot too, from the moment it went (SaveToDe.unansweredHoldOf). */
+                var holds = this._liveHolds(tab.slotHolds);
+                var unanswered = SaveToDe.unansweredHoldOf(tab);
+                if (unanswered && !holds.some(function (hold) { return hold.slot === unanswered.slot && hold.until >= unanswered.until; })) {
+                    holds = holds.filter(function (hold) { return hold.slot !== unanswered.slot; }).concat([unanswered]);
+                };
                 var isPolling = st.runnerState === 'running' || st.runnerState === 'fetching';
                 var hasResults = !isPolling && !!st.results && !!st.activeRun && st.activeRun.deKey === st.results.deKey;
+                /* A finished run whose page did not load (QueryRunner._keepRunWithoutPage) is saved as a run with results: its
+                 * rows are in its temporary Data Extension, and a reload reads the page as it reads any saved run's. */
+                var unread = hasResults ? null : unreadPageOf(st);
+                var unreadCount = unread ? knownRowCount(unread.run) : null;
                 /* Saved results whose page is still loading, or not yet asked for, stay saved: without
                  * this, a save in the meantime dropped them from ss.tabs. */
                 var loading = tab._restoringEntry || tab._pendingRestoreEntry;
@@ -22757,8 +23953,11 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                         runSql: loading.runSql,
                         runStartedAt: loading.runStartedAt,
                         runFinishedAt: loading.runFinishedAt,
+                        runCalls: loading.runCalls,
                         results: loading.results,
-                        resultsRun: loading.resultsRun
+                        resultsRun: loading.resultsRun,
+                        save: save,
+                        slotHolds: holds.length ? holds : undefined
                     });
                     continue;
                 };
@@ -22771,9 +23970,17 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                     runSql: tab.runner.currentRunSql,
                     runStartedAt: (st.runnerState === 'done' || (includeActiveRun && isPolling)) ? tab.runner.currentRunStartedAt : null,
                     runFinishedAt: st.runnerState === 'done' ? tab.runner.currentRunFinishedAt : null,
-                    /* The count goes too, so a restored page read behind it is read again (restoreResults). */
-                    results: hasResults ? { deKey: st.results.deKey, page: st.results.page, pageSize: st.results.pageSize, orderBy: st.results.orderBy, columns: st.activeRun.columns, count: st.results.count } : null,
-                    resultsRun: hasResults ? st.activeRun : null
+                    /* What the run's calls add up to, for its summary after a reload (see tallyRunCalls). A run whose calls are
+                     * not known, as a restored one saved by 1.1.x, saves none. */
+                    runCalls: ((hasResults || !!unread || (includeActiveRun && isPolling)) && tab.runner._calls) ? tallyRunCalls(tab.runner._calls) : null,
+                    /* The count goes too, so a restored page read behind it is read again (restoreResults). A run whose page did not
+                     * load has the count of its last status check when that counted rows, and otherwise none, with the note that
+                     * its read goes through REST, as its first one did. */
+                    results: hasResults ? { deKey: st.results.deKey, page: st.results.page, pageSize: st.results.pageSize, orderBy: st.results.orderBy, columns: st.activeRun.columns, count: st.results.count } :
+                        (unread ? { deKey: unread.run.deKey, page: 1, orderBy: null, columns: unread.run.columns, count: unreadCount, restOnly: unreadCount === null ? true : undefined } : null),
+                    resultsRun: (hasResults || unread) ? st.activeRun : null,
+                    save: save,
+                    slotHolds: holds.length ? holds : undefined
                 });
             };
             var payload = {
@@ -22823,8 +24030,15 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             for (var i = 0; i < this._tabs.length && i < saved.tabs.length; i++) {
                 var entry = saved.tabs[i];
                 if (!entry) continue;
+                /* The holds of moves that ended unconfirmed, which belong to the entry's Business Unit as its query activities do. */
+                this._tabs[i].slotHolds = this._liveHolds(entry.slotHolds);
                 /* A run the user started before whoami answered keeps its tab. */
                 if (isRunInFlight(this._tabs[i].state.runnerState)) continue;
+                /* A save the first call resumed belongs to that Business Unit: it stops here, and its own tabs' entry keeps it. */
+                if (this._tabs[i].activeSave) {
+                    this._tabs[i].activeSave = null;
+                    this._tabs[i].saveModel = null;
+                };
                 /* A second call (another Business Unit than the early read): the first one's results,
                  * loaded or loading, belong to that Business Unit. */
                 if (this._tabs[i].state.activeRun || this._tabs[i]._restoringEntry) this._dropResults(this._tabs[i]);
@@ -22907,7 +24121,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 var entry = stored.tabs[i];
                 if (!entry || tab === this.active()) continue;
                 if ((entry.changedAt || 0) <= (tab.changedAt || 0) || tab.changedAt !== tab.loadedChangedAt) continue;
-                if (isRunInFlight(tab.state.runnerState) || tab.activeExport || tab._restoringEntry || tab._pendingRestoreEntry) continue;
+                if (isRunInFlight(tab.state.runnerState) || tab.activeExport || tab.activeSave || tab._restoringEntry || tab._pendingRestoreEntry) continue;
                 var text = entry.text || '';
                 if (tab.monacoModel) {
                     if (tab.monacoModel.getValue() !== text) tab.monacoModel.setValue(text);
@@ -22938,7 +24152,8 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
          * @method finishRestore
          * @description Resumes polling for every tab whose stashed entry (see applySaved) still
          * had a running run, or reloads the results page for one whose entry had finished results,
-         * then clears the stashed entry either way. The results pages are read one after another
+         * then clears the stashed entry either way. A save whose move was under way is followed on
+         * (SaveToDe.resume). The results pages are read one after another
          * (_restoreResultsInTurn), not all at once. Called once, after applyPendingContent.
          */
         finishRestore: function () {
@@ -22948,6 +24163,8 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 var entry = tab._pendingRestoreEntry;
                 tab._pendingRestoreEntry = null;
                 if (!entry || isRunInFlight(tab.state.runnerState)) continue;
+                /* A save whose move was under way follows it on, beside the results it saves. */
+                if (entry.save) SaveToDe.resume(tab, entry.save);
                 if (entry.activeRun) {
                     tab.runner.resumeRun(entry);
                 } else if (entry.results && entry.resultsRun) {
@@ -23126,6 +24343,489 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
     };
 
     /* ======================================================================
+     * 11a. snippets
+     * ==================================================================== */
+    /* Shared snippets: named pieces of SQL, such as a set of joins around a sales table, that everyone who uses SQL Studio in a
+     * Business Unit sees in the sidebar's Snippets section and inserts into a query. The Backend keeps them in a Data Extension and
+     * reads and writes it with its data functions, so a snippet costs no API call (listSnippets, saveSnippet, deleteSnippet). The list
+     * is read once, after whoami, and kept for the session. The section's Reload reads it again. Where the Backend has snippets off,
+     * whoami says so and the section is not there. Only the author renames or deletes a snippet, and the Backend checks that. */
+    var SNIPPET_NAME_MAX = 100;
+    var SNIPPET_SQL_MAX = 20000;
+    /* How much of a piece of SQL a hover shows: a snippet's row, and a query tab you are not on. */
+    var HOVER_SQL_LINES = 15;
+    var HOVER_SQL_CHARS = 800;
+
+    /**
+     * @function snippetDay
+     * @description The day of a snippet's date in the viewer's own time zone, as yyyy-MM-dd. The Backend gives the time it wrote with
+     * the offset of Marketing Cloud Engagement's clock (yyyy-MM-ddTHH:mm:ss-06:00). A date without an offset, as a Backend from
+     * before it gives, shows its own date part. Empty when the value is of neither shape.
+     * @param {*} value
+     * @returns {string}
+     */
+    function snippetDay(value) {
+        var text = String(value || '');
+        var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+        var zoned = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(Z|([+-])(\d{2}):(\d{2}))$/.exec(text);
+        if (zoned) {
+            var offsetMinutes = zoned[7] === 'Z' ? 0 : (Number(zoned[9]) * 60 + Number(zoned[10])) * (zoned[8] === '-' ? -1 : 1);
+            var at = new Date(Date.UTC(Number(zoned[1]), Number(zoned[2]) - 1, Number(zoned[3]), Number(zoned[4]), Number(zoned[5]), Number(zoned[6])) - offsetMinutes * 60000);
+            return at.getFullYear() + '-' + pad(at.getMonth() + 1) + '-' + pad(at.getDate());
+        };
+        var match = /^(\d{4}-\d{2}-\d{2})/.exec(text);
+        return match ? match[1] : '';
+    };
+
+    /**
+     * @function snippetHoverText
+     * @description What the hover of a snippet's row says: its whole name, which the row may cut short, the start of its SQL, then who
+     * saved it and when.
+     * @param {Object} item - a snippet as listSnippets gives it
+     * @returns {string}
+     */
+    function snippetHoverText(item) {
+        var created = snippetDay(item.createdDate);
+        var changed = snippetDay(item.modifiedDate);
+        var saved = 'Saved by ' + (item.author || 'an unknown author') + (created ? ' on ' + created : '') + (changed && changed !== created ? ', changed on ' + changed : '') + '.';
+        return String(item.name || '') + '\n\n' + hoverSql(item.sql) + '\n\n' + saved;
+    };
+
+    /**
+     * @function hoverSql
+     * @description The start of a piece of SQL as a hover shows it: its first HOVER_SQL_LINES lines and at most HOVER_SQL_CHARS
+     * characters, with a line of "..." where it goes on.
+     * @param {string} text
+     * @returns {string}
+     */
+    function hoverSql(text) {
+        var lines = String(text || '').replace(/\r\n/g, '\n').split('\n');
+        var isCut = lines.length > HOVER_SQL_LINES;
+        var sql = lines.slice(0, HOVER_SQL_LINES).join('\n');
+        if (sql.length > HOVER_SQL_CHARS) {
+            sql = sql.slice(0, HOVER_SQL_CHARS);
+            isCut = true;
+        };
+        return sql + (isCut ? '\n...' : '');
+    };
+
+    /**
+     * @function tidySnippetSql
+     * @description The SQL of a new snippet as it is kept: line breaks as \n, no blank lines before it and no blanks after it. Its
+     * own indentation stays, so a selection of lines keeps its shape.
+     * @param {string} text
+     * @returns {string}
+     */
+    function tidySnippetSql(text) {
+        return String(text || '').replace(/\r\n/g, '\n').replace(/^(?:[ \t]*\n)+/, '').replace(/\s+$/, '');
+    };
+
+    var Snippets = {
+        /* The Business Unit's snippets by name, or null until the first list arrives. */
+        items: null,
+        /* 'idle', 'loading', 'loaded' or 'failed' (the last list could not be read: the error is in error). */
+        status: 'idle',
+        error: null,
+        savedAt: 0,
+        _promise: null,
+        _loadNumber: 0,
+        /* The snippets saved, renamed or deleted while a read was on its way, by id, a deleted one as null: that read may have
+         * started before them, so its answer is put right with them when it comes (_withChanges). Null while no read is. */
+        _changedDuringRead: null,
+
+        /**
+         * @method isEnabled
+         * @description Whether the section is there: the Backend has snippets on (whoami's snippetsEnabled), and the session's
+         * Business Unit is known with the signature whoami gave for it (midSig), which every snippet action needs. A whoami that
+         * could not sign it answers null, and the section stays away rather than fail on every read and save (final review,
+         * 2026-10-07).
+         * @returns {boolean}
+         */
+        isEnabled: function () {
+            var data = Session.data || {};
+            var hasMid = data.mid !== null && data.mid !== undefined && String(data.mid) !== '';
+            return !!data.snippetsEnabled && hasMid && typeof data.midSig === 'string' && data.midSig !== '';
+        },
+
+        /**
+         * @method payload
+         * @description A snippet action's payload: the session's Business Unit as the Backend takes it, its mid as text with the
+         * signature whoami gave for it (midSig), which the Backend needs with it, and the fields given.
+         * @param {Object} [fields]
+         * @returns {Object}
+         */
+        payload: function (fields) {
+            var data = Session.data || {};
+            var payload = {
+                mid: String(data.mid),
+                midSig: data.midSig || null
+            };
+            Object.keys(fields || {}).forEach(function (key) { payload[key] = fields[key]; });
+            return payload;
+        },
+
+        /**
+         * @method load
+         * @description Reads the Business Unit's snippets, once: a later call with no force answers from the list it holds. A forced
+         * one (the section's Reload and Retry) reads again and keeps the old list on screen until the new one arrives. It never
+         * rejects: a failed read leaves status 'failed', which the section shows with a way to try again. The sidebar is drawn
+         * when the read starts and when it ends.
+         * @param {boolean} [isForced]
+         * @returns {Promise<Array>} the snippets held after the read
+         */
+        load: function (isForced) {
+            var self = this;
+            if (!self.isEnabled()) return Promise.resolve([]);
+            if (self._promise) return self._promise;
+            if (self.status === 'loaded' && !isForced) return Promise.resolve(self.items);
+            var loadNumber = ++self._loadNumber;
+            self.status = 'loading';
+            self.error = null;
+            self._changedDuringRead = {};
+            UI.renderSidebarTree();
+            self._promise = Api.call('listSnippets', self.payload()).then(function (res) {
+                if (loadNumber !== self._loadNumber) return self.items;
+                self._promise = null;
+                self.items = self._withChanges((res && res.items) || []);
+                self.status = 'loaded';
+                self.savedAt = Date.now();
+                UI.renderSidebarTree();
+                return self.items;
+            }, function (err) {
+                if (loadNumber !== self._loadNumber) return self.items || [];
+                self._promise = null;
+                /* The list on screen has the changes already, and a list that never came is read again with them. */
+                self._changedDuringRead = null;
+                self.status = 'failed';
+                self.error = err || new Error('The snippets did not load.');
+                UI.renderSidebarTree();
+                return self.items || [];
+            });
+            return self._promise;
+        },
+
+        /**
+         * @method _noteChange
+         * @description Keeps a save, a rename or a delete that the Backend answered while a read was on its way, for that read's
+         * answer, which may not have it (_withChanges). With no read on its way it keeps nothing.
+         * @param {string} id
+         * @param {?Object} item - the snippet as the Backend kept it, or null for one deleted
+         */
+        _noteChange: function (id, item) {
+            if (this._promise && this._changedDuringRead) this._changedDuringRead[id] = item;
+        },
+
+        /**
+         * @method _withChanges
+         * @description A read's answer by name, put right with the changes the Backend answered while it was on its way: a saved or
+         * renamed snippet as its save answered, and a deleted one left out.
+         * @param {Object[]} list - the snippets the read gave
+         * @returns {Object[]}
+         */
+        _withChanges: function (list) {
+            var changed = this._changedDuringRead || {};
+            this._changedDuringRead = null;
+            var kept = list.filter(function (item) { return !Object.prototype.hasOwnProperty.call(changed, item.id); });
+            Object.keys(changed).forEach(function (id) {
+                if (changed[id]) kept.push(changed[id]);
+            });
+            return kept.sort(Snippets.compareNames);
+        },
+
+        /**
+         * @method compareNames
+         * @description Sort comparator for snippets: by name without regard to case.
+         * @param {Object} a
+         * @param {Object} b
+         * @returns {number}
+         */
+        compareNames: function (a, b) {
+            var an = String(a.name).toLowerCase();
+            var bn = String(b.name).toLowerCase();
+            return an < bn ? -1 : an > bn ? 1 : 0;
+        },
+
+        /**
+         * @method find
+         * @description The held snippet with an id.
+         * @param {string} id
+         * @returns {?Object}
+         */
+        find: function (id) {
+            var list = this.items || [];
+            for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+            return null;
+        },
+
+        /**
+         * @method checkName
+         * @description Checks a snippet's name before it is sent, as the Backend checks it: given, at most SNIPPET_NAME_MAX
+         * characters, and not another snippet's of the Business Unit without regard to case. The Backend still has the last word.
+         * @param {string} name - trimmed
+         * @param {?string} exceptId - the id of the snippet being renamed, which may keep its own name
+         * @returns {string} what is wrong, or '' when the name is fine
+         */
+        checkName: function (name, exceptId) {
+            if (!name) return 'Give the snippet a name.';
+            if (name.length > SNIPPET_NAME_MAX) return 'A snippet\'s name can have at most ' + SNIPPET_NAME_MAX + ' characters. This one has ' + name.length + '.';
+            var list = this.items || [];
+            for (var i = 0; i < list.length; i++) {
+                if (list[i].id !== exceptId && list[i].name.toLowerCase() === name.toLowerCase()) {
+                    return 'This Business Unit has a snippet named "' + list[i].name + '" already. Names are not case sensitive.';
+                };
+            };
+            return '';
+        },
+
+        /**
+         * @method save
+         * @description Saves a new snippet, or with an id renames or changes the user's own, and puts the answer in the held list.
+         * @param {string} name
+         * @param {string} sql
+         * @param {?string} id
+         * @returns {Promise<Object>} the snippet as the Backend kept it
+         */
+        save: function (name, sql, id) {
+            var self = this;
+            var fields = {
+                name: name,
+                sql: sql
+            };
+            if (id) fields.id = id;
+            return Api.call('saveSnippet', self.payload(fields)).then(function (res) {
+                var item = res.item;
+                /* A read on its way may have started before this save: its answer gets the snippet too. */
+                self._noteChange(item.id, item);
+                if (self.items) {
+                    var list = self.items.filter(function (held) { return held.id !== item.id; });
+                    list.push(item);
+                    list.sort(Snippets.compareNames);
+                    self.items = list;
+                } else if (!self._promise) {
+                    /* The list never came, and no read is on its way: the snippet is saved, and the section reads it with the rest. */
+                    self.load(true);
+                };
+                return item;
+            }, function (err) {
+                /* A snippet that is gone, or no longer the user's, means the list on screen is out of date. */
+                if (err && id && (err.code === 'NOT_FOUND' || err.code === 'BAD_REQUEST')) self.load(true);
+                throw err;
+            });
+        },
+
+        /**
+         * @method remove
+         * @description Deletes the user's own snippet and takes it out of the held list. NOT_FOUND counts as deleted: a delete sent
+         * again after a network failure finds the snippet gone when the first one went through, and gone is what was asked
+         * (final review, 2026-10-07). The list is read again, as it was out of date.
+         * @param {string} id
+         * @returns {Promise}
+         */
+        remove: function (id) {
+            var self = this;
+            /**
+             * @function dropHeld
+             * @description Takes the snippet out of the held list, and out of the answer of a read on its way.
+             */
+            var dropHeld = function () {
+                self._noteChange(id, null);
+                if (self.items) self.items = self.items.filter(function (held) { return held.id !== id; });
+            };
+            return Api.call('deleteSnippet', self.payload({ id: id })).then(dropHeld, function (err) {
+                if (err && err.code === 'NOT_FOUND') {
+                    dropHeld();
+                    self.load(true);
+                    return;
+                };
+                if (err && err.code === 'BAD_REQUEST') self.load(true);
+                throw err;
+            });
+        },
+
+        /**
+         * @method openSave
+         * @description The save button of the section's title: asks for a name and saves the editor's selection, or the whole query
+         * when nothing is selected, as a snippet. With no SQL to save, or too much of it, a message says so and no dialog opens.
+         */
+        openSave: function () {
+            var self = this;
+            var source = Editor.getSnippetSource();
+            var sql = tidySnippetSql(source.text);
+            if (!sql) {
+                Toast.show('Write or select some SQL first, then save it as a snippet.', 'info');
+                return;
+            };
+            if (sql.length > SNIPPET_SQL_MAX) {
+                Toast.show('A snippet can hold at most ' + fmtNumber(SNIPPET_SQL_MAX) + ' characters of SQL, and ' + (source.isSelection ? 'the selection has ' : 'the query has ') + fmtNumber(sql.length) + '. Select a shorter part of it.', 'warning');
+                return;
+            };
+            var lineCount = sql.split('\n').length;
+            /**
+             * @function saveNew
+             * @description Sends the new snippet.
+             * @param {string} name
+             * @returns {Promise<Object>}
+             */
+            function saveNew(name) {
+                return self.save(name, sql, null);
+            };
+            /**
+             * @function savedNew
+             * @description Says the snippet is saved, and draws the sidebar with the focus back on the save button.
+             * @param {Object} item
+             */
+            function savedNew(item) {
+                Toast.show('Saved the snippet "' + item.name + '".', 'success');
+                UI._nextSidebarFocusKey = 'snippets:save';
+                UI.renderSidebarTree();
+            };
+            this._openNameDialog({
+                title: 'Save as a snippet',
+                confirmLabel: 'Save snippet',
+                value: '',
+                exceptId: null,
+                note: (source.isSelection ? 'Saves the selected SQL' : 'Saves the whole query') + ' (' + fmtNumber(lineCount) + (lineCount === 1 ? ' line' : ' lines') + '). Everyone who uses SQL Studio in this Business Unit can insert it.',
+                preview: sql,
+                submit: saveNew,
+                done: savedNew
+            });
+        },
+
+        /**
+         * @method openRename
+         * @description The rename button of a snippet's row: asks for a new name, which the Backend accepts from the author only.
+         * @param {Object} item - the snippet
+         */
+        openRename: function (item) {
+            var self = this;
+            /**
+             * @function rename
+             * @description Sends the new name, with the SQL the snippet holds. The same name is no change and sends nothing.
+             * @param {string} name
+             * @returns {Promise<Object>}
+             */
+            function rename(name) {
+                return name === item.name ? Promise.resolve(item) : self.save(name, item.sql, item.id);
+            };
+            /**
+             * @function renamed
+             * @description Says the snippet has its new name, and draws the sidebar with the focus back on the row's Rename button.
+             * @param {Object} saved
+             */
+            function renamed(saved) {
+                if (saved !== item) Toast.show('Renamed the snippet to "' + saved.name + '".', 'success');
+                UI._nextSidebarFocusKey = 'snippet:' + saved.id + ':rename';
+                UI.renderSidebarTree();
+            };
+            this._openNameDialog({
+                title: 'Rename snippet',
+                confirmLabel: 'Rename',
+                value: item.name,
+                exceptId: item.id,
+                note: 'Everyone who uses SQL Studio in this Business Unit sees the new name.',
+                preview: null,
+                submit: rename,
+                done: renamed
+            });
+        },
+
+        /**
+         * @method confirmDelete
+         * @description The delete button of a snippet's row: asks first, with Cancel in focus, as the snippet is gone for everyone.
+         * @param {Object} item - the snippet
+         */
+        confirmDelete: function (item) {
+            var self = this;
+            Dialogs.confirm('Delete the snippet "' + item.name + '"?', 'Everyone who uses SQL Studio in this Business Unit loses it. This cannot be undone.', function () {
+                self.remove(item.id).then(function () {
+                    Toast.show('Deleted the snippet "' + item.name + '".', 'success');
+                    UI._nextSidebarFocusKey = 'snippets:save';
+                    UI.renderSidebarTree();
+                }, function (err) {
+                    Toast.show('Could not delete the snippet: ' + (err && err.message ? err.message : 'unknown error'), 'error');
+                    UI.renderSidebarTree();
+                });
+            }, null, true, 'Delete');
+        },
+
+        /**
+         * @method _openNameDialog
+         * @description The small dialog that asks for a snippet's name, as Save As asks for a query's: the name, a note, and for a new
+         * snippet a preview of its SQL. The checks the app can make show under the name before anything is sent, and a refusal of the
+         * Backend shows there too, with the dialog open and the name kept. Enter in the name saves.
+         * @param {Object} o - { title, confirmLabel, value, exceptId, note, preview, submit(name) -> Promise, done(item) }
+         */
+        _openNameDialog: function (o) {
+            var inputId = 'ss-field-' + uid();
+            var errorId = 'ss-field-' + uid();
+            var isBusy = false;
+            var input = h('input', { class: 'ss-input', type: 'text', id: inputId, maxlength: String(SNIPPET_NAME_MAX), required: true, 'aria-describedby': errorId, autocomplete: 'off' }, null);
+            input.value = o.value;
+            var error = h('div', { class: 'ss-message-item ss-message-item--error', id: errorId, role: 'alert', hidden: true }, null);
+            var saveBtn = h('button', { class: 'ss-btn ss-btn--primary', type: 'button', onclick: function () { submit(); } }, o.confirmLabel);
+            var modal = null;
+            /**
+             * @function showError
+             * @description Shows what is wrong under the name and puts the focus back in it.
+             * @param {string} text
+             */
+            function showError(text) {
+                error.textContent = text;
+                error.hidden = false;
+                input.focus();
+            };
+            /**
+             * @function submit
+             * @description Checks the name, sends it, and closes the dialog when the Backend takes it.
+             */
+            function submit() {
+                if (isBusy) return;
+                var name = input.value.trim();
+                var problem = Snippets.checkName(name, o.exceptId);
+                if (problem) {
+                    showError(problem);
+                    return;
+                };
+                error.hidden = true;
+                isBusy = true;
+                saveBtn.disabled = true;
+                o.submit(name).then(function (item) {
+                    modal.close();
+                    o.done(item);
+                }, function (err) {
+                    isBusy = false;
+                    saveBtn.disabled = false;
+                    showError(err && err.message ? err.message : 'The snippet was not saved.');
+                });
+            };
+            input.addEventListener('keydown', function (ev) {
+                if (isPlainEnter(ev)) {
+                    ev.preventDefault();
+                    submit();
+                };
+            });
+            input.addEventListener('input', function () { error.hidden = true; });
+            modal = UI.openModal({
+                title: o.title,
+                body: [
+                    h('div', { class: 'ss-field' }, [h('label', { class: 'ss-label', for: inputId }, 'Name'), input, error]),
+                    h('p', { class: 'ss-snippet-note' }, o.note),
+                    o.preview ? h('pre', { class: 'ss-snippet-preview', 'aria-label': 'The SQL to save' }, o.preview) : null
+                ],
+                footer: [
+                    h('button', { class: 'ss-btn', type: 'button', onclick: function () { modal.close(); } }, 'Cancel'),
+                    saveBtn
+                ]
+            });
+            /* The name is what the dialog is for: the focus starts there, with the name selected for a rename. */
+            setTimeout(function () {
+                input.focus();
+                input.select();
+            }, 0);
+        }
+    };
+
+    /* ======================================================================
      * 12. settings
      * ==================================================================== */
     var Settings = {
@@ -23281,6 +24981,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             this._wireSidebarResizer();
             this._wireSplitResizer();
             this._wireKeyboard();
+            this._wireTips();
             this._applyResponsive();
             global.addEventListener('resize', debounce(function () { UI._applyResponsive(); Editor.layout(); }, 150));
         },
@@ -23306,7 +25007,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             var body = h('div', { class: 'ss-modal__body' }, opts.body || null);
             var footer = opts.footer ? h('div', { class: 'ss-modal__footer' }, opts.footer) : null;
             var dialog = h('div', {
-                class: 'ss-modal' + (opts.wide ? ' ss-modal--wide' : ''),
+                class: 'ss-modal' + (opts.wide ? ' ss-modal--wide' : '') + (opts.xwide ? ' ss-modal--xwide' : ''),
                 role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': titleId
             }, [header, body, footer]);
             overlay.appendChild(dialog);
@@ -23388,9 +25089,10 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         },
 
         /* -- dropdown manager -------------------------------------------------
-         * History, Runs, Settings and Help open as a plain anchored dropdown
-         * under their toolbar button rather than a centred modal, with --shadow-dropdown.
-         * Only one is open at a time. */
+         * History and Open open as a plain anchored dropdown under their toolbar button rather than a centred modal, with
+         * --shadow-dropdown, as both are lists to pick from (Open since the author's RC14 test, 2026-10-09). Save As stays a centred
+         * dialog, as a form that a click beside an anchored panel would close. Only one is open at a time. opts.wide is 420px wide,
+         * opts.xwide 640px. */
         openDropdown: function (anchorEl, key, opts) {
             var self = this;
             if (this._openDropdown) {
@@ -23407,7 +25109,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             var body = h('div', { class: 'ss-modal__body' }, opts.body || null);
             var footer = opts.footer ? h('div', { class: 'ss-modal__footer' }, opts.footer) : null;
             var panel = h('div', {
-                class: 'ss-dropdown-panel' + (opts.wide ? ' ss-dropdown-panel--wide' : ''),
+                class: 'ss-dropdown-panel' + (opts.xwide ? ' ss-dropdown-panel--xwide' : (opts.wide ? ' ss-dropdown-panel--wide' : '')),
                 role: 'dialog', 'aria-modal': 'false', 'aria-labelledby': header ? titleId : null
             }, [header, body, footer]);
 
@@ -23420,10 +25122,13 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             var rootRect = this.el.root.getBoundingClientRect();
             mount.style.top = (rect.bottom - rootRect.top + 4) + 'px';
             var left = rect.left - rootRect.left;
-            var maxLeft = rootRect.width - (opts.wide ? 420 : 300) - 8;
+            var maxLeft = rootRect.width - Math.min(opts.xwide ? 640 : (opts.wide ? 420 : 300), rootRect.width - 16) - 8;
             mount.style.left = Math.max(8, Math.min(left, maxLeft)) + 'px';
+            /* At most the app's width less 8px each side, the width the left above is worked out for: 100vw counted a scrollbar in. */
+            panel.style.maxWidth = (rootRect.width - 16) + 'px';
 
             var previousFocus = document.activeElement;
+            var isClosed = false;
             /**
              * @function trapKeydown
              * @description Dropdown keydown handler: Escape closes it, Tab/Shift+Tab wraps
@@ -23431,6 +25136,9 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
              * @param {KeyboardEvent} ev
              */
             function trapKeydown(ev) {
+                /* A dialog opened from the panel, such as a question before a change, has the keys: Escape closed the panel under it too
+                 * (2026-10-09). */
+                if (self.modalStack.length) return;
                 if (ev.key === 'Escape') {
                     ev.preventDefault();
                     close();
@@ -23460,13 +25168,17 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
              * restores focus to whatever had it before the dropdown opened.
              */
             function close() {
+                /* Once only, and only for this panel: a late close, such as Open's after a slow getQueryActivity, ran into the panel
+                 * opened again since and freed the keys behind it (the RC15 review, 2026-10-09). */
+                if (isClosed) return;
+                isClosed = true;
                 document.removeEventListener('keydown', trapKeydown, true);
                 scrim.removeEventListener('mousedown', onScrimDown);
                 if (mount.parentNode) mount.parentNode.removeChild(mount);
                 if (scrim.parentNode) scrim.parentNode.removeChild(scrim);
                 anchorEl.classList.remove('is-active');
                 anchorEl.setAttribute('aria-expanded', 'false');
-                if (self._openDropdown && self._openDropdown.key === key) self._openDropdown = null;
+                if (self._openDropdown && self._openDropdown.close === close) self._openDropdown = null;
                 if (opts.onClose) opts.onClose();
                 if (previousFocus && previousFocus.focus) {
                     try { previousFocus.focus(); } catch (e) { /* ignore */ };
@@ -23495,6 +25207,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
          * anchored dropdown manager, so only History is left here. */
         toggleDropdown: function (anchorEl, key) {
             if (key === 'history') Dialogs.openHistory(anchorEl);
+            if (key === 'open') Dialogs.openOpenQuery(anchorEl);
         },
 
         /**
@@ -23541,6 +25254,143 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             ta.focus();
             this._onContentChanged();
         };
+    };
+
+    /**
+     * @method getCursorOffset
+     * @description The cursor's offset in the editor's text: where the selection starts in the plain editor, and the
+     * cursor's position in Monaco. 0 when the editor is not there yet.
+     * @returns {number}
+     */
+    Editor.getCursorOffset = function () {
+        if (this.mode === 'monaco' && this.instance && this.model) {
+            var position = this.instance.getPosition();
+            return position ? this.model.getOffsetAt(position) : 0;
+        };
+        return this.textarea ? this.textarea.selectionStart : 0;
+    };
+
+    /**
+     * @method applyEdits
+     * @description Applies replacements of the editor's text, as one step of the editor's undo (Monaco: an undo stop before
+     * and after them). With a cursor, it puts the cursor at that offset of the text they make and gives the editor the focus:
+     * the sidebar's "Join to the query" and snippet inserts write so. Without one, as "Add aliases and run" writes the names, the
+     * cursor stays on the text it was on, the focus stays where it is, and the lint runs at once, as the method that wrote the
+     * names before 1.2.0 did. The plain editor has no undo of its own to give the step to.
+     * @param {Array<Object>} edits - {start, end, text} replacements of the text as it is now
+     * @param {number} [cursor] - the cursor's offset in the text after the edits
+     * @param {string} [source] - the name Monaco gives the edit, 'ss-join-to-query' by default, and 'ss' without a cursor
+     */
+    Editor.applyEdits = function (edits, cursor, source) {
+        var self = this;
+        if (!edits || !edits.length) return;
+        var hasCursor = typeof cursor === 'number';
+        if (this.mode === 'monaco' && this.instance && this.model) {
+            var model = this.model;
+            var operations = edits.map(function (edit) {
+                var from = model.getPositionAt(edit.start);
+                var to = model.getPositionAt(edit.end);
+                return {
+                    range: new self.monaco.Range(from.lineNumber, from.column, to.lineNumber, to.column),
+                    text: edit.text,
+                    forceMoveMarkers: hasCursor
+                };
+            });
+            this.instance.pushUndoStop();
+            this.instance.executeEdits(source || (hasCursor ? 'ss-join-to-query' : 'ss'), operations);
+            if (hasCursor) {
+                var position = model.getPositionAt(cursor);
+                this.instance.setPosition(position);
+                this.instance.revealPositionInCenterIfOutsideViewport(position);
+            };
+            this.instance.pushUndoStop();
+            if (hasCursor) this.instance.focus();
+        } else if (this.textarea) {
+            var ta = this.textarea;
+            /**
+             * @function shifted
+             * @description Moves an offset of the text as it was by the edits that end before it, so it stays on the same text.
+             * @param {number} offset
+             * @returns {number}
+             */
+            var shifted = function (offset) {
+                return edits.reduce(function (moved, edit) { return edit.end <= offset ? moved + edit.text.length - (edit.end - edit.start) : moved; }, offset);
+            };
+            var selectionStart = shifted(ta.selectionStart);
+            var selectionEnd = shifted(ta.selectionEnd);
+            ta.value = Tools.applyEdits(ta.value, edits);
+            ta.selectionStart = hasCursor ? cursor : selectionStart;
+            ta.selectionEnd = hasCursor ? cursor : selectionEnd;
+            if (hasCursor) ta.focus();
+            this._onContentChanged();
+        };
+        if (!hasCursor) this._runLint();
+    };
+
+    /**
+     * @method getSelectionOffsets
+     * @description Where the editor's selection starts and ends, as offsets in its text. A cursor with nothing selected
+     * has the same start and end. Both are 0 when the editor is not there yet.
+     * @returns {{start: number, end: number}}
+     */
+    Editor.getSelectionOffsets = function () {
+        if (this.mode === 'monaco' && this.instance && this.model) {
+            var sel = this.instance.getSelection();
+            if (sel) return {
+                start: this.model.getOffsetAt(sel.getStartPosition()),
+                end: this.model.getOffsetAt(sel.getEndPosition())
+            };
+        } else if (this.textarea) {
+            return {
+                start: this.textarea.selectionStart,
+                end: this.textarea.selectionEnd
+            };
+        };
+        return {
+            start: 0,
+            end: 0
+        };
+    };
+
+    /**
+     * @method getSnippetSource
+     * @description What a new snippet is made of: the selected text when there is any besides blanks, else the whole query.
+     * @returns {{text: string, isSelection: boolean}}
+     */
+    Editor.getSnippetSource = function () {
+        var full = this.getValue();
+        var selection = this.getSelectionOffsets();
+        if (selection.end > selection.start) {
+            var part = full.slice(selection.start, selection.end);
+            if (part.trim()) return {
+                text: part,
+                isSelection: true
+            };
+        };
+        return {
+            text: full,
+            isSelection: false
+        };
+    };
+
+    /**
+     * @method insertSnippet
+     * @description Writes a snippet's SQL as one step of the editor's undo, with the cursor after it and the focus in the editor.
+     * By default it goes in place of the selection, which is the whole of an empty editor. 'replace' puts it in place of the
+     * whole query, and 'cursor' at the cursor on lines of its own, as Insert SELECT writes a query (wrapFullQueryInsert), so it
+     * never runs into the text around it: as first built, a snippet clicked with the cursor at the start of a query ran into
+     * its first line (the author's RC3 test, 2026-10-08).
+     * @param {string} text - the snippet's SQL, as it was saved
+     * @param {string} [how] - 'replace' or 'cursor'
+     */
+    Editor.insertSnippet = function (text, how) {
+        var full = this.getValue();
+        var selection = how === 'replace' ? { start: 0, end: full.length } : this.getSelectionOffsets();
+        var written = how === 'cursor' ? wrapFullQueryInsert(full, selection.start, selection.end, text) : text;
+        /* The cursor goes after the snippet itself: past a line break added before it, and before one added after it. */
+        var lead = written.length > text.length && written.slice(0, text.length + 1) === '\n' + text ? 1 : 0;
+        var cursor = selection.start + lead + text.length;
+        this.applyEdits([{ start: selection.start, end: selection.end, text: written }], cursor, 'ss-insert-snippet');
     };
 
     /* Sidebar "Insert SELECT with all fields" action: replaces the whole
@@ -23590,9 +25440,12 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
 
     /* Small uppercase object-kind marker: DE,
      * SHARED, VIEW, QUERY. A compact one is in smaller type with less space around it, where the
-     * row needs the width for its name. */
-    function typeBadge(text, title, isCompact) {
-        return h('span', { class: 'ss-type-badge' + (isCompact ? ' ss-type-badge--compact' : ''), title: title || text }, text);
+     * row needs the width for its name. In the sidebar its explanation is a quick tip (UI._wireTips), as
+     * a title there showed the browser's own tip over the app's (the RC10 review, 2026-10-09). */
+    function typeBadge(text, title, isCompact, isQuickTip) {
+        var attrs = { class: 'ss-type-badge' + (isCompact ? ' ss-type-badge--compact' : '') };
+        attrs[isQuickTip ? 'data-tip' : 'title'] = title || text;
+        return h('span', attrs, text);
     };
 
     /**
@@ -23601,11 +25454,12 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
      * synchronized from Salesforce.
      * @param {Object} t - a schema table entry with isShared set
      * @param {boolean} [isCompact] - true for the smaller badge of a row in the folder tree
+     * @param {boolean} [isQuickTip] - true in the sidebar, where its explanation is a quick tip and not a title
      * @returns {HTMLElement}
      */
-    function sharedKindBadge(t, isCompact) {
-        if (t.sharedKind === 'synchronized') return typeBadge('SYNCED', 'Synchronized Data Extension of the parent Business Unit', isCompact);
-        return typeBadge('SHARED', 'Shared Data Extension of the parent Business Unit', isCompact);
+    function sharedKindBadge(t, isCompact, isQuickTip) {
+        if (t.sharedKind === 'synchronized') return typeBadge('SYNCED', 'Synchronized Data Extension of the parent Business Unit', isCompact, isQuickTip);
+        return typeBadge('SHARED', 'Shared Data Extension of the parent Business Unit', isCompact, isQuickTip);
     };
 
     /**
@@ -23820,11 +25674,12 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
 
     /* -- 13.3 sidebar --------------------------------------------------------
      * One search box: filters locally first (Data View names/fields, plus
-     * the Business Unit Data Extension list once it has loaded). Two
+     * the Business Unit Data Extension list once it has loaded). Three
      * sections, each collapsed and expanded by its title: "Data Views" (hardcoded,
-     * grouped, collapsed except Email) and "Data Extensions" (the Business Unit's
+     * grouped, collapsed except Email), "Data Extensions" (the Business Unit's
      * list, loaded in the background when SQL Studio opens - see
-     * Schema.loadDataExtensionList). With the search box empty, the Data Extensions
+     * Schema.loadDataExtensionList) and "Snippets" (the Business Unit's shared pieces of SQL, see
+     * Snippets, not there where the Backend has them off). With the search box empty, the Data Extensions
      * are MCE's own folder tree (Schema.deTree), as Contact Builder shows it: the Data Extensions root
      * open and every other folder collapsed until opened. A section's title is the outermost level, at the
      * sidebar's left edge, and what is under it starts one indent step in (ss-tree__section-body), each
@@ -23845,7 +25700,8 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
      * only. */
     UI._sectionCollapsed = {
         dataViews: false,
-        dataExtensions: false
+        dataExtensions: false,
+        snippets: false
     };
     UI._deFolderOpen = {};
     UI._deFolderShown = {};
@@ -23856,6 +25712,11 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
      * as Reload is gone while the list loads: a later draw that has it gives the focus back to it, while
      * the focus has gone nowhere else meanwhile. */
     UI._lostSidebarFocusKey = null;
+    /* The Join to the query buttons the tree holds, {button, table}, and what the query on screen offers them (_planJoin), drawn with
+     * them: the state of each button follows the query (_refreshJoinButtons). _joinBusy holds the tables whose join waits for fields. */
+    UI._joinRows = [];
+    UI._joinPlan = null;
+    UI._joinBusy = {};
     UI.sidebarQuery = '';
 
     UI._buildSidebar = function () {
@@ -23864,7 +25725,8 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         var savedSections = readJSON(sidebarKey(), null);
         this._sectionCollapsed = {
             dataViews: !!(savedSections && savedSections.dataViews),
-            dataExtensions: !!(savedSections && savedSections.dataExtensions)
+            dataExtensions: !!(savedSections && savedSections.dataExtensions),
+            snippets: !!(savedSections && savedSections.snippets)
         };
         var searchInput = h('input', {
             class: 'ss-input', type: 'search', placeholder: 'Search Data Extensions...', 'aria-label': 'Search Data Extensions',
@@ -23959,16 +25821,16 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
 
     /**
      * @function minutesAgoLabel
-     * @description Builds the sidebar/Save As Data Extension list footer's "loaded N min
-     * ago" text from when it was last loaded.
+     * @description How old a list is, from when it was last read, for the name of a section's reload icon (UI._renderReloadButton):
+     * "Loaded just now", "Loaded 3 min ago", "Loaded 5 h ago".
      * @param {number} savedAt - Date.now() form
      * @returns {string}
      */
     function minutesAgoLabel(savedAt) {
         var minutes = Math.floor((Date.now() - savedAt) / 60000);
-        if (minutes < 1) return 'List loaded just now';
-        if (minutes < 60) return 'List loaded ' + minutes + ' min ago';
-        return 'List loaded ' + Math.floor(minutes / 60) + ' h ago';
+        if (minutes < 1) return 'Loaded just now';
+        if (minutes < 60) return 'Loaded ' + minutes + ' min ago';
+        return 'Loaded ' + Math.floor(minutes / 60) + ' h ago';
     };
 
     UI.setSidebarCollapsed = function (isCollapsed) {
@@ -24001,6 +25863,8 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         this._lostSidebarFocusKey = null;
         if (this._nextSidebarFocusKey) focusKey = this._nextSidebarFocusKey;
         this._nextSidebarFocusKey = null;
+        this._joinRows = [];
+        this._joinPlan = null;
         clearNode(container);
 
         var raw = (this.sidebarQuery || '').trim();
@@ -24024,6 +25888,8 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         };
 
         self._renderDataExtensionsSection(container, raw);
+        self._renderSnippetsSection(container, raw);
+        self._dockSectionTitles();
 
         if (focusKey) {
             var keyed = container.querySelectorAll('[data-focus-key]');
@@ -24042,7 +25908,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
      * @method _renderSectionTitle
      * @description The title of a sidebar section, a button with a caret that collapses and expands the
      * section. A collapsed section's title shows how many search matches it hides, when there is a search.
-     * @param {string} id - 'dataViews' or 'dataExtensions', the key of the state kept in the browser
+     * @param {string} id - 'dataViews', 'dataExtensions' or 'snippets', the key of the state kept in the browser
      * @param {string} label - the title text
      * @param {?number} matchCount - the section's search matches, or null when there is no search or no count yet
      * @returns {HTMLElement}
@@ -24054,15 +25920,113 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         return h('button', {
             class: 'ss-tree__section-title ss-tree__section-toggle', type: 'button', 'aria-expanded': String(!isCollapsed),
             'data-focus-key': 'section:' + id,
-            onclick: function () { self._toggleSection(id); }
+            onclick: function (ev) { self._onSectionTitle(id, ev.currentTarget); }
         }, [h('span', { class: 'ss-tree__section-caret', 'aria-hidden': 'true' }, isCollapsed ? '▸' : '▾'), text]);
+    };
+
+    /**
+     * @method _sectionDockOf
+     * @description The element of a section's title that docks: the title itself, or the head that holds it beside the
+     * section's own buttons (Snippets).
+     * @param {HTMLElement} title - the section title's button
+     * @returns {HTMLElement}
+     */
+    UI._sectionDockOf = function (title) {
+        return (title.parentNode && title.parentNode.classList && title.parentNode.classList.contains('ss-tree__section-head')) ? title.parentNode : title;
+    };
+
+    /**
+     * @method _dockSectionTitles
+     * @description Makes the section titles of the drawn tree dock (`.ss-tree__dock`), each with the number of titles before it
+     * (--ss-dock-above) and after it (--ss-dock-below), so the titles stack at the top and the bottom of the sidebar's scroll in
+     * their order and never cover one another. The stylesheet gives every title one height, so nothing is measured.
+     */
+    UI._dockSectionTitles = function () {
+        var docks = Array.prototype.filter.call(this.el.sidebarTree.children, function (el) {
+            return el.classList.contains('ss-tree__section-title') || el.classList.contains('ss-tree__section-head');
+        });
+        docks.forEach(function (el, i) {
+            el.classList.add('ss-tree__dock');
+            el.style.setProperty('--ss-dock-above', String(i));
+            el.style.setProperty('--ss-dock-below', String(docks.length - 1 - i));
+        });
+    };
+
+    /**
+     * @method _onSectionTitle
+     * @description A click, Enter or Space on a section title. A title docked at the bottom stands for a section further down:
+     * it brings that section into view, opening it if it is collapsed, as the click asks for it. Anywhere else the title
+     * collapses or expands its section, as before.
+     * @param {string} id - 'dataViews', 'dataExtensions' or 'snippets'
+     * @param {HTMLElement} title - the title's button
+     */
+    UI._onSectionTitle = function (id, title) {
+        var dock = this._sectionDockOf(title);
+        var before = dock.previousElementSibling;
+        /* Where it is not docked, the title follows what comes before it. Docked at the bottom, what comes before runs on under it. */
+        var isDockedBelow = !!before && before.getBoundingClientRect().bottom > dock.getBoundingClientRect().top + 1;
+        if (!isDockedBelow) {
+            this._toggleSection(id);
+            return;
+        };
+        if (this._sectionCollapsed[id]) {
+            this._sectionCollapsed[id] = false;
+            writeJSON(sidebarKey(), this._sectionCollapsed);
+            this.renderSidebarTree();
+        };
+        this._scrollToSection(id);
+    };
+
+    /**
+     * @method _scrollToSection
+     * @description Scrolls the sidebar so a section's title sits in its own place, right under the titles docked above it,
+     * with its rows below.
+     * @param {string} id - 'dataViews', 'dataExtensions' or 'snippets'
+     */
+    UI._scrollToSection = function (id) {
+        var container = this.el.sidebarTree;
+        var title = container.querySelector('[data-focus-key="section:' + id + '"]');
+        if (!title) return;
+        var dock = this._sectionDockOf(title);
+        var before = dock.previousElementSibling;
+        if (!before) {
+            container.scrollTop = 0;
+            return;
+        };
+        /* Its own place starts where what comes before it ends, wherever the title is docked. */
+        var place = before.getBoundingClientRect().bottom - container.getBoundingClientRect().top;
+        container.scrollTop += place - (parseFloat(getComputedStyle(dock).top) || 0);
+    };
+
+    /**
+     * @method _renderReloadButton
+     * @description The reload icon at the right of a section's title, beside its own buttons: its name says what it reloads and when the
+     * list was read, as the line "List loaded N min ago · Reload" under the list said, which a long list put out of sight (the author's
+     * RC7 test, 2026-10-09). While the list loads the icon turns and a click does nothing, with what it is doing as its name.
+     * @param {string} focusKey - the button's data-focus-key
+     * @param {string} what - what it reloads, as "the Data Extension list" or "the snippets"
+     * @param {?number} savedAt - Date.now() form of the last read, or null when there was none
+     * @param {boolean} isLoading - whether a read is on its way
+     * @param {string} loadingText - its name while a read is on its way
+     * @param {Function} onReload - what a click does
+     * @returns {HTMLElement}
+     */
+    UI._renderReloadButton = function (focusKey, what, savedAt, isLoading, loadingText, onReload) {
+        /* What it does first, then how old the list is: "Reload the Data Extension list. Loaded 5 h ago." */
+        var label = isLoading ? loadingText : 'Reload ' + what + '.' + (savedAt ? ' ' + minutesAgoLabel(savedAt) + '.' : '');
+        return h('button', {
+            class: 'ss-tree__action ss-tree__section-action' + (isLoading ? ' is-busy' : ''), type: 'button', 'data-tip': label, 'aria-label': label,
+            'aria-busy': isLoading ? 'true' : 'false', 'aria-disabled': isLoading ? 'true' : 'false', 'data-focus-key': focusKey,
+            /* Not disabled while it loads, which would drop the focus of a keyboard user who just pressed it: a click then does nothing. */
+            onclick: function () { if (!isLoading) onReload(); }
+        }, icon('refresh'));
     };
 
     /**
      * @method _toggleSection
      * @description Collapses or expands a sidebar section and keeps the choice in the browser. Where the
      * browser refuses the write, the choice lasts until the page closes.
-     * @param {string} id - 'dataViews' or 'dataExtensions'
+     * @param {string} id - 'dataViews', 'dataExtensions' or 'snippets'
      */
     UI._toggleSection = function (id) {
         this._sectionCollapsed[id] = !this._sectionCollapsed[id];
@@ -24078,7 +26042,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             'aria-expanded': String(!isCollapsed), 'data-focus-key': 'group:' + group,
             onclick: function () { self._dvGroupCollapsed[group] = !isCollapsed; self.renderSidebarTree(); }
         }, isCollapsed ? '▸' : '▾');
-        var row = h('div', { class: 'ss-tree__row ss-tree__folder', title: group, onclick: function () { self._dvGroupCollapsed[group] = !isCollapsed; self.renderSidebarTree(); } }, [
+        var row = h('div', { class: 'ss-tree__row ss-tree__folder', 'data-tip': group, onclick: function () { self._dvGroupCollapsed[group] = !isCollapsed; self.renderSidebarTree(); } }, [
             caret, h('span', { class: 'ss-tree__name' }, group)
         ]);
         var wrap = h('div', null, row);
@@ -24105,7 +26069,12 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         var isFirstLoad = isLoading && !(Schema.deList && Schema.deList.length);
         var loadError = Schema.deListError();
         var deMatches = (raw && !isFirstLoad && !loadError) ? matchLocalTables(Schema.searchableList(), normalizeForSearch(raw)).sort(compareTableNames) : null;
-        container.appendChild(self._renderSectionTitle('dataExtensions', 'Data Extensions', deMatches ? deMatches.length : null));
+        var savedAt = Schema.deListSavedAt();
+        var reloadBtn = self._renderReloadButton('reload', 'the Data Extension list', savedAt, isLoading,
+            savedAt ? 'Reloading the Data Extension list…' : 'Loading the Data Extension list…', function () { Schema.loadDataExtensionList(true); });
+        container.appendChild(h('div', { class: 'ss-tree__section-head' }, [
+            self._renderSectionTitle('dataExtensions', 'Data Extensions', deMatches ? deMatches.length : null), reloadBtn
+        ]));
         if (this._sectionCollapsed.dataExtensions) return;
         var body = h('div', { class: 'ss-tree__section-body' }, null);
         container.appendChild(body);
@@ -24154,20 +26123,133 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             };
         };
 
-        var savedAt = Schema.deListSavedAt();
-        if (savedAt && isLoading) {
-            body.appendChild(h('div', { class: 'ss-tree__list-footer', role: 'status' }, [spinner(), ' Reloading the list...']));
-        } else if (isLoading) {
-            body.appendChild(h('div', { class: 'ss-tree__list-footer', role: 'status' }, [spinner(), ' Loading the list: ' + Schema.deList.length.toLocaleString('en-US') + ' so far...']));
-        } else if (savedAt) {
-            body.appendChild(h('div', { class: 'ss-tree__list-footer' }, [
-                minutesAgoLabel(savedAt) + ' · ',
-                h('button', { class: 'ss-tree__link', type: 'button', 'data-focus-key': 'reload', onclick: function () { Schema.loadDataExtensionList(true); } }, 'Reload')
-            ]));
-            if (Schema.isParentListCapped()) {
-                body.appendChild(h('div', { class: 'ss-tree__list-footer' }, "The parent Business Unit's list stops short: it has more Data Extensions than SQL Studio reads."));
-            };
+        /* What the list's state says goes at the top, under the hint, where a long list does not put it out of sight: the pages of a
+         * first load so far, and a parent list that stops short. A reload says it in the title's icon, which turns. */
+        var statusLines = [];
+        if (isLoading && !savedAt) {
+            statusLines.push(h('div', { class: 'ss-tree__list-status', role: 'status' }, [spinner(), ' Loading the list: ' + Schema.deList.length.toLocaleString('en-US') + ' so far...']));
+        } else if (!isLoading && savedAt && Schema.isParentListCapped()) {
+            statusLines.push(h('div', { class: 'ss-tree__list-status' }, "The parent Business Unit's list stops short: it has more Data Extensions than SQL Studio reads."));
         };
+        var hint = body.firstChild && (body.firstChild.classList.contains('ss-tree__hint') || body.firstChild.classList.contains('ss-tree__empty')) ? body.firstChild : null;
+        statusLines.forEach(function (line) { body.insertBefore(line, hint ? hint.nextSibling : body.firstChild); });
+    };
+
+    /**
+     * @method _renderSnippetsSection
+     * @description The Snippets section, below the Data Extensions: its title (a button that collapses it, with the save button beside
+     * it), a hint that the snippets are shared, the Business Unit's snippets by name (a search narrows them by name or SQL), and a
+     * footer with Reload. Not there at all where the Backend has snippets off. Until the first list arrives it shows a loading row, and a
+     * list that could not be read shows its error with Retry.
+     * @param {HTMLElement} container - the sidebar tree
+     * @param {string} raw - the search, trimmed
+     */
+    UI._renderSnippetsSection = function (container, raw) {
+        var self = this;
+        if (!Snippets.isEnabled()) return;
+        var isSearch = !!raw;
+        var needle = raw.toLowerCase();
+        var all = Snippets.items || [];
+        var matches = isSearch ? all.filter(function (item) { return item.name.toLowerCase().indexOf(needle) !== -1 || String(item.sql).toLowerCase().indexOf(needle) !== -1; }) : all;
+        var saveBtn = h('button', {
+            class: 'ss-tree__action ss-tree__section-action', type: 'button', 'data-tip': 'Save the selection, or the whole query, as a snippet',
+            'aria-label': 'Save as a snippet', 'data-focus-key': 'snippets:save',
+            onclick: function () { Snippets.openSave(); }
+        }, icon('save'));
+        var reloadBtn = self._renderReloadButton('snippets:reload', 'the snippets', Snippets.savedAt || null, Snippets.status === 'loading',
+            Snippets.items ? 'Reloading the snippets…' : 'Loading the snippets…', function () { Snippets.load(true); });
+        container.appendChild(h('div', { class: 'ss-tree__section-head' }, [
+            self._renderSectionTitle('snippets', 'Snippets', (isSearch && Snippets.items) ? matches.length : null), saveBtn, reloadBtn
+        ]));
+        if (this._sectionCollapsed.snippets) return;
+        var body = h('div', { class: 'ss-tree__section-body' }, null);
+        container.appendChild(body);
+        body.appendChild(h('div', { class: 'ss-tree__hint' }, 'Shared with everyone who uses SQL Studio in this Business Unit.'));
+
+        if (!Snippets.items) {
+            if (Snippets.status === 'failed') {
+                body.appendChild(h('div', { class: 'ss-tree__empty' }, [
+                    'Could not load the snippets: ' + Snippets.error.message + ' ',
+                    h('button', { class: 'ss-tree__link', type: 'button', 'aria-label': 'Retry the snippets', 'data-focus-key': 'snippets:retry', onclick: function () { Snippets.load(true); } }, 'Retry')
+                ]));
+            } else {
+                body.appendChild(h('div', { class: 'ss-tree__loading' }, [spinner(), ' Loading the snippets...']));
+            };
+            return;
+        };
+
+        if (!matches.length) {
+            body.appendChild(h('div', { class: 'ss-tree__empty' }, isSearch ? 'No snippets match.' : 'No snippets yet. Select some SQL, or write a query, and use the save button in the title above.'));
+        } else {
+            matches.forEach(function (item) { body.appendChild(self._renderSnippetRow(item)); });
+        };
+
+        /* A reload that failed keeps the list it had, and says so under the hint with a way to try again; the title's icon reloads too. */
+        if (Snippets.status === 'failed' && Snippets.error) {
+            body.insertBefore(h('div', { class: 'ss-tree__list-status', role: 'alert' }, [
+                'Could not reload the snippets: ' + Snippets.error.message + ' ',
+                h('button', { class: 'ss-tree__link', type: 'button', 'aria-label': 'Retry the snippets', 'data-focus-key': 'snippets:retry', onclick: function () { Snippets.load(true); } }, 'Retry')
+            ]), body.firstChild ? body.firstChild.nextSibling : null);
+        };
+    };
+
+    /**
+     * @method _renderSnippetRow
+     * @description One snippet: its name, which inserts it at the cursor on a click, Enter or Space, and for the author's own rows
+     * Rename and Delete over the end of the row, as a table's actions lie. The row's hover shows the SQL, the author and the date. The
+     * row is a plain container of controls side by side, none inside another, each with a data-focus-key so the focus stays on it
+     * when the sidebar is drawn again.
+     * @param {Object} item - a snippet as listSnippets gives it
+     * @returns {HTMLElement}
+     */
+    UI._renderSnippetRow = function (item) {
+        var self = this;
+        var focusKey = 'snippet:' + item.id;
+        var insert = function () { self._insertSnippet(item); };
+        var toggle = h('div', {
+            class: 'ss-tree__toggle ss-snippet__insert', tabindex: '0', role: 'button',
+            'aria-label': 'Insert the snippet ' + item.name, 'data-focus-key': focusKey,
+            onclick: insert, onkeydown: pressOnKey(insert)
+        }, [h('span', { class: 'ss-tree__caret', 'aria-hidden': 'true' }, null), h('span', { class: 'ss-tree__name' }, item.name)]);
+        var actions = null;
+        if (item.isOwn) {
+            actions = h('span', { class: 'ss-tree__actions' }, [
+                h('button', {
+                    class: 'ss-tree__action ss-snippet__rename', type: 'button', 'data-tip': 'Rename', 'aria-label': 'Rename the snippet ' + item.name,
+                    'data-focus-key': focusKey + ':rename', onclick: function () { Snippets.openRename(item); }
+                }, icon('edit')),
+                h('button', {
+                    class: 'ss-tree__action ss-snippet__delete', type: 'button', 'data-tip': 'Delete', 'aria-label': 'Delete the snippet ' + item.name,
+                    'data-focus-key': focusKey + ':delete', onclick: function () { Snippets.confirmDelete(item); }
+                }, icon('delete'))
+            ]);
+        };
+        return h('div', { class: 'ss-tree__row ss-tree__row--table ss-snippet', 'data-tip': snippetHoverText(item) }, [toggle, actions]);
+    };
+
+    /**
+     * @method _insertSnippet
+     * @description Writes a snippet as one undo step, and gives the focus to the editor. An empty editor takes it at once, and so
+     * does a selection, which it replaces, as selecting is the choice. A query with nothing selected asks first, as a snippet is
+     * often a whole query: "Replace the query", "Insert at the cursor" (on lines of its own) or Cancel, which has the focus and
+     * writes nothing (the author's RC3 test, 2026-10-08: the click wrote into the query with no question).
+     * @param {Object} item
+     */
+    UI._insertSnippet = function (item) {
+        var selection = Editor.getSelectionOffsets();
+        if (!Editor.getValue().trim() || selection.end > selection.start) {
+            Editor.insertSnippet(item.sql);
+            return;
+        };
+        var modal = this.openModal({
+            title: 'Insert the snippet "' + item.name + '"?',
+            body: h('p', null, 'This tab has a query already. Replace it with the snippet, or insert the snippet at the cursor on lines of its own. Undo takes either back.'),
+            footer: [
+                h('button', { class: 'ss-btn', type: 'button', 'data-autofocus': true, onclick: function () { modal.close(); } }, 'Cancel'),
+                h('button', { class: 'ss-btn', type: 'button', onclick: function () { modal.close(); Editor.insertSnippet(item.sql, 'cursor'); } }, 'Insert at the cursor'),
+                h('button', { class: 'ss-btn ss-btn--primary', type: 'button', onclick: function () { modal.close(); Editor.insertSnippet(item.sql, 'replace'); } }, 'Replace the query')
+            ]
+        });
     };
 
     /**
@@ -24238,10 +26320,10 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         }, isOpen ? '▾' : '▸');
         var row = h('div', {
             class: 'ss-tree__row ss-tree__folder ss-tree__folder--de' + (node.isMadeUp ? ' ss-tree__folder--made-up' : ''),
-            title: node.isMadeUp ? node.name + ': the Data Extensions whose folder is not in the folder list' : node.name,
+            'data-tip': node.isMadeUp ? node.name + ': the Data Extensions whose folder is not in the folder list' : node.name,
             onclick: toggle
         }, [
-            caret, h('span', { class: 'ss-tree__name' }, node.name), node.count ? h('span', { class: 'ss-tree__count', title: countText }, fmtNumber(node.count)) : null
+            caret, h('span', { class: 'ss-tree__name' }, node.name), node.count ? h('span', { class: 'ss-tree__count', 'data-tip': countText }, fmtNumber(node.count)) : null
         ]);
         var wrap = h('div', null, row);
         if (isOpen) {
@@ -24316,26 +26398,40 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             class: 'ss-tree__toggle', tabindex: '0', role: 'button', 'aria-expanded': String(isExpanded),
             'aria-label': 'Fields of ' + wholeName, 'data-focus-key': focusKey,
             onclick: toggleFields, onkeydown: pressOnKey(toggleFields)
-        }, [caret, nameEl, t.isShared ? sharedKindBadge(t, isInFolder) : null]);
+        }, [caret, nameEl, t.isShared ? sharedKindBadge(t, isInFolder, true) : null]);
         /* The row's actions: small icon buttons, shown while the row is hovered or has the keyboard's
          * focus (CSS). Insert name writes the table's name, with ENT. or Ent. where it needs it, and
-         * Insert table query (SELECT with all fields) writes a full "SELECT every field" query. Shared by Data View
-         * and Data Extension rows. Enter or Space on a button clicks it, and nothing else hears the key. */
+         * Join to the query writes the table's join into the query, and Insert table query (SELECT with all fields) writes a
+         * full "SELECT every field" query. Shared by Data View and Data Extension rows. Enter or Space on a button clicks it,
+         * and nothing else hears the key. */
         var insertNameBtn = h('button', {
             class: 'ss-tree__action ss-tree__insert-name', type: 'button',
-            title: 'Insert name', 'aria-label': 'Insert name', 'data-focus-key': focusKey + ':insert-name',
+            'data-tip': 'Insert name', 'aria-label': 'Insert name', 'data-focus-key': focusKey + ':insert-name',
             onclick: function () { self._insertTable(t); }
         }, icon('add'));
+        /* Join to the query writes this table's whole join into the query on screen, as the join completion after JOIN writes it. It is
+         * off, with a title that says why, while the query has no table to join to or no relationship to this one is known. */
+        var joinBtn = h('button', {
+            class: 'ss-tree__action ss-tree__join', type: 'button',
+            'data-tip': 'Join to the query', 'aria-label': 'Join to the query', 'data-focus-key': focusKey + ':join',
+            onclick: function () { self._joinToQuery(t); }
+        }, icon('left_join'));
+        this._joinRows.push({
+            button: joinBtn,
+            table: t
+        });
+        if (!this._joinPlan) this._joinPlan = this._planJoin();
+        this._showJoinState(joinBtn, t, this._joinPlan);
         var insertFullBtn = h('button', {
             class: 'ss-tree__action ss-tree__insert-full', type: 'button',
-            title: 'Insert table query (SELECT with all fields)', 'aria-label': 'Insert table query (SELECT with all fields)', 'data-focus-key': focusKey + ':insert-full',
+            'data-tip': 'Insert table query (SELECT with all fields)', 'aria-label': 'Insert table query (SELECT with all fields)', 'data-focus-key': focusKey + ':insert-full',
             onclick: function () { self._insertFullQuery(t); }
         }, icon('table'));
-        var row = h('div', { class: 'ss-tree__row ss-tree__row--table', title: tableTitle(t, wholeName) }, [
-            toggle, h('span', { class: 'ss-tree__actions' }, [insertNameBtn, insertFullBtn])
+        var row = h('div', { class: 'ss-tree__row ss-tree__row--table', 'data-tip': tableTitle(t, wholeName) }, [
+            toggle, h('span', { class: 'ss-tree__actions' }, [insertNameBtn, joinBtn, insertFullBtn])
         ]);
         var wrap = h('div', null, row);
-        if (t.isShared && t.folderPath && !isInFolder) wrap.appendChild(h('div', { class: 'ss-tree__path', title: t.folderPath }, t.folderPath));
+        if (t.isShared && t.folderPath && !isInFolder) wrap.appendChild(h('div', { class: 'ss-tree__path', 'data-tip': t.folderPath }, t.folderPath));
         if (isExpanded) wrap.appendChild(isMatched ? self._buildFieldRows(t, matchedFields) : self._renderFieldsList(t));
         return wrap;
     };
@@ -24347,6 +26443,191 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         var text = t.isShared ? ('ENT.' + Tools.formatIdentifier(t.name)) :
             (t.kind === 'dataview' ? Tools.dataViewTable(t.name, SQLData, isParentBusinessUnit() === false) : Tools.formatIdentifier(t.name));
         Editor.insertTextAtCursor(text);
+        Editor.prefetchFields(t);
+    };
+
+    /**
+     * @method _planJoin
+     * @description Asks Tools.joinToQuery what the query on screen can be joined to: the SELECT the cursor is in gets the join, at the end
+     * of its FROM. One answer serves every row of the sidebar, as the joins of all the tables come from one ask. In a child Business
+     * Unit, _Subscribers and _EnterpriseAttribute are written with Ent., as completion writes them.
+     * @returns {Object} Tools.joinToQuery's answer, or one with no table when it fails
+     */
+    UI._planJoin = function () {
+        try {
+            return Tools.joinToQuery(Editor.getValue(), Editor.getCursorOffset(), Schema.getIndex(), SQLData, { isChildBusinessUnit: isParentBusinessUnit() === false });
+        } catch (e) {
+            return {
+                hasTable: false,
+                isUnfinished: false,
+                readTables: [],
+                readViews: [],
+                pendingTables: [],
+                items: []
+            };
+        };
+    };
+
+    /**
+     * @function joinState
+     * @description Builds the state of a Join to the query button.
+     * @param {boolean} isOn - whether the button is on
+     * @param {string} title - the button's title, which says why it is off
+     * @param {?Object} item - the join it writes, or null when it is off or waits for fields
+     * @returns {Object} { isOn, title, item }
+     */
+    function joinState(isOn, title, item) {
+        return {
+            isOn: isOn,
+            title: title,
+            item: item
+        };
+    };
+
+    /**
+     * @method _joinStateOf
+     * @description What a table's Join to the query button shows, from the plan: on with the join the table has, on while the join
+     * waits for what is not known yet (the fields of a Data Extension that are not loaded, and the send relationship of a sendable
+     * one whose details are on their way, the table's own and those of the Data Extensions the query reads), or off with the reason,
+     * which the button's title gives: the query has no table, its FROM ends in a half-written join, the table, a Data Extension or a
+     * Data View, is in the query already, or no relationship to the query's tables is known.
+     * @param {Object} t - a schema table entry
+     * @param {Object} plan - from _planJoin
+     * @returns {Object} { isOn, title, item }: item is the join, or null
+     */
+    UI._joinStateOf = function (t, plan) {
+        if (!plan.hasTable) return joinState(false, 'Join to the query: the query has no table yet', null);
+        if (plan.isUnfinished) return joinState(false, 'Join to the query: finish the join the query ends with first', null);
+        var isRead = t.kind === 'dataview' ? plan.readViews.indexOf(t.name) !== -1 : plan.readTables.indexOf(t) !== -1;
+        if (isRead) return joinState(false, 'Join to the query: it is in the query already', null);
+        /* The plan's joins by table, made once for all the rows: an org can have thousands of them. */
+        if (!plan.joinByTable) {
+            plan.joinByTable = {};
+            plan.items.forEach(function (join) {
+                plan.joinByTable[join.dataExtension ? 'de:' + Schema.tableKey(join.dataExtension) : 'view:' + join.view] = join;
+            });
+        };
+        var item = plan.joinByTable[t.kind === 'dataview' ? 'view:' + t.name : 'de:' + Schema.tableKey(t)];
+        if (item) return joinState(true, 'Join to the query', item);
+        /* A Data Extension whose fields are not loaded is on even when its sendable field alone joins nothing: its other fields may. */
+        var isUnknown = plan.pendingTables.length > 0 || (t.kind !== 'dataview' && (!t.fields || Schema.isDetailsPending(t)));
+        if (isUnknown) return joinState(true, 'Join to the query', null);
+        return joinState(false, 'Join to the query: no relationship to the query\'s tables is known', null);
+    };
+
+    /**
+     * @method _showJoinState
+     * @description Sets a Join to the query button to the state its table has in the plan: off (disabled) with the reason as its title, or on.
+     * @param {HTMLElement} button
+     * @param {Object} t - a schema table entry
+     * @param {Object} plan - from _planJoin
+     */
+    UI._showJoinState = function (button, t, plan) {
+        var state = this._joinStateOf(t, plan);
+        button.disabled = !state.isOn;
+        button.setAttribute('data-tip', state.title);
+    };
+
+    /**
+     * @method _refreshJoinButtons
+     * @description Sets every Join to the query button of the tree to what the query on screen offers it now. It runs after each edit of
+     * the query, a switch of tab and a field load, a moment after the last (_scheduleJoinRefresh), and never redraws the tree.
+     */
+    UI._refreshJoinButtons = function () {
+        var self = this;
+        if (!this._joinRows.length) {
+            this._joinPlan = null;
+            return;
+        };
+        var plan = this._planJoin();
+        this._joinPlan = plan;
+        this._joinRows.forEach(function (row) { self._showJoinState(row.button, row.table, plan); });
+    };
+    UI._scheduleJoinRefresh = debounce(function () { UI._refreshJoinButtons(); }, JOIN_REFRESH_MS);
+
+    /**
+     * @method _joinToQuery
+     * @description The Join to the query action: writes the table's join into the query on screen, as one step of the editor's undo, with
+     * the cursor after it. A table that is not known well enough to join yet, because its fields are not loaded, or those of a Data
+     * Extension the query reads, loads them first (1 API call each, cached for the session), and a sendable one whose details are on
+     * their way waits for them (Schema.details, one call for the tables of one moment), and then it writes. When what came shows no
+     * relationship, nothing is written and a message says so. The join goes into the tab the click came from: when another tab is on
+     * screen by then, nothing is written and a toast says why.
+     * @param {Object} t - a schema table entry
+     */
+    UI._joinToQuery = function (t) {
+        var self = this;
+        var key = Schema.tableKey(t);
+        if (this._joinBusy[key]) return;
+        var plan = this._planJoin();
+        var state = this._joinStateOf(t, plan);
+        if (!state.isOn) {
+            Toast.show(state.title.replace(/^Join to the query: /, '').replace(/^./, function (c) { return c.toUpperCase(); }) + '.', 'info');
+            return;
+        };
+        /* A Data Extension of the query whose fields are not loaded could be a better table to join to than the ones the join
+         * is written against now, so its fields load first even when a join is known. */
+        if (state.item && !plan.pendingTables.length) {
+            this._writeJoin(t, state.item);
+            return;
+        };
+        var loads = plan.pendingTables.slice();
+        if (t.kind !== 'dataview' && (!t.fields || Schema.isDetailsPending(t)) && loads.indexOf(t) === -1) loads.push(t);
+        /* The send relationships it waits for, to say so when one could not be read. */
+        var awaited = loads.filter(function (table) { return Schema.isDetailsPending(table); });
+        /* The editor shows one tab's model at a time, and the join was planned against the text of this one. */
+        var tab = QueryTabs.active();
+        /**
+         * @function isTabLeft
+         * @description Tells whether another tab is on screen than the one the click came from, and says so in a toast: the join
+         * is then written into neither.
+         * @returns {boolean}
+         */
+        var isTabLeft = function () {
+            if (QueryTabs.active() === tab) return false;
+            Toast.show(t.name + ' was not joined, as another tab is on screen now. Open ' + QueryTabs.labelFor(tab) + ' and join it again.', 'info');
+            return true;
+        };
+        this._joinBusy[key] = true;
+        Promise.all(loads.map(function (table) {
+            return Schema.fields(table).then(function () { return Schema.details(table); });
+        })).then(function () {
+            delete self._joinBusy[key];
+            self._refreshJoinButtons();
+            if (isTabLeft()) return;
+            var next = self._joinStateOf(t, self._planJoin());
+            if (!next.item) {
+                Toast.show('No relationship between ' + t.name + ' and the tables of the query is known, so no join was written.', 'info');
+                return;
+            };
+            self._writeJoin(t, next.item);
+            /* A send relationship that could not be read leaves the join on what the fields show, which may miss the sendable field. */
+            var unread = awaited.filter(function (table) { return table.hasDetails !== true; }).map(function (table) { return table.name; });
+            if (unread.length) Toast.show('Could not read the send relationship of ' + unread.join(', ') + ', so the join may not be the best one.', 'warning');
+        }, function (err) {
+            delete self._joinBusy[key];
+            if (isTabLeft()) return;
+            /* A load that failed leaves the join the query offers without those fields: it is a correct join, and may not be the best one.
+             * It is asked for again, as the query may have changed while the fields were on their way. */
+            var known = self._joinStateOf(t, self._planJoin());
+            if (known.item) {
+                self._writeJoin(t, known.item);
+                Toast.show('Could not load the fields of a table of the query, so the join may not be the best one: ' + err.message, 'warning');
+                return;
+            };
+            Toast.show('Could not load the fields to join ' + t.name + ': ' + err.message, 'error');
+        });
+    };
+
+    /**
+     * @method _writeJoin
+     * @description Writes a join of Tools.joinToQuery into the editor: one step of its undo, the cursor after the join. A Data Extension
+     * starts to load its fields at once, as Insert name does, for the conditions after its ON.
+     * @param {Object} t - a schema table entry
+     * @param {Object} item - the join, from the plan
+     */
+    UI._writeJoin = function (t, item) {
+        Editor.applyEdits(item.edits, item.cursor);
         Editor.prefetchFields(t);
     };
 
@@ -24426,17 +26707,17 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             var insert = function () { Editor.insertTextAtCursor(Tools.formatIdentifier(f.name)); };
             var fieldKey = focusKey + ':field:' + f.name;
             var row = h('div', {
-                class: 'ss-field-row', tabindex: '0', role: 'button', 'aria-label': 'Insert ' + f.name, title: f.name,
+                class: 'ss-field-row', tabindex: '0', role: 'button', 'aria-label': 'Insert ' + f.name, 'data-tip': f.name,
                 'data-focus-key': fieldKey,
                 onclick: insert, onkeydown: pressOnKey(insert)
             }, [
-                f.isPrimaryKey ? h('span', { class: 'ss-field-row__key', title: 'Primary key' }, icon('key')) : null,
+                f.isPrimaryKey ? h('span', { class: 'ss-field-row__key', 'data-tip': 'Primary key' }, icon('key')) : null,
                 h('span', { class: 'ss-field-row__name' }, f.name),
                 h('span', { class: 'ss-field-row__type' }, String(f.type || '') + (f.length ? '(' + f.length + ')' : ''))
             ]);
             var insertNameBtn = h('button', {
                 class: 'ss-tree__action ss-tree__insert-name', type: 'button',
-                title: 'Insert name', 'aria-label': 'Insert name', 'data-focus-key': fieldKey + ':insert-name',
+                'data-tip': 'Insert name', 'aria-label': 'Insert name', 'data-focus-key': fieldKey + ':insert-name',
                 onclick: insert
             }, icon('add'));
             wrap.appendChild(h('div', { class: 'ss-field-item' }, [row, h('span', { class: 'ss-tree__actions' }, [insertNameBtn])]));
@@ -24467,7 +26748,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         var formatBtn = toolbarButton('magicwand', 'Format', function () { Editor.format(); }, { secondary: true, title: 'Format (' + shortcutLabel('F', true) + ')', keys: shortcutKeys('F', true) });
         /* The Save shortcut opens Save as while no query is open, when the Save button is hidden. */
         var saveAsBtn = toolbarButton('save', 'Save as', function () { Dialogs.openSaveAs(); }, { secondary: true, title: 'Save as (' + shortcutLabel('S') + ' while no query is open)' });
-        var openBtn = toolbarButton('open_folder', 'Open', function () { Dialogs.openOpenQuery(); }, { secondary: true });
+        var openBtn = toolbarButton('open_folder', 'Open', function (ev) { UI.toggleDropdown(ev.currentTarget, 'open'); }, { secondary: true });
         var historyBtn = toolbarButton('clock', 'History', function (ev) { UI.toggleDropdown(ev.currentTarget, 'history'); }, { secondary: true });
         var saveBtn = toolbarButton('save', 'Save', function () { Dialogs.saveCurrent(); }, { secondary: true, title: 'Save (' + shortcutLabel('S') + ')', keys: shortcutKeys('S') });
         var disconnectBtn = toolbarButton('clear', 'Disconnect', function () { self._disconnectOpenedQuery(); }, { secondary: true });
@@ -25033,7 +27314,10 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         if (!button || !tab) return;
         var progress = tab.activeExport;
         var isExporting = !!progress;
-        button.disabled = isExporting || isRunInFlight(state.runnerState);
+        var isSaving = !!tab.activeSave;
+        /* A finished run whose rows did not load has nothing to export until the page reads (QueryRunner.readResultsAgain). */
+        var isUnread = !!unreadPageOf(tab.state);
+        button.disabled = isExporting || isSaving || isRunInFlight(state.runnerState) || isUnread;
         button.classList.toggle('is-exporting', isExporting);
         if (isExporting) {
             button.setAttribute('aria-busy', 'true');
@@ -25055,19 +27339,58 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             };
             this.el.exportText.textContent = EXPORT_BUTTON_LABEL;
             this.el.exportSizer.textContent = '';
+            if (isUnread) button.title = 'The rows did not load, so there is nothing to export yet. Read the results again first.';
         };
-        /* Run waits for the export of this tab, as it does for its own run, and says why. */
+        /* A save of this tab's results holds Export too: both read the run's temporary Data Extension, and the save says why. */
+        if (!isExporting && isSaving) button.title = 'Export is on hold while this tab saves its results to a Data Extension.';
+        /* Run waits for the export or the save of this tab, as it does for its own run, and says why. */
         var runBtn = this.el.runBtn;
         if (runBtn) {
-            if (isExporting) {
+            if (isExporting || isSaving) {
                 if (this._runTitle === undefined) this._runTitle = runBtn.title;
                 runBtn.disabled = true;
-                runBtn.title = 'Run is on hold while this tab exports its results.';
+                runBtn.title = isExporting ? 'Run is on hold while this tab exports its results.' : 'Run is on hold while this tab saves its results to a Data Extension.';
             } else if (this._runTitle !== undefined) {
                 runBtn.disabled = isRunInFlight(state.runnerState);
                 runBtn.title = this._runTitle;
                 this._runTitle = undefined;
             };
+        };
+        this._syncSaveButton();
+    };
+
+    /**
+     * @method _syncSaveButton
+     * @description Draws the Save to DE button for the tab on screen. It shows on the Results tab once the tab has results, and while
+     * the tab runs a query or saves, so it can say it is off. It is off, with a title that says why (SaveToDe.blockReason), while the
+     * tab runs, exports or saves. While a save runs it shows a spinner and "Saving…" in the width of its label, as Export CSV shows an
+     * export's progress. Every place that draws the export button comes here with it.
+     */
+    UI._syncSaveButton = function () {
+        var button = this.el.saveDeBtn;
+        var tab = QueryTabs.active();
+        if (!button || !tab) return;
+        var isSaving = !!tab.activeSave;
+        var isShown = this.activeTab === 'results' && (Grid.hasData() || isRunInFlight(state.runnerState) || isSaving);
+        button.style.display = isShown ? '' : 'none';
+        var reason = SaveToDe.blockReason(tab);
+        button.disabled = !!reason;
+        button.title = reason || SAVE_BUTTON_TITLE;
+        button.classList.toggle('is-exporting', isSaving);
+        if (isSaving) {
+            button.setAttribute('aria-busy', 'true');
+            if (!this.el.saveDeSpinner) {
+                this.el.saveDeSpinner = spinner();
+                button.insertBefore(this.el.saveDeSpinner, this.el.saveDeLabel);
+            };
+            this.el.saveDeText.textContent = SAVE_BUTTON_BUSY_LABEL;
+        } else {
+            button.removeAttribute('aria-busy');
+            if (this.el.saveDeSpinner) {
+                button.removeChild(this.el.saveDeSpinner);
+                this.el.saveDeSpinner = null;
+            };
+            this.el.saveDeText.textContent = SAVE_BUTTON_LABEL;
         };
     };
 
@@ -25175,13 +27498,22 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             class: 'ss-btn ss-btn--sm ss-export-btn', type: 'button', title: 'Download every row as CSV',
             onclick: function () { Grid.exportCsv(); }
         }, [icon('download'), exportLabel]);
+        /* Save to DE, beside Export CSV: it saves the results into a new Data Extension (SaveToDe, UI._syncSaveButton). The label is two layers
+         * in one grid cell, as Export CSV's, so "Saving…" does not change the button's width. */
+        var saveDeText = h('span', { class: 'ss-export-btn__text' }, SAVE_BUTTON_LABEL);
+        var saveDeSizer = h('span', { class: 'ss-export-btn__sizer', 'aria-hidden': 'true' }, SAVE_BUTTON_LABEL);
+        var saveDeLabel = h('span', { class: 'ss-export-btn__label ss-save-btn__label' }, [saveDeText, saveDeSizer]);
+        var saveDeBtn = h('button', {
+            class: 'ss-btn ss-btn--sm ss-export-btn ss-save-btn', type: 'button', title: SAVE_BUTTON_TITLE,
+            onclick: function () { SaveToDe.open(); }
+        }, [icon('database'), saveDeLabel]);
         /* Where an export's progress is announced: a live region, kept out of sight. Only the start and each quarter are
          * written to it, so a screen reader does not read every number the button shows. */
         var exportStatus = h('span', { class: 'ss-export-status', 'aria-live': 'polite', 'aria-atomic': 'true' }, null);
         var header = h('div', { class: 'ss-results-header' }, [
             tabs, runSummary,
             h('div', { class: 'ss-toolbar__spacer' }, null),
-            levelSelect, fixAllBtn, fixReviewNote, clientFilter, exportCost, exportBtn, exportStatus
+            levelSelect, fixAllBtn, fixReviewNote, clientFilter, exportCost, exportBtn, saveDeBtn, exportStatus
         ]);
         var statusPanel = this._buildStatusPanel();
         var gridScroll = h('div', { class: 'ss-grid-scroll' }, h('div', { class: 'ss-empty-state' }, 'Run a query to see results here.'));
@@ -25202,6 +27534,9 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         this.el.exportText = exportText;
         this.el.exportSizer = exportSizer;
         this.el.exportStatus = exportStatus;
+        this.el.saveDeBtn = saveDeBtn;
+        this.el.saveDeLabel = saveDeLabel;
+        this.el.saveDeText = saveDeText;
         this.el.gridScroll = gridScroll;
         this.el.pager = pager;
         this.el.resultsPanel = resultsPanel;
@@ -25230,6 +27565,13 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             this._updatePagingUI();
             return;
         };
+        /* A finished run whose rows did not load says so, and offers to read them again. */
+        var unread = unreadPageOf(state);
+        if (unread) {
+            this.el.gridScroll.appendChild(this._buildUnreadPage(unread));
+            this._updatePagingUI();
+            return;
+        };
         if (!Grid.hasData()) {
             this.el.gridScroll.appendChild(h('div', { class: 'ss-empty-state' }, 'Run a query to see results here.'));
             this._updatePagingUI();
@@ -25237,6 +27579,40 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         };
         this.el.gridScroll.appendChild(this._buildGridTable(Grid.data.columns, Grid.visibleRows()));
         this._updatePagingUI();
+    };
+
+    /**
+     * @method _buildUnreadPage
+     * @description The results area of a finished run whose page 1 did not load (QueryRunner._keepRunWithoutPage): what
+     * happened, the error's own text, where the rows are, what reading them again costs, and the button that does it
+     * (QueryRunner.readResultsAgain). While that read is under way the button is off and shows a spinner.
+     * @param {Object} unread - the tab's record from unreadPageOf
+     * @returns {HTMLElement}
+     */
+    UI._buildUnreadPage = function (unread) {
+        var run = unread.run;
+        /* The tab on screen at the render: a click reads for that tab's run. */
+        var runner = QueryTabs.active().runner;
+        /* A run that counted rows reads for free first, and goes through REST only when the free read cannot answer. */
+        var costText = knownRowCount(run) !== null
+            ? 'Reading them again takes no API call when SQL Studio can read the page without one, and 1 API call when it cannot.'
+            : 'Reading them again takes 1 API call.';
+        var button = h('button', {
+            class: 'ss-btn ss-btn--primary ss-unread-page__button', type: 'button',
+            onclick: function () { runner.readResultsAgain(); }
+        }, unread.isReading ? [spinner(), h('span', null, 'Reading the results')] : 'Read the results again');
+        if (unread.isReading) {
+            button.disabled = true;
+            button.setAttribute('aria-busy', 'true');
+        };
+        /* The button follows the error, above the details, so it is in view when the results area is short. */
+        return h('div', { class: 'ss-empty-state ss-empty-state--unread' }, [
+            h('p', { class: 'ss-empty-state__title' }, 'The query finished, but its rows did not load.'),
+            h('p', { class: 'ss-unread-page__error' }, unread.message),
+            button,
+            h('p', { class: 'ss-unread-page__detail' }, 'They are in the temporary Data Extension ' + run.deKey + '. ' + costText),
+            h('p', { class: 'ss-unread-page__detail' }, 'Last tried at ' + fmtClock(unread.triedAt) + '.')
+        ]);
     };
 
     /* Pager, one row under the grid: a page
@@ -25497,13 +27873,14 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             el.appendChild(document.createTextNode('Cancelled after ' + dur));
         } else if (rs === 'done' && state.activeRun) {
             var run = state.activeRun;
-            var rowCount = state.results ? state.results.count : 0;
+            /* A run whose page did not load says the rows its status check counted, and nothing when none did. */
+            var rowCount = state.results ? state.results.count : (unreadPageOf(state) ? knownRowCount(run) : 0);
             var phaseAt = Runner.phaseAt || {};
             var doneText = 'Done in ' + fmtDuration((phaseAt.done || finishedAt) - startedAt);
             el.appendChild(hintTrigger(doneText, joinHints([runStepsHint(startedAt, phaseAt), runDetailsHint(state.runDetails)])));
             /* The row count is on the Results tab as well, and Temp DE is a convenience, so in a narrow header both give way
              * (sqlstudio.css) and Delete results keeps its place after the two call counts. */
-            el.appendChild(h('span', { class: 'ss-run-summary__rows' }, '· ' + fmtRows(rowCount)));
+            if (rowCount !== null) el.appendChild(h('span', { class: 'ss-run-summary__rows' }, '· ' + fmtRows(rowCount)));
             if (Runner._calls) {
                 /* The calls through the API and through WSProxy, each with its own number: one total read six times too high on the
                  * author's org (30 API calls for 5 through the API), as Salesforce is said not to count WSProxy against the API
@@ -25559,6 +27936,10 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             Toast.show('This tab is exporting its results. Delete them when the export has ended.', 'info');
             return;
         };
+        if (tab.activeSave) {
+            Toast.show('This tab is saving its results to a Data Extension. Delete them when the save has ended.', 'info');
+            return;
+        };
         /* It asks first, as the other actions that remove something do: the results go with the Data Extension, and "Temp DE",
          * which opens it, sits right before the link (the author, 2026-10-05). Cancel has the focus, so a stray Enter keeps them. */
         Dialogs.confirm('Delete these results?', 'SQL Studio deletes them from Marketing Cloud Engagement, with the temporary Data Extension ' + run.deKey + ' that holds them. Your query stays, and running it again brings the results back.', function () {
@@ -25578,6 +27959,10 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         if (tab.state.activeRun !== run) return;
         if (tab.activeExport) {
             Toast.show('This tab is exporting its results. Delete them when the export has ended.', 'info');
+            return;
+        };
+        if (tab.activeSave) {
+            Toast.show('This tab is saving its results to a Data Extension. Delete them when the save has ended.', 'info');
             return;
         };
         Api.call('deleteRun', { deKey: run.deKey }).then(function () {
@@ -26031,6 +28416,152 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         return !!(target && target.closest && target.closest('.ss-editor-container, .ss-editor-fallback'));
     };
 
+    /* How long a pointer rests on, or the keyboard's focus stays on, an element with a data-tip before its tip shows: the browser's own
+     * title waits about a second and a half, which the author found slow for the sidebar's icons (RC8 test, 2026-10-09). */
+    var TIP_DELAY_MS = 250;
+
+    /**
+     * @method _wireTips
+     * @description The app's own tooltip, for the elements that carry their text in data-tip in place of a title: it shows TIP_DELAY_MS
+     * after the pointer rests on one or the keyboard's focus reaches it, under it and right-aligned to it, or above it near the bottom,
+     * and goes when the pointer or the focus leaves, on a press, a scroll or Escape. A redraw of the sidebar that puts the same control
+     * under the pointer keeps its tip. One element serves every tip. The text is the element's own data-tip, read when it shows, so a
+     * tip that changes (the age of a list) is current. The element keeps its aria-label, which says the same to assistive technology.
+     */
+    UI._wireTips = function () {
+        var self = this;
+        var tip = h('div', { class: 'ss-tip', role: 'tooltip', hidden: true }, null);
+        this.el.root.appendChild(tip);
+        var timer = null;
+        var current = null;
+        /* The control last pressed: its tip waits until the pointer goes to another, as the browser's title does. A press redraws the
+         * sidebar or a tab, and Chrome's late word of the new element under the pointer brought the tip back a second after the click
+         * (the RC13 review, 2026-10-09). The element itself counts too, as a tab stays in place and its class and tip change on the press. */
+        var pressedEl = null;
+        var pressedId = null;
+        /**
+         * @function hide
+         * @description Hides the tip and forgets the element it was for.
+         */
+        function hide() {
+            if (timer) global.clearTimeout(timer);
+            timer = null;
+            current = null;
+            tip.hidden = true;
+        };
+        /**
+         * @function show
+         * @description Shows the tip of an element still on the page, placed by it inside the app.
+         * @param {HTMLElement} target
+         */
+        function show(target) {
+            if (!target.isConnected || !target.getAttribute('data-tip')) return;
+            tip.textContent = target.getAttribute('data-tip');
+            /* Measured at the app's left edge: where the last tip stood, it would wrap to the room left there. */
+            tip.style.left = '0px';
+            tip.style.top = '0px';
+            tip.hidden = false;
+            var rootBox = self.el.root.getBoundingClientRect();
+            var box = target.getBoundingClientRect();
+            var left = Math.max(8, Math.min(box.right - rootBox.left - tip.offsetWidth, rootBox.width - tip.offsetWidth - 8));
+            var top = box.bottom - rootBox.top + 6;
+            if (top + tip.offsetHeight > rootBox.height - 8) top = box.top - rootBox.top - tip.offsetHeight - 6;
+            tip.style.left = left + 'px';
+            tip.style.top = top + 'px';
+        };
+        /**
+         * @function schedule
+         * @description Shows an element's tip after TIP_DELAY_MS, unless it is the one already shown or on its way.
+         * @param {?HTMLElement} target
+         */
+        function schedule(target) {
+            if (target && (target === pressedEl || (pressedId !== null && identity(target) === pressedId))) return;
+            pressedEl = null;
+            pressedId = null;
+            if (target === current) return;
+            if (target && current && !current.isConnected && identity(target) === identity(current)) {
+                /* The sidebar was drawn again under a pointer at rest, as when a list lands, and the browser told of the new control:
+                 * the same control's tip keeps its time, or stays with its text now. */
+                current = target;
+                if (!timer) show(target);
+                return;
+            };
+            hide();
+            if (!target) return;
+            current = target;
+            timer = global.setTimeout(function () {
+                timer = null;
+                current = replacement();
+                if (current) show(current);
+            }, TIP_DELAY_MS);
+        };
+        /**
+         * @function identity
+         * @description What makes an element with a tip the same control once the sidebar is drawn again: the focus key it or its
+         *   first control carries, or its class and its tip where neither has one. A state class, such as a reload icon's is-busy while
+         *   its list loads, is no part of a keyed control's identity (the RC10 review, 2026-10-09).
+         * @param {HTMLElement} el
+         * @returns {string}
+         */
+        function identity(el) {
+            var keyed = el.hasAttribute('data-focus-key') ? el : el.querySelector('[data-focus-key]');
+            return keyed ? 'key:' + keyed.getAttribute('data-focus-key') : 'tip:' + el.className + '|' + el.getAttribute('data-tip');
+        };
+        /**
+         * @function replacement
+         * @description The element the tip is for when its time is up: the one it was scheduled for, or, where a redraw of the sidebar
+         *   took that away meanwhile, the same control now under the pointer, or holding the focus. Chrome tells of the new control
+         *   under a pointer at rest only about a second after the redraw, so the tip of the reload icon was late where the snippets
+         *   landed in the wait (the min-bundle gate, 2026-10-09).
+         * @returns {?HTMLElement}
+         */
+        function replacement() {
+            if (!current || current.isConnected) return current;
+            var el = tipOf(point ? document.elementFromPoint(point.x, point.y) : document.activeElement);
+            return (el && identity(el) === identity(current)) ? el : null;
+        };
+        var tipOf = function (node) { return (node && node.closest) ? node.closest('[data-tip]') : null; };
+        /* Where the pointer came onto the element whose tip is on its way, or null for a tip the focus brought. */
+        var point = null;
+        document.addEventListener('pointerover', function (ev) {
+            point = {
+                x: ev.clientX,
+                y: ev.clientY
+            };
+            schedule(tipOf(ev.target));
+        }, true);
+        /* The pointer leaving the element, or the frame (no relatedTarget), counts, and not an out of something around it, which a
+         * redraw can bring: after a redraw, leaving the frame is the only out the tip of the control that was taken away can get. */
+        document.addEventListener('pointerout', function (ev) {
+            if (current && (!ev.relatedTarget || (current.contains(ev.target) && !current.contains(ev.relatedTarget)))) hide();
+        }, true);
+        document.addEventListener('focusin', function (ev) {
+            var target = tipOf(ev.target);
+            if (target && target.matches(':focus-visible')) {
+                point = null;
+                schedule(target);
+            };
+        }, true);
+        document.addEventListener('focusout', function () { hide(); }, true);
+        document.addEventListener('pointerdown', function (ev) {
+            var pressed = tipOf(ev.target);
+            hide();
+            pressedEl = pressed;
+            pressedId = pressed ? identity(pressed) : null;
+        }, true);
+        document.addEventListener('scroll', function () { hide(); }, true);
+        /**
+         * @method _refreshTip
+         * @description Puts an element's new tip on screen where its tip shows, for an element that stays in place while its tip
+         *   changes, as a query tab does while it runs and when it ends (the RC13 review, 2026-10-09).
+         * @param {HTMLElement} el
+         */
+        self._refreshTip = function (el) {
+            if (el === current && !tip.hidden) show(el);
+        };
+        document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') hide(); }, true);
+    };
+
     UI._wireKeyboard = function () {
         /* Cmd/Ctrl+A with Marketing Cloud Engagement's page focused selects that page, which paints SQL Studio's
          * whole frame blue (2026-09-29). Only a reload or a click on selectable text in MCE's page clears it, such
@@ -26078,6 +28609,12 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             console.info('[SQL Studio] Focus left SQL Studio\'s frame at ' + new Date().toLocaleTimeString() + ' (it was on ' + what + '). A click inside SQL Studio brings it back.');
         });
         document.addEventListener('keydown', function (ev) {
+            /* Backspace outside a text field is no edit, and some browsers and pages take it for Back: after a failed move the
+             * overlay's fields are locked, and a Backspace there left SQL Studio (the author's RC8 test, 2026-10-09). */
+            if (ev.key === 'Backspace' && !isTextEntryTarget(ev.target) && !isInEditor(ev.target)) {
+                ev.preventDefault();
+                return;
+            };
             var isModKey = ev.metaKey || ev.ctrlKey;
             if (isModKey && !ev.altKey && !ev.shiftKey && (ev.key === 'a' || ev.key === 'A') && !isTextEntryTarget(ev.target)) {
                 ev.preventDefault();
@@ -26321,6 +28858,11 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 meta = h('span', { class: 'ss-querytab__meta' }, rowsText + (ranMs !== null ? ' · ' + fmtShortDuration(ranMs) : ''));
                 tip.push(rowsText + (ranMs !== null ? ' in ' + fmtDuration(ranMs) : '') +
                     (tab.runner.currentRunFinishedAt ? ', finished ' + fmtDateTime(new Date(tab.runner.currentRunFinishedAt)) : ''));
+            } else if (rs === 'done' && unreadPageOf(tab.state)) {
+                /* Done, with the rows still in the temporary Data Extension: the tab offers to read them again. */
+                stateIcon = h('span', { class: 'ss-querytab__icon ss-querytab__icon--done' }, icon('check'));
+                meta = h('span', { class: 'ss-querytab__meta' }, 'Not loaded');
+                tip.push('Done, but its rows did not load. Open the tab to read them again.');
             } else if (rs === 'failed') {
                 stateIcon = h('span', { class: 'ss-querytab__icon ss-querytab__icon--failed' }, icon('error'));
                 meta = h('span', { class: 'ss-querytab__meta ss-querytab__meta--failed' }, 'Failed');
@@ -26343,9 +28885,14 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 children.push(h('span', { class: 'ss-querytab__dot', 'aria-hidden': 'true' }, null));
                 tip.push('Finished since you last looked');
             };
-            btn.title = tip.join('\n');
+            /* The quick tip (UI._wireTips), as the browser's own title was slow (the author's RC12 test, 2026-10-09). A tab you are not on
+             * also shows the start of its SQL, as a snippet's row does: the active tab's is in the editor under it. The SQL stays out of
+             * the label, which a screen reader reads on each tab. */
+            var tabSql = isActive ? '' : String(Editor.textFor(tab) || '').trim();
+            btn.setAttribute('data-tip', tip.join('\n') + (tabSql ? '\n\n' + hoverSql(tabSql) : ''));
             btn.setAttribute('aria-label', tip.join('. '));
             appendChildren(btn, children);
+            if (this._refreshTip) this._refreshTip(btn);
         };
     };
 
@@ -26445,14 +28992,21 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         function renderTargetItems(items, emptyMessage) {
             clearNode(targetList);
             targetList.removeAttribute('aria-busy');
+            /* Each row says where its Data Extension is, by the path of its folder, as the Open dialog's rows do, and its key. As first built
+             * the row gave the key and the folder's id, such as "SQL Studio Auth Log · 398580" (the author's RC14 test, 2026-10-09), and a
+             * key the same as the name was left out, which read as a key missing (RC15). A folder the sidebar has not loaded leaves the
+             * path out. */
+            var folderPaths = Schema.deFolderPaths();
             items.slice(0, 200).forEach(function (t) {
+                var folderText = t.isShared ? (t.folderPath || '') : (folderPaths[String(t.categoryId)] || '');
+                var metaText = [folderText ? 'Folder: ' + folderText : '', t.key ? 'Key: ' + t.key : ''].filter(Boolean).join(' · ');
                 var row = h('div', {
                     class: 'ss-list-row', tabindex: '0', role: 'button', 'aria-label': 'Use ' + t.name + ' as the target',
                     onclick: function () { selectTarget(t); }, onkeydown: function (ev) { if (ev.key === 'Enter') selectTarget(t); }
                 }, [
                     h('div', { class: 'ss-list-row__main' }, [
                         h('div', { class: 'ss-list-row__title' }, [t.name, ' ', t.isShared ? sharedKindBadge(t) : typeBadge('DE')]),
-                        h('div', { class: 'ss-list-row__meta' }, t.isShared ? (t.folderPath || t.key || '') : ((t.key || '') + ' · ' + (t.categoryId || '')))
+                        metaText ? h('div', { class: 'ss-list-row__meta' }, metaText) : null
                     ])
                 ]);
                 var isPicked = !!picked.target && Schema.tableKey(picked.target) === Schema.tableKey(t);
@@ -26610,6 +29164,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         };
         var modal = UI.openModal({
             title: 'Save As', wide: true,
+            onClose: function () { UI._saveAsTargetRefresh = null; },
             body: [
                 labelledField('Name', nameInput),
                 labelledField('Description', descInput),
@@ -26657,11 +29212,20 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             ]
         });
         renderTargetList('');
+        /* Rows drawn while the folders load have no path: they are drawn again when the folders come (Schema._loadDeFolders). */
+        UI._saveAsTargetRefresh = function () { renderTargetList(targetSearch.value); };
         loadTargetList();
     };
 
-    Dialogs.openOpenQuery = function () {
-        var searchInput = h('input', { class: 'ss-input', type: 'search', placeholder: 'Search saved queries...', 'aria-label': 'Search saved queries' }, null);
+    /**
+     * @method openOpenQuery
+     * @description The Open panel: the Business Unit's saved Query Activities with a search, under the toolbar's Open button as History
+     * is, or a centred dialog where no button is given.
+     * @param {HTMLElement} [anchorEl] - the toolbar button it opens under
+     */
+    Dialogs.openOpenQuery = function (anchorEl) {
+        /* The search has the focus, as in the centred dialog Open was: the panel would give it to its Close button, its first control. */
+        var searchInput = h('input', { class: 'ss-input', type: 'search', placeholder: 'Search saved queries...', 'aria-label': 'Search saved queries', 'data-autofocus': true }, null);
         var list = h('div', { class: 'ss-list' }, h('div', { class: 'ss-hint' }, 'Loading...'));
         var modal;
 
@@ -26684,6 +29248,10 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             /* The SQL would replace the results the tab is exporting, and delete their Data Extension under the export. */
             if (QueryTabs.active().activeExport) {
                 Toast.show('This tab is exporting its results. Open the query when the export has ended.', 'info');
+                return;
+            };
+            if (QueryTabs.active().activeSave) {
+                Toast.show('This tab is saving its results to a Data Extension. Open the query when the save has ended.', 'info');
                 return;
             };
             /**
@@ -26758,7 +29326,19 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             }).catch(function (err) { clearNode(list); list.appendChild(h('div', { class: 'ss-hint' }, 'Could not load: ' + err.message)); });
         };
         searchInput.addEventListener('input', debounce(function () { load(searchInput.value); }, 200));
-        modal = UI.openModal({ title: 'Open Query Activity', wide: true, body: [searchInput, list] });
+        var panelOpts = {
+            title: 'Open Query Activity',
+            body: [searchInput, list]
+        };
+        if (anchorEl) {
+            panelOpts.xwide = true;
+            modal = UI.openDropdown(anchorEl, 'open', panelOpts);
+            /* A second click on Open closes it. */
+            if (!modal) return;
+        } else {
+            panelOpts.wide = true;
+            modal = UI.openModal(panelOpts);
+        };
         load('');
     };
 
@@ -26768,7 +29348,8 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
      * feature any more. */
     Dialogs.openHistory = function (anchorEl) {
         var isServerMode = !!Session.data.historyEnabled;
-        var searchInput = h('input', { class: 'ss-input', type: 'search', placeholder: 'Search history...', 'aria-label': 'Search history' }, null);
+        /* The search has the focus, as in Open: the panel would give it to its Close button, its first control (2026-10-09). */
+        var searchInput = h('input', { class: 'ss-input', type: 'search', placeholder: 'Search history...', 'aria-label': 'Search history', 'data-autofocus': true }, null);
         var list = h('div', { class: 'ss-list' }, null);
         /* Where the entries live, so a user knows who else can read them, and that an admin decides it
          * (the Backend's historyDE setting). */
@@ -26789,6 +29370,10 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             /* The SQL would replace the results the tab is exporting, and delete their Data Extension under the export. */
             if (QueryTabs.active().activeExport) {
                 Toast.show('This tab is exporting its results. Load the entry when the export has ended.', 'info');
+                return;
+            };
+            if (QueryTabs.active().activeSave) {
+                Toast.show('This tab is saving its results to a Data Extension. Load the entry when the save has ended.', 'info');
                 return;
             };
             /**
@@ -26827,8 +29412,11 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             };
             items.forEach(function (item) {
                 var whenDate = item.createdDate || item.startedAt;
+                /* The row shows the SQL's first line, and its quick tip the start of the whole, as a snippet's row and a query tab do (the
+                 * author's RC12 test, 2026-10-09). */
                 list.appendChild(h('div', {
                     class: 'ss-list-row', tabindex: '0', role: 'button', 'aria-label': 'Load history entry from ' + fmtDateTime(whenDate),
+                    'data-tip': hoverSql(item.sql),
                     onclick: function () { loadItem(item.sql); }, onkeydown: function (ev) { if (isPlainEnter(ev)) loadItem(item.sql); }
                 }, [
                     h('div', { class: 'ss-list-row__main' }, [
@@ -27027,6 +29615,2156 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 Api.call('deleteRun', { deKey: staleDataExtensions[i].key }).catch(function () { /* best effort */ }).then(function () { step(i + 1); });
             })(0);
         }).catch(function () { /* best effort */ });
+    };
+
+    /* ======================================================================
+     * 14b. Save to Data Extension
+     * A user saves what a run gave into a Data Extension set up on purpose: the Backend's createDataExtension makes it, and
+     * moveToDataExtension moves the rows into it with the tab's own Query Activity. The
+     * overlay edits a plain model, which the tab keeps for the run, so closing it and opening it again, or a refused create,
+     * loses nothing. What is checked here is what the Backend checks, so a refusal of it is the exception.
+     * ==================================================================== */
+
+    /* The field types Marketing Cloud Engagement offers, as the Backend takes them. */
+    var SAVE_FIELD_TYPES = ['Text', 'Number', 'Date', 'Boolean', 'EmailAddress', 'Phone', 'Decimal', 'Locale'];
+    /* The field types each send relationship takes, as the Backend checks them. MCE's "Data Extension Properties" help says a Text,
+     * EmailAddress or Phone field can relate to the Subscriber Key, and the Email Address takes an EmailAddress field. */
+    var SAVE_SENDABLE_TYPES = {
+        subscriberKey: ['Text', 'EmailAddress', 'Phone'],
+        emailAddress: ['EmailAddress']
+    };
+    /* The Backend's limits (createDataExtension): a name of 128 characters, a key of 36, a Text length of 4,000, a Decimal of 29 digits
+     * and 8 after the point, a retention period of 999, and a default value of 4,000 characters. */
+    var SAVE_NAME_MAX = 128;
+    var SAVE_KEY_MAX = 36;
+    var SAVE_TEXT_MAX = 4000;
+    /* The lengths a Text field is sized to from its values on screen (saveTextLengthOf), in the draft and when the user turns a field into
+     * Text: 254, as most text and an e-mail address fit, and the next one up for a longer value, up to the most a length takes. */
+    var SAVE_TEXT_STEPS = [254, 500, 1000, 2000, 4000];
+    var SAVE_DEFAULT_MAX = 4000;
+    var SAVE_DECIMAL_MAX_PRECISION = 29;
+    var SAVE_DECIMAL_MAX_SCALE = 8;
+    var SAVE_DECIMAL_DEFAULT_PRECISION = 18;
+    var SAVE_DECIMAL_DEFAULT_SCALE = 4;
+    var SAVE_PERIOD_MAX = 999;
+    var SAVE_RETENTION_UNITS = ['Days', 'Weeks', 'Months', 'Years'];
+    /* What the retention select offers, and the Backend's flags for each: isRowBased is RowBasedRetention and
+     * isDataExtensionDeleted is DeleteAtEndOfRetentionPeriod, which the Backend writes as they are. The one place that maps
+     * Contact Builder's choices to them. MCE's SOAP guide "Create a Data Extension" says it of object-based retention:
+     * DeleteAtEndOfRetentionPeriod false deletes the Data Extension itself at the end of the period, and true deletes only its
+     * rows and keeps it. RowBasedRetention true deletes each row once it is older than the period. The org check confirms them.
+     * - Individual rows: true, false. Seen on an org too: the Auth Log's "individual records, 1 day", set by the first install.
+     * - All rows, the Data Extension kept: false, true, as the guide gives it. Seen on the author's org (2026-10-09): "All records".
+     * - All rows and the Data Extension: false, false, as the guide gives it and the temporary run Data Extension sets it. Seen on the
+     *   author's org (2026-10-09): "All records and data extensions". */
+    var SAVE_RETENTION_MODES = [
+        { id: 'none', label: 'Keep the rows', isRowBased: false, isDataExtensionDeleted: false },
+        { id: 'rows', label: 'Delete individual rows after', isRowBased: true, isDataExtensionDeleted: false },
+        { id: 'all', label: 'Delete all rows after', isRowBased: false, isDataExtensionDeleted: true },
+        { id: 'de', label: 'Delete all rows and the Data Extension after', isRowBased: false, isDataExtensionDeleted: false }
+    ];
+    /* The key of a temporary run Data Extension, which the app hides and sweeps: the Backend refuses it as a key. */
+    var SAVE_TEMP_KEY_RE = /^SQLStudio_[0-9a-f]{8}_[0-9]{8}_[0-9]{6}(_[2-9])?$/i;
+    /* The column the run's temporary Data Extension adds for its free reads. A move leaves it out, so no field takes its name. */
+    var SAVE_ROW_MARK_FIELD = 'SQLStudioRowMark';
+    /* The Backend's own counts for what a save makes: createDataExtension is 1 API call, moveToDataExtension 5, 4 of them and 1
+     * WSProxy call in the Backend's own Business Unit. Each check of the move's task is 1 WSProxy call there and 1 API call
+     * elsewhere (saveCheckWait), and the check of the run's temporary Data Extension before the move is free there and 1 API
+     * call elsewhere. */
+    var SAVE_CREATE_API_CALLS = 1;
+    var SAVE_MOVE_API_CALLS = 5;
+    /* How long a move takes, for the cost said before the click. [Guessing] 20 seconds: a small run took 14 seconds on the
+     * author's org (2026-09-29). The console line after a save gives the real count. */
+    var SAVE_EXPECTED_MOVE_MS = 20000;
+    var SAVE_BUTTON_LABEL = 'Save to DE';
+    var SAVE_BUTTON_BUSY_LABEL = 'Saving…';
+    var SAVE_BUTTON_TITLE = 'Save these results to a new Data Extension';
+    /* What the folder picker calls the top folder while the Business Unit's folders are not loaded and its own name is not known. */
+    var SAVE_ROOT_FOLDER_TEXT = 'Data Extensions (the top folder)';
+
+    /**
+     * @function saveHasControl
+     * @description Tells whether a text holds a control character, a line break or a tab among them, which no name or value of a Data
+     * Extension takes and the Backend refuses.
+     * @param {string} text
+     * @returns {boolean}
+     */
+    function saveHasControl(text) {
+        return /[\u0000-\u001f]/.test(String(text));
+    };
+
+    /**
+     * @function saveIsWhole
+     * @description Tells whether the text of an input is a whole number from min to max.
+     * @param {string} text
+     * @param {number} min
+     * @param {number} max
+     * @returns {boolean}
+     */
+    function saveIsWhole(text, min, max) {
+        var trimmed = String(text).trim();
+        if (!/^[0-9]+$/.test(trimmed)) return false;
+        var n = parseInt(trimmed, 10);
+        return n >= min && n <= max;
+    };
+
+    /**
+     * @function saveTypeOfSourceField
+     * @description The type a new Data Extension gives a column that reads a known field: the field's own type, as the Data Views and
+     * a Data Extension's fields write it, Email and EmailAddress as EmailAddress. A type the app does not know is Text.
+     * @param {?Object} field - a schema field
+     * @returns {string} one of SAVE_FIELD_TYPES
+     */
+    function saveTypeOfSourceField(field) {
+        var key = String(field && field.type ? field.type : '').toLowerCase().replace(/[^a-z]/g, '');
+        var byKey = {
+            text: 'Text',
+            number: 'Number',
+            date: 'Date',
+            boolean: 'Boolean',
+            email: 'EmailAddress',
+            emailaddress: 'EmailAddress',
+            phone: 'Phone',
+            decimal: 'Decimal',
+            locale: 'Locale'
+        };
+        return Object.prototype.hasOwnProperty.call(byKey, key) ? byKey[key] : 'Text';
+    };
+
+    /**
+     * @function saveFindFromEntry
+     * @description Finds the FROM entry a qualifier names, as the type inference does: an alias wins, and a table without an alias is found
+     * by its own name, an Ent. prefix aside.
+     * @param {Array<Object>} fromTables
+     * @param {string} qualifier
+     * @returns {?Object} the one matching entry, or null for none or several
+     */
+    function saveFindFromEntry(fromTables, qualifier) {
+        var wanted = String(qualifier).toUpperCase();
+        var byAlias = fromTables.filter(function (f) { return !!f.alias && f.alias.toUpperCase() === wanted; });
+        if (byAlias.length) return byAlias.length === 1 ? byAlias[0] : null;
+        var byName = fromTables.filter(function (f) { return !f.alias && !!f.name && String(f.name).replace(/^ENT\.\s*/i, '').toUpperCase() === wanted; });
+        return byName.length === 1 ? byName[0] : null;
+    };
+
+    /**
+     * @function saveFieldsOfEntry
+     * @description The loaded fields of the table a FROM entry names, or null: not a table, a table function, a CTE of the query, a Data
+     * Extension whose fields are not loaded, or a table whose field list is only a sample of its real columns.
+     * @param {?Object} entry - a parsed FROM entry
+     * @param {Object} cteNames - the query's CTE names, upper case, as keys
+     * @returns {?Array<Object>}
+     */
+    function saveFieldsOfEntry(entry, cteNames) {
+        if (!entry || entry.kind !== 'table' || entry.isFunction || !entry.name) return null;
+        var key = String(entry.name).replace(/^ENT\.\s*/i, '').replace(/^\[|\]$/g, '').toUpperCase();
+        if (cteNames[key]) return null;
+        var table = Tools.lookupTable(Schema.byName, entry.name);
+        if (!table || !Array.isArray(table.fields)) return null;
+        var isOpen = table.fields.some(function (f) { return !!f && typeof f.name === 'string' && f.name.charAt(0) === '['; });
+        return isOpen ? null : table.fields;
+    };
+
+    /**
+     * @function saveFieldNamed
+     * @description Finds a field of a list by name, without regard to case.
+     * @param {Array<Object>} fields
+     * @param {string} name
+     * @returns {?Object}
+     */
+    function saveFieldNamed(fields, name) {
+        var wanted = String(name).toLowerCase();
+        for (var i = 0; i < fields.length; i++) {
+            if (fields[i] && String(fields[i].name).toLowerCase() === wanted) return fields[i];
+        };
+        return null;
+    };
+
+    /**
+     * @function saveSourceFields
+     * @description The source field of each column of a query, as the schema holds it, for the draft of a new Data Extension: the
+     * field a plain reference (`alias.Field`, `Field`, each with or without AS), or a `*`, reads, and null for anything computed or not
+     * known. The same rules as the column types of a run (the fields of the tables the query reads must be loaded, a bare name must
+     * belong to one table), but they give the field itself, which has the type and the length the run's types leave out (an
+     * EmailAddress, a Phone, a Text length).
+     * @param {string} sql - the run's SQL
+     * @param {number} count - how many columns the run has: a query that parses to another number gives none
+     * @returns {Array<?Object>} count entries
+     */
+    function saveSourceFields(sql, count) {
+        var none = [];
+        for (var n = 0; n < count; n++) none.push(null);
+        var parsed = null;
+        try {
+            parsed = Tools.parse(sql, Schema.getIndex());
+        } catch (err) {
+            return none;
+        };
+        if (!parsed || parsed._noSelect || !parsed.selectList || !parsed.selectList.items) return none;
+        if (parsed.clauses && parsed.clauses.union && parsed.clauses.union.length > 1) return none;
+        var fromTables = parsed.from || [];
+        var cteNames = {};
+        (parsed.ctes || []).forEach(function (c) { cteNames[String(c.name).toUpperCase()] = true; });
+        var found = [];
+        parsed.selectList.items.forEach(function (item) {
+            if (item.kind === 'star') {
+                var names = item._resolvedColumns;
+                var entry = item.starTable ? saveFindFromEntry(fromTables, item.starTable) : (fromTables.length === 1 ? fromTables[0] : null);
+                var starFields = names ? saveFieldsOfEntry(entry, cteNames) : null;
+                (names || [null]).forEach(function (name) { found.push(starFields && name !== null ? saveFieldNamed(starFields, name) : null); });
+            } else if ((item.kind === 'column' || item.kind === 'alias') && item.sourceColumn) {
+                var field = null;
+                if (item.sourceTable) {
+                    var fields = saveFieldsOfEntry(saveFindFromEntry(fromTables, item.sourceTable), cteNames);
+                    field = fields ? saveFieldNamed(fields, item.sourceColumn) : null;
+                } else {
+                    var isUnsure = false;
+                    fromTables.forEach(function (from) {
+                        var candidates = saveFieldsOfEntry(from, cteNames);
+                        if (!candidates) {
+                            isUnsure = true;
+                            return;
+                        };
+                        var match = saveFieldNamed(candidates, item.sourceColumn);
+                        if (!match) return;
+                        if (field) isUnsure = true;
+                        field = match;
+                    });
+                    if (isUnsure) field = null;
+                };
+                found.push(field);
+            } else {
+                found.push(null);
+            };
+        });
+        return found.length === count ? found : none;
+    };
+
+    /**
+     * @function saveDraftField
+     * @description The draft of one field of the new Data Extension, from a result column. A column the run typed (a plain reference to
+     * a Date, Number, Decimal or Boolean field) keeps that type, with the Decimal's precision and scale. Any other column that reads a
+     * known field keeps that field's type and, for a Text one, its length. A computed column, or one the schema does not know, is Text
+     * sized from its values on screen (saveTextLengthOf): 254, or the next length up that its longest value needs, or none for one past
+     * 4,000. As first built it was Text of 4,000 (the author's RC8 test, 2026-10-09: 254 is the default, for the Data Extension's
+     * performance). A Decimal is held to the Backend's 29 digits and 8 after the point.
+     * @param {string} name - the result column's name
+     * @param {?Object} columnType - the run's type of the column, or null for Text
+     * @param {?Object} source - the column's source field, or null
+     * @param {number} longest - the length of the column's longest value on screen
+     * @returns {Object} the field's model, every number as the text of its input
+     */
+    function saveDraftField(name, columnType, source, longest) {
+        var type = 'Text';
+        var length = saveTextLengthOf(longest);
+        var precision = '';
+        var scale = '';
+        if (columnType && SAVE_FIELD_TYPES.indexOf(columnType.type) !== -1) {
+            type = columnType.type;
+        } else if (source) {
+            type = saveTypeOfSourceField(source);
+        };
+        if (type === 'Text' && source && typeof source.length === 'number' && source.length >= 1 && source.length <= SAVE_TEXT_MAX) length = source.length;
+        if (type === 'Decimal') {
+            var givenPrecision = columnType && typeof columnType.precision === 'number' ? columnType.precision : (source ? (source.precision != null ? source.precision : source.length) : null);
+            var givenScale = columnType && typeof columnType.scale === 'number' ? columnType.scale : (source && typeof source.scale === 'number' ? source.scale : null);
+            var digits = (typeof givenPrecision === 'number' && givenPrecision >= 1) ? Math.min(SAVE_DECIMAL_MAX_PRECISION, Math.floor(givenPrecision)) : SAVE_DECIMAL_DEFAULT_PRECISION;
+            var after = (typeof givenScale === 'number' && givenScale >= 0) ? Math.floor(givenScale) : SAVE_DECIMAL_DEFAULT_SCALE;
+            precision = String(digits);
+            scale = String(Math.min(after, digits, SAVE_DECIMAL_MAX_SCALE));
+        };
+        return {
+            source: name,
+            name: name,
+            type: type,
+            length: type === 'Text' ? String(length) : '',
+            precision: precision,
+            scale: scale,
+            isPrimaryKey: false,
+            isNullable: true,
+            defaultValue: ''
+        };
+    };
+
+    /**
+     * @function saveLongestOnScreen
+     * @description The length of a column's longest value in the rows on screen, 0 when there are none.
+     * @param {Object} tab
+     * @param {number} columnIndex - the column's place, which is its field's
+     * @returns {number}
+     */
+    function saveLongestOnScreen(tab, columnIndex) {
+        var rows = (tab && tab.state && tab.state.results && Array.isArray(tab.state.results.rows)) ? tab.state.results.rows : [];
+        var longest = 0;
+        rows.forEach(function (row) {
+            var value = Array.isArray(row) ? row[columnIndex] : null;
+            if (value !== null && value !== undefined && String(value).length > longest) longest = String(value).length;
+        });
+        return longest;
+    };
+
+    /**
+     * @function saveTextLengthOf
+     * @description The length of a Text field for values whose longest has a length: the smallest of SAVE_TEXT_STEPS that holds it, and
+     * 4,000 for a longer one, which the overlay then says will not fit (saveFieldWarnings). Never no length: a Text field with none holds
+     * more (4,100 characters on the author's org, 2026-10-09), but it can slow queries and take data storage, so only the user clears a
+     * length (the author's decision, 2026-10-09). Only the page on screen is read: a longer value further on fails the move with
+     * Marketing Cloud Engagement's message, and the length can be changed before the save.
+     * @param {number} longest
+     * @returns {string} the length as the text of its input
+     */
+    function saveTextLengthOf(longest) {
+        for (var i = 0; i < SAVE_TEXT_STEPS.length; i++) {
+            if (longest <= SAVE_TEXT_STEPS[i]) return String(SAVE_TEXT_STEPS[i]);
+        };
+        return String(SAVE_TEXT_MAX);
+    };
+
+    /**
+     * @function saveFieldWarnings
+     * @description What the overlay warns of under the fields, before the save: a Text field with no length, which holds any value but
+     * which the author wants used only on purpose (2026-10-09: it can slow queries on the Data Extension, long values such as whole e-mails
+     * or JSON count against the account's Data Extension storage limit and can use it up, and Contact Builder's record editor takes 255
+     * characters at most in it), and a Text field shorter than its longest
+     * value on screen, whose move would fail. A warning stops nothing: Save stays on.
+     * @param {Object} tab
+     * @param {Object} model - the save model
+     * @returns {string[]} one sentence for each field it warns of
+     */
+    function saveFieldWarnings(tab, model) {
+        var found = [];
+        model.fields.forEach(function (f, i) {
+            if (f.type !== 'Text') return;
+            var name = f.name.trim() || f.source;
+            var longest = saveLongestOnScreen(tab, i);
+            if (f.length.trim() === '') {
+                found.push(name + ' has no length: any value fits. Use it only if you are sure values past ' + fmtNumber(SAVE_TEXT_MAX) +
+                    ' characters must fit. Such a field can slow queries on this Data Extension, long values such as whole e-mails or JSON count against the account\'s Data Extension storage limit and can use it up, and Contact Builder\'s record editor takes 255 characters at most in it.');
+            } else if (saveIsWhole(f.length, 1, SAVE_TEXT_MAX) && longest > parseInt(f.length, 10)) {
+                found.push(name + ': values on screen run to ' + fmtNumber(longest) + ' characters, more than its length of ' + fmtNumber(parseInt(f.length, 10)) + ' holds. The move will fail.');
+            };
+        });
+        return found;
+    };
+
+    /**
+     * @function saveDraftName
+     * @description The name the overlay starts with: the query's first table and today's date, such as Sent_2026-10-06, made unique against
+     * the Business Unit's list without regard to case (a taken name gets _2, _3 and on). The table's name is cleaned for a Data Extension
+     * name: its ENT. prefix and brackets go, characters other than letters, digits, spaces, dots, hyphens and underscores become an
+     * underscore, and the leading underscores a Data View's name has go, since a name may not start with one. A query with no table
+     * of its own, such as a derived table, starts from Results.
+     * @param {string} sql - the run's SQL
+     * @returns {string}
+     */
+    function saveDraftName(sql) {
+        var base = '';
+        try {
+            var parsed = Tools.parse(sql, Schema.getIndex());
+            var first = parsed && parsed.from && parsed.from[0];
+            if (first && first.kind === 'table' && first.name && !first.isFunction) base = String(first.name);
+        } catch (err) {
+            base = '';
+        };
+        base = base.replace(/^ENT\.\s*/i, '').replace(/[\[\]]/g, '').replace(/[^A-Za-z0-9 _.-]/g, '_').replace(/^[_. ]+/, '');
+        if (!base) base = 'Results';
+        var today = new Date();
+        var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+        var stamp = today.getFullYear() + '-' + pad(today.getMonth() + 1) + '-' + pad(today.getDate());
+        var name = base.slice(0, 100) + '_' + stamp;
+        var taken = {};
+        Schema.deList.forEach(function (t) { if (t && t.name) taken[String(t.name).toLowerCase()] = true; });
+        var candidate = name;
+        for (var n = 2; taken[candidate.toLowerCase()]; n++) candidate = name + '_' + n;
+        return candidate;
+    };
+
+    /**
+     * @function saveCandidates
+     * @description The fields a send relationship can use, by their place in the model's list: those of a type the Backend takes for
+     * it (SAVE_SENDABLE_TYPES), Text, EmailAddress or Phone for the Subscriber Key and EmailAddress for the Email Address. By type
+     * alone, so a field whose name is emptied on the way to another one stays a candidate.
+     * @param {Object} model - the save model
+     * @param {string} kind - 'subscriberKey' or 'emailAddress'
+     * @returns {Array<number>} indexes into model.fields
+     */
+    function saveCandidates(model, kind) {
+        var types = SAVE_SENDABLE_TYPES[kind] || SAVE_SENDABLE_TYPES.subscriberKey;
+        var found = [];
+        model.fields.forEach(function (f, i) { if (types.indexOf(f.type) !== -1) found.push(i); });
+        return found;
+    };
+
+    /**
+     * @function saveSendableField
+     * @description The field the send relationship is on: the one the user chose, held by its place in the model's list
+     * (model.sendable.fieldIndex) so a rename follows it, while it is of a type the relationship takes. Null when none is chosen,
+     * or the chosen one is of another type now.
+     * @param {Object} model - the save model
+     * @returns {?Object} a field of the model
+     */
+    function saveSendableField(model) {
+        var f = model.fields[model.sendable.fieldIndex];
+        if (!f) return null;
+        return saveCandidates(model, model.sendable.kind).indexOf(model.sendable.fieldIndex) !== -1 ? f : null;
+    };
+
+    /**
+     * @function saveFolderOptions
+     * @description The options the Save to DE folder picker lists for a search: the top folder, whose id is '', and the Business Unit's
+     * own folders whose own name or whole path holds the text, without regard to case, and without the underscores the sidebar's search
+     * leaves out (normalizeForSearch). The folders whose own name matches come first, then those that match in their path alone, each
+     * group by path with the top folder first in its group. An empty search matches every folder, so the top folder comes first and the
+     * folders by path after it. At most DE_SECTION_ROW_LIMIT options come back, as the sidebar's search shows rows, with the number of
+     * matches it left out.
+     * @param {{root: ?Object, choices: Array<{id: number, path: string, name: string, parent: string}>}} folders - Schema.ownFolderChoices()
+     * @param {string} query - the text typed, trimmed here
+     * @returns {{options: Array<{id: string, name: string, parent: string, path: string}>, more: number}} each option's id is the folder's
+     * id as text ('' for the top folder), parent is the path above its own name ('' for the top folder), and more is how many matches the
+     * limit left out
+     */
+    function saveFolderOptions(folders, query) {
+        var q = normalizeForSearch(String(query || '').trim());
+        var rootName = folders.root ? folders.root.name : SAVE_ROOT_FOLDER_TEXT;
+        var all = [{
+            id: '',
+            name: rootName,
+            parent: '',
+            path: rootName
+        }].concat(folders.choices.map(function (f) {
+            return {
+                id: String(f.id),
+                name: f.name,
+                parent: f.parent,
+                path: f.path
+            };
+        }));
+        var byName = [];
+        var byPath = [];
+        all.forEach(function (option) {
+            if (normalizeForSearch(option.name).indexOf(q) !== -1) {
+                byName.push(option);
+            } else if (normalizeForSearch(option.path).indexOf(q) !== -1) {
+                byPath.push(option);
+            };
+        });
+        var matches = byName.concat(byPath);
+        return {
+            options: matches.slice(0, DE_SECTION_ROW_LIMIT),
+            more: Math.max(0, matches.length - DE_SECTION_ROW_LIMIT)
+        };
+    };
+
+    /**
+     * @function saveFolderPicker
+     * @description Builds the Folder control of the Save to DE overlay: a text input with the combobox role over a listbox of folders
+     * (saveFolderOptions) that opens under it. The input shows the chosen folder's whole path. A click opens the list and selects that
+     * text, so typing replaces it and searches, and typing or ArrowDown opens it too. A focus alone selects the text and opens nothing,
+     * as the frame's focus coming back from Marketing Cloud Engagement's page focuses the input again. Each option shows the folder's own name with the path above it in muted
+     * text. A click on an option, or Enter on the active one, chooses it: it sets model.folderId ('' for the top folder, else the id as
+     * text) and model.folderPath (what the input shows if the folders are not loaded when the overlay opens again), closes the list and
+     * shows the path. ArrowDown and ArrowUp move the active option and open a closed list, Home and End go to the first and the last
+     * of an open one, Escape closes the list and stops there, so the overlay stays open (a second Escape closes it), and Tab moves on,
+     * which closes it. A text typed that chose nothing gives way to the chosen folder's path when the input loses the focus. The folders
+     * are read each time the list opens, so ones that load while the overlay is open show. The options are drawn from text nodes only.
+     * @param {Object} model - the save model
+     * @returns {{el: HTMLElement, input: HTMLInputElement, setDisabled: Function}} el is the control to put in the form, input the
+     * combobox, and setDisabled(isOff) switches it on or off, closing the list when it goes off
+     */
+    function saveFolderPicker(model) {
+        var folders = Schema.ownFolderChoices();
+        var shown = {
+            options: [],
+            more: 0
+        };
+        var optionNodes = [];
+        var activeIndex = -1;
+        var isOpen = false;
+        /* Whether the text in the input is one the user typed, which searches, and not the chosen folder's path, which does not. */
+        var isEdited = false;
+        var isFocusing = false;
+        var input = h('input', {
+            class: 'ss-input', type: 'text', id: 'ss-save-folder', 'data-save': 'folder', autocomplete: 'off', spellcheck: 'false',
+            placeholder: 'Search folders...', role: 'combobox', 'aria-autocomplete': 'list', 'aria-expanded': 'false', 'aria-controls': 'ss-save-folder-list',
+            /* A focus alone selects the text and opens nothing: it also comes when the frame gets the focus back from Marketing
+             * Cloud Engagement's page, which takes it now and then, and an open list then met the next click (the author's RC8 test,
+             * 2026-10-09, where Save had to be clicked twice). A click, typing or ArrowDown opens it. */
+            onfocus: function () { input.select(); },
+            onclick: function () { if (isOpen) return; showList(); input.select(); },
+            oninput: function () { isEdited = true; showList(); },
+            onkeydown: onKeydown,
+            onblur: function () { closeList(); showChosen(); },
+            /* A press that gives the input the focus must not take the selection back when the button comes up (Safari). */
+            onmousedown: function () { isFocusing = document.activeElement !== input; },
+            onmouseup: function (ev) { if (isFocusing) ev.preventDefault(); isFocusing = false; }
+        }, null);
+        var list = h('div', { class: 'ss-combo__list', id: 'ss-save-folder-list', role: 'listbox', 'aria-label': 'Folders' }, null);
+        var note = h('div', { class: 'ss-tree__empty ss-combo__note', hidden: true }, null);
+        /* A press on the list must not take the focus from the input, or the input's blur would close the list before the click. */
+        var popup = h('div', { class: 'ss-combo__popup', hidden: true, onmousedown: function (ev) { ev.preventDefault(); } }, [list, note]);
+
+        /**
+         * @function chosenPath
+         * @description The whole path of the chosen folder: the top folder's name for '', else the path the folders hold for its id,
+         * else the one remembered when it was chosen.
+         * @returns {string}
+         */
+        function chosenPath() {
+            if (model.folderId === '') return folders.root ? folders.root.name : SAVE_ROOT_FOLDER_TEXT;
+            var found = folders.choices.filter(function (f) { return String(f.id) === String(model.folderId); })[0];
+            return found ? found.path : (model.folderPath || ('Folder ' + model.folderId));
+        };
+
+        /**
+         * @function showChosen
+         * @description Puts the chosen folder's whole path in the input, in place of any text typed, and its id in the input's
+         * data-folder-id, which says which folder the path is of.
+         */
+        function showChosen() {
+            isEdited = false;
+            input.value = chosenPath();
+            input.setAttribute('data-folder-id', String(model.folderId));
+        };
+
+        /**
+         * @function setActive
+         * @description Makes one option the active one: marks it, points aria-activedescendant at it and scrolls the list to it. -1
+         * leaves none.
+         * @param {number} index - the place in the options shown
+         */
+        function setActive(index) {
+            activeIndex = index;
+            optionNodes.forEach(function (node, i) { node.classList.toggle('is-active', i === index); });
+            if (index === -1) {
+                input.removeAttribute('aria-activedescendant');
+                return;
+            };
+            var node = optionNodes[index];
+            input.setAttribute('aria-activedescendant', node.id);
+            if (node.offsetTop < popup.scrollTop) {
+                popup.scrollTop = node.offsetTop;
+            } else if (node.offsetTop + node.offsetHeight > popup.scrollTop + popup.clientHeight) {
+                popup.scrollTop = node.offsetTop + node.offsetHeight - popup.clientHeight;
+            };
+        };
+
+        /**
+         * @function closeList
+         * @description Closes the list, if it is open.
+         */
+        function closeList() {
+            isOpen = false;
+            popup.hidden = true;
+            input.setAttribute('aria-expanded', 'false');
+            setActive(-1);
+        };
+
+        /**
+         * @function pick
+         * @description Chooses a folder: the model takes it, the input shows its path and the list closes. The input keeps the focus.
+         * @param {{id: string, path: string}} option
+         */
+        function pick(option) {
+            model.folderId = option.id;
+            model.folderPath = option.path;
+            showChosen();
+            closeList();
+        };
+
+        /**
+         * @function showList
+         * @description Opens the list if it is closed, reading the folders again then, and draws the options for the text typed, or for
+         * all folders while the input holds the chosen folder's path. The active option is the first, or the chosen folder when
+         * nothing is typed and it is among those shown.
+         */
+        function showList() {
+            if (input.disabled) return;
+            if (!isOpen) {
+                folders = Schema.ownFolderChoices();
+                isOpen = true;
+                popup.hidden = false;
+                input.setAttribute('aria-expanded', 'true');
+            };
+            var query = isEdited ? input.value.trim() : '';
+            shown = saveFolderOptions(folders, query);
+            clearNode(list);
+            optionNodes = shown.options.map(function (option, i) {
+                var isChosen = option.id === String(model.folderId);
+                var node = h('div', {
+                    class: 'ss-list-row ss-combo__option' + (isChosen ? ' is-selected' : ''), id: 'ss-save-folder-option-' + i, role: 'option', title: option.path,
+                    'aria-selected': String(isChosen), 'data-folder-id': option.id,
+                    onclick: function () { pick(option); }
+                }, h('div', { class: 'ss-list-row__main' }, [
+                    h('div', { class: 'ss-list-row__title' }, option.name),
+                    option.parent ? h('div', { class: 'ss-list-row__meta' }, option.parent) : null
+                ]));
+                list.appendChild(node);
+                return node;
+            });
+            var noteText = '';
+            if (!shown.options.length) {
+                noteText = 'No folders match "' + query + '".';
+            } else if (shown.more > 0) {
+                noteText = shown.more + ' more. Keep typing to narrow the list.';
+            };
+            note.textContent = noteText;
+            note.hidden = noteText === '';
+            var chosenIndex = query === '' ? shown.options.map(function (o) { return o.id; }).indexOf(String(model.folderId)) : -1;
+            setActive(optionNodes.length ? Math.max(0, chosenIndex) : -1);
+        };
+
+        /**
+         * @function onKeydown
+         * @description The input's keys: ArrowDown and ArrowUp move the active option, and open a closed list. Home and End go to the
+         * first and last option of an open list. Enter chooses the active option. Escape closes an open list, and stops there so the
+         * overlay stays open. Tab is left to the browser: the focus moves on, and the blur closes the list. Any key while a composition
+         * is open is left to it.
+         * @param {KeyboardEvent} ev
+         */
+        function onKeydown(ev) {
+            if (ev.isComposing) return;
+            var key = ev.key;
+            if (key === 'ArrowDown' || key === 'ArrowUp') {
+                ev.preventDefault();
+                if (!isOpen) {
+                    showList();
+                } else if (optionNodes.length) {
+                    setActive(Math.max(0, Math.min(optionNodes.length - 1, activeIndex + (key === 'ArrowDown' ? 1 : -1))));
+                };
+            } else if ((key === 'Home' || key === 'End') && isOpen && optionNodes.length) {
+                ev.preventDefault();
+                setActive(key === 'Home' ? 0 : optionNodes.length - 1);
+            } else if (key === 'Enter' && isOpen) {
+                ev.preventDefault();
+                if (activeIndex !== -1) pick(shown.options[activeIndex]);
+            } else if (key === 'Escape' && isOpen) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                closeList();
+            };
+        };
+
+        /**
+         * @function setDisabled
+         * @description Switches the control on or off. Going off closes the list, which the browser would leave open on an input it
+         * has disabled, and puts the chosen folder's path back in place of any text typed.
+         * @param {boolean} isOff
+         */
+        function setDisabled(isOff) {
+            if (isOff) {
+                closeList();
+                showChosen();
+            };
+            input.disabled = isOff;
+        };
+
+        showChosen();
+        return {
+            el: h('div', { class: 'ss-combo' }, [input, popup]),
+            input: input,
+            setDisabled: setDisabled
+        };
+    };
+
+    /**
+     * @function saveTypesText
+     * @description A list of field types as a sentence says it: "EmailAddress", or "Text, EmailAddress or Phone".
+     * @param {Array<string>} types
+     * @returns {string}
+     */
+    function saveTypesText(types) {
+        return types.length > 1 ? types.slice(0, -1).join(', ') + ' or ' + types[types.length - 1] : types[0];
+    };
+
+    /**
+     * @function saveValidate
+     * @description Checks a save model as the Backend checks createDataExtension, before any call, and says what is wrong where: the
+     * name (1 to 128 characters, no leading underscore, none taken in this Business Unit), the key (up to 36, never a temporary run
+     * Data Extension's), each field (a name of 1 to 128 characters that no other field has, a Text length of 1 to 4,000, a Decimal's
+     * precision of 1 to 29 and scale of 0 to the smaller of the precision and 8, a default of up to 4,000 characters, and a primary key
+     * that is not nullable), the retention (a whole period of 1 to 999) and the send relationship (a chosen field of a type it takes). A
+     * field's name is never the row mark column's, and when the save runs the query again (model.mode 'sql') it is its column's,
+     * since the query's columns name what it fills. Once the Data Extension exists, as after a refused move, its name is not
+     * checked against the list.
+     * @param {Object} model - the save model
+     * @returns {{name: string, key: string, fields: Array<Object>, retention: string, sendable: string, count: number}} an empty
+     * text where nothing is wrong, and in count how many things are
+     */
+    function saveValidate(model) {
+        var errors = {
+            name: '',
+            key: '',
+            fields: [],
+            retention: '',
+            sendable: '',
+            count: 0
+        };
+        var name = model.name.trim();
+        var isTaken = false;
+        if (!model.created) {
+            Schema.deList.forEach(function (t) { if (t && !t.isShared && String(t.name).toLowerCase() === name.toLowerCase()) isTaken = true; });
+        };
+        if (!name) errors.name = 'Enter a name.';
+        else if (name.length > SAVE_NAME_MAX) errors.name = 'A name takes ' + SAVE_NAME_MAX + ' characters at most.';
+        else if (name.charAt(0) === '_') errors.name = 'A name cannot start with an underscore.';
+        else if (saveHasControl(name)) errors.name = 'A name cannot hold a line break or another control character.';
+        else if (isTaken) errors.name = 'A Data Extension named ' + name + ' is already there.';
+        var key = model.key.trim();
+        if (key.length > SAVE_KEY_MAX) errors.key = 'A key takes ' + SAVE_KEY_MAX + ' characters at most.';
+        else if (saveHasControl(key)) errors.key = 'A key cannot hold a line break or another control character.';
+        else if (SAVE_TEMP_KEY_RE.test(key)) errors.key = 'This key is the shape of SQL Studio\'s temporary Data Extensions, which it sweeps. Choose another.';
+        var seen = {};
+        model.fields.forEach(function (f) {
+            var lower = f.name.trim().toLowerCase();
+            if (lower) seen[lower] = (seen[lower] || 0) + 1;
+        });
+        model.fields.forEach(function (f) {
+            var e = {
+                name: '',
+                length: '',
+                scale: '',
+                defaultValue: '',
+                key: ''
+            };
+            var fieldName = f.name.trim();
+            if (!fieldName) e.name = 'Enter a name.';
+            else if (fieldName.length > SAVE_NAME_MAX) e.name = SAVE_NAME_MAX + ' characters at most.';
+            else if (saveHasControl(fieldName)) e.name = 'No control characters.';
+            else if (seen[fieldName.toLowerCase()] > 1) e.name = 'Another field has this name.';
+            else if (fieldName.toLowerCase() === SAVE_ROW_MARK_FIELD.toLowerCase()) e.name = 'SQL Studio uses this name itself.';
+            else if (model.mode === 'sql' && saveIsRenamed(f)) e.name = 'Keeps its column\'s name, ' + f.source + ', as the query runs again.';
+            if (f.type === 'Text' && f.length.trim() !== '' && !saveIsWhole(f.length, 1, SAVE_TEXT_MAX)) e.length = '1 to ' + fmtNumber(SAVE_TEXT_MAX) + '.';
+            /* Marketing Cloud Engagement refuses a Text primary key with no length (the author's org, 2026-10-09). */
+            if (f.type === 'Text' && f.isPrimaryKey && f.length.trim() === '') e.length = 'A primary key needs a length.';
+            var precision = SAVE_DECIMAL_DEFAULT_PRECISION;
+            if (f.type === 'Decimal') {
+                if (f.precision.trim() !== '' && !saveIsWhole(f.precision, 1, SAVE_DECIMAL_MAX_PRECISION)) {
+                    e.length = '1 to ' + SAVE_DECIMAL_MAX_PRECISION + '.';
+                } else if (f.precision.trim() !== '') {
+                    precision = parseInt(f.precision, 10);
+                };
+                var maxScale = Math.min(precision, SAVE_DECIMAL_MAX_SCALE);
+                if (f.scale.trim() !== '' && !saveIsWhole(f.scale, 0, maxScale)) e.scale = '0 to ' + maxScale + '.';
+            };
+            if (f.defaultValue.length > SAVE_DEFAULT_MAX) e.defaultValue = SAVE_DEFAULT_MAX + ' characters at most.';
+            else if (saveHasControl(f.defaultValue)) e.defaultValue = 'No control characters.';
+            else if (f.defaultValue !== '' && f.defaultValue.trim() === '') e.defaultValue = 'Not spaces alone.';
+            if (f.isPrimaryKey && f.isNullable) e.key = 'A primary key cannot be nullable.';
+            errors.fields.push(e);
+            errors.count += (e.name ? 1 : 0) + (e.length ? 1 : 0) + (e.scale ? 1 : 0) + (e.defaultValue ? 1 : 0) + (e.key ? 1 : 0);
+        });
+        if (model.retention.mode !== 'none' && !saveIsWhole(model.retention.period, 1, SAVE_PERIOD_MAX)) errors.retention = 'A period is a whole number from 1 to ' + SAVE_PERIOD_MAX + '.';
+        if (model.sendable.isOn) {
+            var kind = model.sendable.kind;
+            var relatesTo = kind === 'emailAddress' ? 'Email Address' : 'Subscriber Key';
+            if (!saveCandidates(model, kind).length) errors.sendable = 'No field is of type ' + saveTypesText(SAVE_SENDABLE_TYPES[kind]) + ', which the ' + relatesTo + ' needs. Change a field\'s type first.';
+            else if (!saveSendableField(model)) errors.sendable = 'Choose the field that holds the ' + relatesTo + '.';
+        };
+        errors.count += (errors.name ? 1 : 0) + (errors.key ? 1 : 0) + (errors.retention ? 1 : 0) + (errors.sendable ? 1 : 0);
+        return errors;
+    };
+
+    /**
+     * @function saveCreatePayload
+     * @description The createDataExtension payload of a valid save model, as the Backend validates it: the trimmed names, a key and a
+     * folder only when set, a Text length and a Decimal's precision and scale only when typed in, a default only when not empty, the
+     * retention with the flags of its mode, and the send relationship.
+     * @param {Object} model - the save model, which saveValidate passed
+     * @returns {Object}
+     */
+    function saveCreatePayload(model) {
+        var payload = {
+            name: model.name.trim(),
+            fields: model.fields.map(function (f) {
+                var entry = {
+                    name: f.name.trim(),
+                    type: f.type,
+                    isPrimaryKey: f.isPrimaryKey,
+                    isNullable: f.isNullable
+                };
+                /* maxLength, not length: on the org a payload object's length answered when the app sent none (2026-10-08). */
+                if (f.type === 'Text' && f.length.trim() !== '') entry.maxLength = parseInt(f.length, 10);
+                if (f.type === 'Decimal' && f.precision.trim() !== '') entry.precision = parseInt(f.precision, 10);
+                if (f.type === 'Decimal' && f.scale.trim() !== '') entry.scale = parseInt(f.scale, 10);
+                if (f.defaultValue !== '') entry.defaultValue = f.defaultValue;
+                return entry;
+            })
+        };
+        if (model.key.trim() !== '') payload.key = model.key.trim();
+        if (model.folderId !== '') payload.categoryId = Number(model.folderId);
+        var mode = SAVE_RETENTION_MODES.filter(function (m) { return m.id === model.retention.mode; })[0];
+        if (mode && mode.id !== 'none') {
+            payload.retention = {
+                period: parseInt(model.retention.period, 10),
+                unit: model.retention.unit,
+                isRowBased: mode.isRowBased,
+                isDataExtensionDeleted: mode.isDataExtensionDeleted,
+                resetOnImport: mode.id === 'rows' && model.retention.reset === true
+            };
+        };
+        if (model.sendable.isOn) {
+            payload.sendable = {
+                field: saveSendableField(model).name.trim(),
+                subscriberField: model.sendable.kind
+            };
+        };
+        return payload;
+    };
+
+    /**
+     * @function saveMoveColumns
+     * @description The columns moveToDataExtension reads, in the order of the results: a column's own name when its field has the
+     * same name in the new Data Extension, and { name, as } for one the user renamed.
+     * @param {Object} model - the save model
+     * @returns {Array<(string|{name: string, as: string})>}
+     */
+    function saveMoveColumns(model) {
+        return model.fields.map(function (f) {
+            var renamed = f.name.trim();
+            return renamed === f.source ? f.source : { name: f.source, as: renamed };
+        });
+    };
+
+    /**
+     * @function saveIsRenamed
+     * @description Tells whether the user gave a field another name than its result column's, without regard to case, as
+     * Marketing Cloud Engagement matches field names.
+     * @param {Object} f - a field of the save model
+     * @returns {boolean}
+     */
+    function saveIsRenamed(f) {
+        return f.name.trim().toLowerCase() !== String(f.source).toLowerCase();
+    };
+
+    /**
+     * @function saveUseColumnNames
+     * @description Gives every field of a model its column's name again, for a save that runs the query again: the query's
+     * columns name the fields it fills, so a renamed field would stay empty.
+     * @param {Object} model - the save model
+     * @returns {boolean} whether a name changed
+     */
+    function saveUseColumnNames(model) {
+        var hasChanged = false;
+        model.fields.forEach(function (f) {
+            if (f.name === f.source) return;
+            f.name = f.source;
+            hasChanged = true;
+        });
+        return hasChanged;
+    };
+
+    /**
+     * @function saveIsFreeFollow
+     * @description Whether the checks of a move's task cost no API call, by the rule a run's status checks follow
+     * (isRunStatusDue): a task ID with its signature, in a session in the Backend's own Business Unit, while the reads come back
+     * through WSProxy. Anywhere else each check is an API call: the token's SOAP read of the task, or isrunning.
+     * @param {Object} task - the save's task, { taskId, taskSig, via }
+     * @returns {boolean}
+     */
+    function saveIsFreeFollow(task) {
+        return !!task.taskId && !!task.taskSig && task.via !== 'soap' && task.via !== 'none' && Session.isBackendBu();
+    };
+
+    /**
+     * @function saveCheckWait
+     * @description How long until the next check of a move's task, by a run's own schedule. Where a check is a free WSProxy read,
+     * as a run's free polls: every POLL_FREE_FAST_MS in the first minute and POLL_FREE_SLOW_MS after it. Where each check is an
+     * API call, as the status checks of a run whose row count cannot be read, in a child Business Unit: pollInterval, a fifth of
+     * the time so far, from 3 to 30 seconds. A move started through REST is always the second kind, as isrunning is an API call.
+     * @param {boolean} isFree - saveIsFreeFollow
+     * @param {number} elapsed - milliseconds since the move started
+     * @returns {number} milliseconds
+     */
+    function saveCheckWait(isFree, elapsed) {
+        if (isFree) return elapsed < POLL_FREE_FAST_WINDOW_MS ? POLL_FREE_FAST_MS : POLL_FREE_SLOW_MS;
+        return pollInterval(elapsed);
+    };
+
+    /**
+     * @function saveExpectedChecks
+     * @description How many checks a move of SAVE_EXPECTED_MOVE_MS takes on saveCheckWait's schedule: the first one POLL_FAST_MS
+     * after the start, as a run's first poll, and the last one the first at or past its end.
+     * @param {boolean} isFree - whether each check is a free WSProxy read
+     * @returns {number}
+     */
+    function saveExpectedChecks(isFree) {
+        var at = POLL_FAST_MS;
+        var count = 1;
+        while (at < SAVE_EXPECTED_MOVE_MS) {
+            at += saveCheckWait(isFree, at);
+            count++;
+        };
+        return count;
+    };
+
+    /**
+     * @function saveCostText
+     * @description What a save costs, said before the click: about so many API calls, and in the Backend's own Business Unit the WSProxy
+     * calls too, which SQL Studio counts apart. The numbers are the Backend's own for the create and the move, the check of the
+     * run's temporary Data Extension before a move from it (free there, 1 API call elsewhere), and the checks of the move's task
+     * on the schedule they follow (saveExpectedChecks), a WSProxy call each there and an API call elsewhere. A move alone, into a
+     * Data Extension that exists, leaves out the create.
+     * @param {Object} model - the save model
+     * @returns {string} such as "Saving takes about 5 API calls and 8 WSProxy calls."
+     */
+    function saveCostText(model) {
+        var isOwn = Session.isBackendBu();
+        var create = model.created ? 0 : SAVE_CREATE_API_CALLS;
+        var check = (model.mode === 'from' && !isOwn) ? 1 : 0;
+        var checks = saveExpectedChecks(isOwn);
+        var api = create + check + (isOwn ? SAVE_MOVE_API_CALLS - 1 : SAVE_MOVE_API_CALLS + checks);
+        var wsproxy = isOwn ? 1 + checks : 0;
+        return (model.created ? 'Moving the rows takes about ' : 'Saving takes about ') + apiCallsText(api) + (wsproxy ? ' and ' + wsproxyCallsText(wsproxy) : '') + '.';
+    };
+
+    /* The reason of a move that Marketing Cloud Engagement reports as no longer running, while SQL Studio cannot read how it ended: a
+     * REST start has no task to read, and a task read can fail. A move refused while it ran stops running too, so this is no save
+     * that worked. */
+    var SAVE_ENDED_UNREAD_TEXT = 'Marketing Cloud Engagement reports that the move has ended, and SQL Studio cannot read whether it worked. Check the Data Extension in Contact Builder.';
+
+    /* Why a move that a reload or Renew left without the answer to its request ends unconfirmed (SaveToDe.resume): the request may
+     * have started it, and there is no task to follow. */
+    var SAVE_UNANSWERED_TEXT = 'The page was reloaded while the move\'s request was on its way, so SQL Studio cannot tell whether Marketing Cloud Engagement started the move.';
+
+    /**
+     * @function saveUnconfirmed
+     * @description The error of a move whose end SQL Studio could not see: it gave up waiting, could not check, or cannot read how a
+     * move that ended went. It is told apart from a move that failed (isUnconfirmed). Its rows may still arrive, unless Marketing Cloud
+     * Engagement says the move has ended (hasEnded).
+     * @param {string} reason - what happened, whole sentences
+     * @param {boolean} [hasEnded] - true when Marketing Cloud Engagement says the move no longer runs
+     * @returns {Error}
+     */
+    function saveUnconfirmed(reason, hasEnded) {
+        var err = new Error(reason);
+        err.isUnconfirmed = true;
+        err.hasEnded = hasEnded === true;
+        return err;
+    };
+
+    /**
+     * @function saveUnconfirmedText
+     * @description What the overlay and the toast say of a move SQL Studio could not confirm: the Data Extension was created, the
+     * reason, and that the rows may still arrive, which a move that has ended leaves out.
+     * @param {string} name - the Data Extension's name
+     * @param {Object} error - { message, hasEnded }
+     * @returns {string}
+     */
+    function saveUnconfirmedText(name, error) {
+        return 'The Data Extension ' + name + ' was created, but SQL Studio could not confirm that its rows were moved. ' + error.message + (error.hasEnded ? '' : ' The rows may still arrive.');
+    };
+
+    /**
+     * @function saveCreateRefusedBy
+     * @description Who refused a create that made nothing: Marketing Cloud Engagement for its own refusal (MCE_ERROR), and
+     * SQL Studio for any other, such as a check of the Backend or an error of its own before the Create went out (INTERNAL,
+     * which the Backend answers only then). As first built every refusal named Marketing Cloud Engagement (the author's RC3
+     * test, 2026-10-08, where the Backend stopped on an error of the script engine).
+     * @param {Object} error - the save's error, with its code
+     * @returns {string}
+     */
+    function saveCreateRefusedBy(error) {
+        return (error && error.code === 'MCE_ERROR') ? 'Marketing Cloud Engagement' : 'SQL Studio';
+    };
+
+    /**
+     * @function saveCreateUnknownText
+     * @description What the overlay and the toast say of a create that may have made the Data Extension (mayExist): the Backend's
+     * own message for one it made without reading its key (CREATED_NO_KEY), which says so, the Backend's own message for a Create
+     * that Marketing Cloud Engagement answered with no clear refusal (CREATE_UNCONFIRMED), which says it may have been made, or, for
+     * an answer that never came (a network failure, the request's time limit, an HTTP 408 or 504), that it may have been made. The
+     * last two add to look in Contact Builder before another save, which a taken name would refuse.
+     * @param {string} name - the name the create gave
+     * @param {Object} error - { code, message }
+     * @returns {string}
+     */
+    function saveCreateUnknownText(name, error) {
+        if (error.code === 'CREATED_NO_KEY') return saveSentence(error.message);
+        if (error.code === 'CREATE_UNCONFIRMED') return saveSentence(error.message) + ' Check Contact Builder before you save again.';
+        return 'SQL Studio got no answer when it created the Data Extension ' + name + ', so it may have been made. ' + saveSentence(error.message) + ' Check Contact Builder before you save again.';
+    };
+
+    /**
+     * @function saveSentence
+     * @description A message as a whole sentence, with a full stop where it has none.
+     * @param {*} text
+     * @returns {string}
+     */
+    function saveSentence(text) {
+        var said = String(text || 'No message').trim();
+        return /[.!?]$/.test(said) ? said : said + '.';
+    };
+
+    /**
+     * @function saveMisfits
+     * @description The fields whose values on screen do not fit them, as the reason Marketing Cloud Engagement does not give for a move
+     * that failed: a Text field shorter than its longest value, and an EmailAddress field with a value that is no e-mail address. Only
+     * the page on screen is read, and only the fields the run's own columns fill, by place. The author's RC8 test (2026-10-09): a value
+     * of 4,100 characters failed a move into Text of 4,000 with no reason, and the overlay could only name the usual causes.
+     * @param {Object} tab
+     * @param {?Object} model - the save model
+     * @returns {string[]} one sentence for each field that does not fit
+     */
+    function saveMisfits(tab, model) {
+        if (!model || !Array.isArray(model.fields)) return [];
+        var rows = (tab && tab.state && tab.state.results && Array.isArray(tab.state.results.rows)) ? tab.state.results.rows : [];
+        var found = [];
+        model.fields.forEach(function (f, i) {
+            var name = f.name.trim() || f.source;
+            if (f.type === 'Text' && f.length.trim() !== '') {
+                var longest = saveLongestOnScreen(tab, i);
+                var length = parseInt(f.length, 10);
+                if (longest > length) found.push(name + ' has values of up to ' + fmtNumber(longest) + ' characters on screen, more than its length of ' + fmtNumber(length) + '.');
+            } else if (f.type === 'EmailAddress') {
+                var odd = rows.map(function (row) { return Array.isArray(row) ? row[i] : null; }).filter(function (v) {
+                    return v !== null && v !== undefined && String(v) !== '' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v));
+                })[0];
+                if (odd !== undefined) found.push(name + ' has a value on screen that is no e-mail address: "' + firstLine(String(odd), 60) + '".');
+            };
+        });
+        return found;
+    };
+
+    /**
+     * @function saveFailureText
+     * @description The text of a move whose task ended in an error: what Marketing Cloud Engagement said, or, when it gave no reason, as
+     * a failed run does, the fields whose values on screen do not fit them (saveMisfits), or else what SQL Studio knows about the usual
+     * cause.
+     * @param {?Object} taskStatus - the getRunStatus entry's taskStatus
+     * @param {Object} tab
+     * @param {?Object} model - the save model
+     * @returns {string}
+     */
+    function saveFailureText(taskStatus, tab, model) {
+        var said = String((taskStatus && taskStatus.errorMsg) || '').trim();
+        if (said) return 'Marketing Cloud Engagement did not move the rows: ' + said;
+        var noReason = 'Marketing Cloud Engagement did not move the rows and gives no reason (status ' + ((taskStatus && taskStatus.status) || 'unknown') + ').';
+        var misfits = saveMisfits(tab, model);
+        if (misfits.length) return noReason + ' ' + misfits.join(' ');
+        return noReason + ' A value that does not fit its field is the usual cause, such as an invalid address in an EmailAddress field.';
+    };
+
+    var SaveToDe = {
+        /**
+         * @method blockReason
+         * @description Why a tab cannot save now, in the words the button's title carries, or '' when it can: it has no finished results, it
+         * runs a query, it exports its results or it saves them already.
+         * @param {Object} tab
+         * @returns {string}
+         */
+        blockReason: function (tab) {
+            if (!tab) return 'Run a query first.';
+            if (isRunInFlight(tab.state.runnerState)) return 'Save to DE is off while this tab runs a query.';
+            if (tab.activeExport) return 'Save to DE is off while this tab exports its results.';
+            if (tab.activeSave) return 'Save to DE is off while this tab saves its results.';
+            if (!tab.state.activeRun || !tab.state.results) return 'Run a query first. Save to DE saves its results.';
+            return '';
+        },
+
+        /**
+         * @method _newModel
+         * @description Drafts the save of a tab's finished run: a name, no key and the root folder, one field for each result column in
+         * its order (saveDraftField, from the run's column types and the source fields the schema holds), no retention and no send
+         * relationship.
+         * @param {Object} tab
+         * @returns {Object} the save model
+         */
+        _newModel: function (tab) {
+            var run = tab.state.activeRun;
+            var sql = tab.runner.currentRunSql || '';
+            var sources = saveSourceFields(sql, run.columns.length);
+            return {
+                runKey: run.deKey,
+                rowCount: tab.state.results ? tab.state.results.count : 0,
+                sql: sql,
+                name: saveDraftName(sql),
+                key: '',
+                /* The folder's id as text, '' for the top folder, and its whole path as the picker showed it when it was chosen. */
+                folderId: '',
+                folderPath: '',
+                fields: run.columns.map(function (column, i) { return saveDraftField(column, (run.columnTypes || [])[i] || null, sources[i], saveLongestOnScreen(tab, i)); }),
+                retention: {
+                    mode: 'none',
+                    period: '30',
+                    unit: 'Days',
+                    reset: false
+                },
+                /* fieldIndex is the chosen field's place in fields, -1 for none: by place, so a rename follows it. */
+                sendable: {
+                    isOn: false,
+                    kind: 'subscriberKey',
+                    fieldIndex: -1
+                },
+                /* 'from' moves the rows of the run's temporary Data Extension, 'sql' runs the query into the new one when that is gone,
+                 * and 'none' has neither. checkState says whether _check has settled it, and namesReset whether the switch to the
+                 * query gave a field its column's name again. */
+                mode: 'from',
+                checkState: 'pending',
+                namesReset: false,
+                created: null,
+                error: null,
+                view: null
+            };
+        },
+
+        /**
+         * @method _check
+         * @description Looks for the run's temporary Data Extension, with the page read the restore of a tab's results makes: free for a
+         * Data Extension in the Backend's own Business Unit, 1 API call elsewhere. It runs when the overlay opens, before each move from
+         * that Data Extension and after one that failed, since the Backend's NOT_FOUND names the target alone. One that is gone (Marketing
+         * Cloud Engagement deleted it after its day) makes the save run the query into the new Data Extension instead, and with no SQL
+         * to run there is nothing to save. Before the Data Extension is created, the switch to the query gives every field its column's
+         * name again (model.namesReset says whether one changed), since the query's columns name what it fills. Any other failure of
+         * the read leaves the move to say what is wrong.
+         * @param {Object} tab
+         * @param {Object} model - the save model
+         * @param {Object} [owner] - { _calls }, where a save notes the call
+         * @returns {Promise} settles once the check has
+         */
+        _check: function (tab, model, owner) {
+            var known = tab.state.results && typeof tab.state.results.count === 'number' ? tab.state.results.count : null;
+            var send = function (payload) { return Api.call('getResults', payload, owner); };
+            var columns = model.fields.map(function (f) { return f.source; });
+            model.checkState = 'pending';
+            if (model.view) model.view.refresh();
+            return readCheckedPage(send, { deKey: model.runKey, page: 1, pageSize: 1, columns: columns }, known, 'The check before saving', send).then(function () {
+                model.mode = 'from';
+            }, function (err) {
+                if (isDataExtensionGoneError(err)) {
+                    model.mode = model.sql ? 'sql' : 'none';
+                    if (model.mode === 'sql' && !model.created && saveUseColumnNames(model)) model.namesReset = true;
+                } else {
+                    model.mode = 'from';
+                };
+            }).then(function () {
+                model.checkState = 'done';
+                if (model.view) model.view.refresh();
+            });
+        },
+
+        /**
+         * @method open
+         * @description Opens the overlay for the tab on screen, with the tab's own model of this run (a new draft when it has none, or
+         * one for another run), and checks that the run's temporary Data Extension is still there. A tab that cannot save says why
+         * in a toast.
+         */
+        open: function () {
+            var tab = QueryTabs.active();
+            var reason = this.blockReason(tab);
+            if (reason) {
+                Toast.show(reason, 'info');
+                return;
+            };
+            var model = tab.saveModel;
+            if (!model || model.runKey !== tab.state.activeRun.deKey) {
+                model = this._newModel(tab);
+                tab.saveModel = model;
+            };
+            this._openOverlay(tab, model);
+            if (!model.created) this._check(tab, model);
+        },
+
+        /**
+         * @method _openOverlay
+         * @description Builds the overlay of a save model and opens it as the app's modal. Everything the user edits goes into the
+         * model, and refresh() draws what depends on it: what is wrong and where, the cost, the notice at the top and the buttons.
+         * While a save runs (the tab's activeSave) or once the Data Extension exists, the controls are off.
+         * @param {Object} tab
+         * @param {Object} model
+         */
+        _openOverlay: function (tab, model) {
+            var self = this;
+            var view = {
+                rows: [],
+                hint: h('p', { class: 'ss-hint', 'data-save': 'hint' }, null),
+                notice: h('div', { class: 'ss-save__notice', 'aria-live': 'polite' }, null),
+                warnings: h('div', { class: 'ss-save__warnings', 'data-save': 'warnings' }, null),
+                cost: h('p', { class: 'ss-save__cost' }, null),
+                fix: h('p', { class: 'ss-save__fix' }, null)
+            };
+            var modal = null;
+            var nameErr = h('div', { class: 'ss-save__error' }, null);
+            var keyErr = h('div', { class: 'ss-save__error' }, null);
+            var nameInput = h('input', {
+                class: 'ss-input', type: 'text', id: 'ss-save-name', 'data-save': 'name', autocomplete: 'off', spellcheck: 'false',
+                oninput: function (ev) { model.name = ev.target.value; view.refresh(); }
+            }, null);
+            var keyInput = h('input', {
+                class: 'ss-input', type: 'text', id: 'ss-save-key', 'data-save': 'key', autocomplete: 'off', spellcheck: 'false',
+                placeholder: 'Optional: Marketing Cloud Engagement makes one',
+                oninput: function (ev) { model.key = ev.target.value; view.refresh(); }
+            }, null);
+            var folderPicker = saveFolderPicker(model);
+            nameInput.value = model.name;
+            keyInput.value = model.key;
+
+            /* One row of the fields table. Its parts are kept in view.rows, so refresh() can mark what is wrong in each. */
+            var tbody = h('tbody', null, null);
+            /**
+             * @function buildRow
+             * @description Builds the table row of one field and the references refresh() needs to mark it.
+             * @param {Object} f - the field's model
+             * @param {number} i - its place in the list
+             * @returns {Object} { tr, nameInput, nameErr, typeSelect, lengthInput, lengthErr, scaleInput, scaleErr, pk, nullable, defaultInput, defaultErr }
+             */
+            function buildRow(f, i) {
+                var label = ' of ' + f.source;
+                var row = {};
+                row.nameInput = h('input', {
+                    class: 'ss-input', type: 'text', 'aria-label': 'Field name' + label, 'data-save-field': String(i), 'data-save': 'field-name',
+                    autocomplete: 'off', spellcheck: 'false',
+                    oninput: function (ev) { f.name = ev.target.value; view.refresh(); }
+                }, null);
+                row.nameErr = h('div', { class: 'ss-save__error' }, null);
+                row.typeSelect = h('select', {
+                    class: 'ss-select', 'aria-label': 'Type' + label, 'data-save-field': String(i), 'data-save': 'field-type',
+                    onchange: function (ev) {
+                        f.type = ev.target.value;
+                        if (f.type === 'Text' && f.length.trim() === '') f.length = saveTextLengthOf(saveLongestOnScreen(tab, i));
+                        if (f.type === 'Decimal') {
+                            if (f.precision.trim() === '') f.precision = String(SAVE_DECIMAL_DEFAULT_PRECISION);
+                            if (f.scale.trim() === '') f.scale = String(SAVE_DECIMAL_DEFAULT_SCALE);
+                        };
+                        row.lengthInput.value = f.type === 'Decimal' ? f.precision : f.length;
+                        row.scaleInput.value = f.scale;
+                        view.refresh();
+                    }
+                }, SAVE_FIELD_TYPES.map(function (t) { return h('option', { value: t }, t); }));
+                row.lengthInput = h('input', {
+                    class: 'ss-input ss-save__number', type: 'text', inputmode: 'numeric', 'data-save-field': String(i), 'data-save': 'field-length',
+                    oninput: function (ev) {
+                        if (f.type === 'Decimal') {
+                            f.precision = ev.target.value;
+                        } else {
+                            f.length = ev.target.value;
+                        };
+                        view.refresh();
+                    }
+                }, null);
+                row.lengthErr = h('div', { class: 'ss-save__error' }, null);
+                row.scaleInput = h('input', {
+                    class: 'ss-input ss-save__number', type: 'text', inputmode: 'numeric', 'aria-label': 'Scale' + label, 'data-save-field': String(i), 'data-save': 'field-scale',
+                    oninput: function (ev) { f.scale = ev.target.value; view.refresh(); }
+                }, null);
+                row.scaleErr = h('div', { class: 'ss-save__error' }, null);
+                row.pk = h('input', {
+                    type: 'checkbox', 'aria-label': 'Primary key' + label, 'data-save-field': String(i), 'data-save': 'field-pk',
+                    onchange: function (ev) {
+                        f.isPrimaryKey = ev.target.checked;
+                        if (f.isPrimaryKey) f.isNullable = false;
+                        view.refresh();
+                    }
+                }, null);
+                row.nullable = h('input', {
+                    type: 'checkbox', 'aria-label': 'Nullable' + label, 'data-save-field': String(i), 'data-save': 'field-nullable',
+                    onchange: function (ev) { f.isNullable = ev.target.checked; view.refresh(); }
+                }, null);
+                row.defaultInput = h('input', {
+                    class: 'ss-input', type: 'text', 'aria-label': 'Default value' + label, 'data-save-field': String(i), 'data-save': 'field-default',
+                    autocomplete: 'off', spellcheck: 'false',
+                    oninput: function (ev) { f.defaultValue = ev.target.value; view.refresh(); }
+                }, null);
+                row.defaultErr = h('div', { class: 'ss-save__error' }, null);
+                row.nameInput.value = f.name;
+                row.typeSelect.value = f.type;
+                row.lengthInput.value = f.type === 'Decimal' ? f.precision : f.length;
+                row.scaleInput.value = f.scale;
+                row.defaultInput.value = f.defaultValue;
+                row.tr = h('tr', null, [
+                    h('td', { class: 'ss-save__source', title: f.source }, f.source),
+                    h('td', null, [row.nameInput, row.nameErr]),
+                    h('td', null, row.typeSelect),
+                    h('td', null, [row.lengthInput, row.lengthErr]),
+                    h('td', null, [row.scaleInput, row.scaleErr]),
+                    h('td', { class: 'ss-save__check' }, h('span', { class: 'ss-save__check-box' }, row.pk)),
+                    h('td', { class: 'ss-save__check' }, h('span', { class: 'ss-save__check-box' }, row.nullable)),
+                    h('td', null, [row.defaultInput, row.defaultErr])
+                ]);
+                return row;
+            };
+            model.fields.forEach(function (f, i) {
+                var row = buildRow(f, i);
+                view.rows.push(row);
+                tbody.appendChild(row.tr);
+            });
+            var table = h('table', { class: 'ss-save__table', 'aria-label': 'Fields of the new Data Extension' }, [
+                h('thead', null, h('tr', null, [
+                    h('th', null, 'Result column'), h('th', null, 'Field name'), h('th', null, 'Type'), h('th', { title: 'The length of a Text field, or the precision of a Decimal' }, 'Length'),
+                    h('th', { title: 'The digits after the point of a Decimal' }, 'Scale'), h('th', { class: 'ss-save__check' }, 'Key'), h('th', { class: 'ss-save__check' }, 'Null'), h('th', null, 'Default')
+                ])),
+                tbody
+            ]);
+
+            /* Retention and the send relationship. */
+            var modeSelect = h('select', {
+                class: 'ss-select', 'aria-label': 'Retention', 'data-save': 'retention-mode',
+                onchange: function (ev) { model.retention.mode = ev.target.value; view.refresh(); }
+            }, SAVE_RETENTION_MODES.map(function (m) { return h('option', { value: m.id }, m.label); }));
+            var periodInput = h('input', {
+                class: 'ss-input ss-save__number', type: 'text', inputmode: 'numeric', 'aria-label': 'Retention period', 'data-save': 'retention-period',
+                oninput: function (ev) { model.retention.period = ev.target.value; view.refresh(); }
+            }, null);
+            var unitSelect = h('select', {
+                class: 'ss-select', 'aria-label': 'Retention unit', 'data-save': 'retention-unit',
+                onchange: function (ev) { model.retention.unit = ev.target.value; }
+            }, SAVE_RETENTION_UNITS.map(function (u) { return h('option', { value: u }, u.toLowerCase()); }));
+            var resetBox = h('input', {
+                type: 'checkbox', 'data-save': 'retention-reset',
+                onchange: function (ev) { model.retention.reset = ev.target.checked; }
+            }, null);
+            var resetLabel = h('label', { class: 'ss-save__inline' }, [resetBox, ' Start the period again when rows are imported']);
+            var retentionErr = h('div', { class: 'ss-save__error' }, null);
+            modeSelect.value = model.retention.mode;
+            periodInput.value = model.retention.period;
+            unitSelect.value = model.retention.unit;
+            resetBox.checked = model.retention.reset === true;
+
+            var sendBox = h('input', {
+                type: 'checkbox', 'data-save': 'sendable',
+                onchange: function (ev) {
+                    model.sendable.isOn = ev.target.checked;
+                    if (model.sendable.isOn) self._pickSendableField(model);
+                    view.refresh();
+                }
+            }, null);
+            var kindSelect = h('select', {
+                class: 'ss-select', 'aria-label': 'Relates to', 'data-save': 'sendable-kind',
+                onchange: function (ev) {
+                    model.sendable.kind = ev.target.value;
+                    self._pickSendableField(model);
+                    view.refresh();
+                }
+            }, [h('option', { value: 'subscriberKey' }, 'Subscriber Key'), h('option', { value: 'emailAddress' }, 'Email Address')]);
+            var sendFieldSelect = h('select', {
+                class: 'ss-select', 'aria-label': 'Sendable field', 'data-save': 'sendable-field',
+                onchange: function (ev) {
+                    model.sendable.fieldIndex = ev.target.value === '' ? -1 : parseInt(ev.target.value, 10);
+                    view.refresh();
+                }
+            }, null);
+            var sendErr = h('div', { class: 'ss-save__error' }, null);
+            /* The author's org refused it (2026-10-09): "The SendableSubscriberField cannot be EmailAddress because the SUBSCRIBER_KEY
+             * business rule has been turned on". Most accounts have that rule on, so the choice says so when it is made. */
+            var sendNote = h('div', { class: 'ss-save__note', 'data-save': 'sendable-note' }, null);
+            sendBox.checked = model.sendable.isOn;
+            kindSelect.value = model.sendable.kind;
+            /* Contact Builder's own words, "<field> relates to Subscribers on <Subscriber Key>", and only while it is ticked: the
+             * words stayed when the two selects hid, and read "relates to the  field" (the author's RC3 test, 2026-10-08). */
+            var relatesText = h('span', null, 'relates to Subscribers on');
+            var sendRow = h('div', { class: 'ss-save__line' }, [
+                h('label', { class: 'ss-save__inline' }, [sendBox, ' Make it sendable.']),
+                sendFieldSelect,
+                relatesText,
+                kindSelect
+            ]);
+            var retentionRow = h('div', { class: 'ss-save__line' }, [modeSelect, periodInput, unitSelect, resetLabel]);
+
+            var movingNote = h('p', { class: 'ss-save__moving', role: 'status', 'data-save': 'moving-note' }, null);
+            var cancelBtn = h('button', { class: 'ss-btn', type: 'button', onclick: function () { modal.close(); } }, 'Cancel');
+            var startOverBtn = h('button', {
+                class: 'ss-btn ss-btn--link', type: 'button',
+                title: 'Leave the Data Extension that was created where it is, and set up another one.',
+                onclick: function () {
+                    model.created = null;
+                    model.error = null;
+                    /* A new Data Extension filled by the query again takes its columns' names. */
+                    if (model.mode === 'sql' && saveUseColumnNames(model)) model.namesReset = true;
+                    view.refresh();
+                }
+            }, 'Save to a new Data Extension instead');
+            var primaryBtn = h('button', {
+                class: 'ss-btn ss-btn--primary ss-save__primary', type: 'button', 'data-autofocus': true, 'data-save': 'primary',
+                onclick: function () {
+                    if (primaryBtn.disabled) return;
+                    self._start(tab, model);
+                }
+            }, null);
+
+            /**
+             * @method setControlsDisabled
+             * @description Switches every control of the form on or off: off while a save runs and once the Data Extension exists.
+             * @param {boolean} isOff
+             */
+            function setControlsDisabled(isOff) {
+                [nameInput, keyInput, modeSelect, periodInput, unitSelect, resetBox, sendBox, kindSelect, sendFieldSelect].forEach(function (c) { c.disabled = isOff; });
+                folderPicker.setDisabled(isOff);
+                view.rows.forEach(function (r) {
+                    [r.nameInput, r.typeSelect, r.lengthInput, r.scaleInput, r.pk, r.nullable, r.defaultInput].forEach(function (c) { c.disabled = isOff; });
+                });
+            };
+
+            /**
+             * @method refresh
+             * @description Draws everything that depends on the model: what saveValidate finds wrong and where, the fields' own cells
+             * (a Decimal's two numbers, a primary key's nullable box), the retention's and the relationship's parts, the cost, the notice
+             * at the top and the buttons.
+             */
+            view.refresh = function () {
+                /* A chosen field that is no longer of a type the relationship takes loses the choice, and the overlay asks for one:
+                 * no other field is picked behind the user's back, and changing the type back does not choose it again. */
+                if (model.sendable.fieldIndex !== -1 && !saveSendableField(model)) model.sendable.fieldIndex = -1;
+                var errors = saveValidate(model);
+                /* A query that runs again reads newer data, so the run's count says nothing of the rows it moves. */
+                view.hint.textContent = model.mode === 'sql'
+                    ? 'SQL Studio creates the Data Extension in Marketing Cloud Engagement, then runs the query again into it.'
+                    : 'SQL Studio creates the Data Extension in Marketing Cloud Engagement, then moves the ' + fmtRows(model.rowCount) + ' of these results into it.';
+                var isBusy = !!tab.activeSave;
+                var isLocked = isBusy || !!model.created;
+                /* A save that runs the query again fills the fields its columns name, so the names are not the user's to change. */
+                var isNameLocked = model.mode === 'sql';
+                setControlsDisabled(isLocked);
+                var mark = function (control, message, errorNode) {
+                    control.classList.toggle('is-invalid', !!message);
+                    control.setAttribute('aria-invalid', message ? 'true' : 'false');
+                    if (errorNode) errorNode.textContent = message;
+                };
+                mark(nameInput, errors.name, nameErr);
+                mark(keyInput, errors.key, keyErr);
+                /* Once the Data Extension exists its fields are set, so there is nothing left to warn of. */
+                clearNode(view.warnings);
+                if (!model.created) {
+                    appendChildren(view.warnings, saveFieldWarnings(tab, model).map(function (text) {
+                        return h('div', { class: 'ss-message-item ss-message-item--warning', 'data-save': 'warning' }, text);
+                    }));
+                };
+                model.fields.forEach(function (f, i) {
+                    var r = view.rows[i];
+                    var e = errors.fields[i];
+                    var isDecimal = f.type === 'Decimal';
+                    var isText = f.type === 'Text';
+                    if (r.nameInput.value !== f.name && document.activeElement !== r.nameInput) r.nameInput.value = f.name;
+                    r.nameInput.disabled = isLocked || isNameLocked;
+                    r.nameInput.title = isNameLocked ? 'The query runs again into the Data Extension, so each field takes its column\'s name.' : '';
+                    mark(r.nameInput, e.name, r.nameErr);
+                    mark(r.lengthInput, e.length, r.lengthErr);
+                    mark(r.scaleInput, e.scale, r.scaleErr);
+                    mark(r.defaultInput, e.defaultValue, r.defaultErr);
+                    r.lengthInput.style.visibility = (isText || isDecimal) ? '' : 'hidden';
+                    r.scaleInput.style.visibility = isDecimal ? '' : 'hidden';
+                    r.lengthInput.setAttribute('aria-label', (isDecimal ? 'Precision' : 'Length') + ' of ' + f.source);
+                    /* An empty length sends the field with no MaxLength, which Email Studio makes for a field that holds more than
+                     * 4,000 characters and Contact Builder does not offer. */
+                    r.lengthInput.placeholder = isText ? 'None' : '';
+                    r.lengthInput.disabled = isLocked || !(isText || isDecimal);
+                    r.scaleInput.disabled = isLocked || !isDecimal;
+                    r.pk.checked = f.isPrimaryKey;
+                    r.nullable.checked = f.isNullable;
+                    r.nullable.disabled = isLocked || f.isPrimaryKey;
+                    r.nullable.title = f.isPrimaryKey ? 'A primary key is never nullable.' : '';
+                    r.tr.classList.toggle('has-error', !!(e.name || e.length || e.scale || e.defaultValue || e.key));
+                });
+                var isRetained = model.retention.mode !== 'none';
+                periodInput.style.display = isRetained ? '' : 'none';
+                unitSelect.style.display = isRetained ? '' : 'none';
+                resetLabel.style.display = model.retention.mode === 'rows' ? '' : 'none';
+                mark(periodInput, errors.retention, null);
+                retentionErr.textContent = errors.retention;
+                /* The options name the fields of a type the relationship takes, each by its place in the list, so a rename keeps the
+                 * choice. A field whose name is empty shows its column's name meanwhile. */
+                var chosen = saveSendableField(model);
+                clearNode(sendFieldSelect);
+                if (!chosen) sendFieldSelect.appendChild(h('option', { value: '' }, 'Choose a field'));
+                saveCandidates(model, model.sendable.kind).forEach(function (i) {
+                    var f = model.fields[i];
+                    sendFieldSelect.appendChild(h('option', { value: String(i) }, f.name.trim() || f.source));
+                });
+                sendFieldSelect.value = chosen ? String(model.sendable.fieldIndex) : '';
+                sendFieldSelect.style.display = model.sendable.isOn ? '' : 'none';
+                relatesText.style.display = model.sendable.isOn ? '' : 'none';
+                kindSelect.style.display = model.sendable.isOn ? '' : 'none';
+                sendErr.textContent = model.sendable.isOn ? errors.sendable : '';
+                sendNote.textContent = (model.sendable.isOn && model.sendable.kind === 'emailAddress')
+                    ? 'Most accounts have the Subscriber Key business rule on, and refuse a relationship to the Email Address.'
+                    : '';
+                self._drawFooter(tab, model, view, errors, { movingNote: movingNote, cancelBtn: cancelBtn, startOverBtn: startOverBtn, primaryBtn: primaryBtn });
+            };
+
+            var body = [
+                view.notice,
+                view.hint,
+                h('div', { class: 'ss-save__top' }, [
+                    h('div', { class: 'ss-field' }, [h('label', { class: 'ss-label', for: 'ss-save-name' }, 'Name'), nameInput, nameErr]),
+                    h('div', { class: 'ss-field' }, [h('label', { class: 'ss-label', for: 'ss-save-key' }, 'External key'), keyInput, keyErr]),
+                    h('div', { class: 'ss-field' }, [h('label', { class: 'ss-label', for: 'ss-save-folder' }, 'Folder'), folderPicker.el])
+                ]),
+                h('div', { class: 'ss-label' }, 'Fields'),
+                h('div', { class: 'ss-save__table-wrap' }, table),
+                view.warnings,
+                h('div', { class: 'ss-field ss-save__group' }, [h('div', { class: 'ss-label' }, 'Retention'), retentionRow, retentionErr]),
+                h('div', { class: 'ss-field ss-save__group' }, [h('div', { class: 'ss-label' }, 'Send relationship (optional)'), sendRow, sendNote, sendErr]),
+                view.fix
+            ];
+            modal = UI.openModal({
+                title: 'Save to a new Data Extension',
+                xwide: true,
+                body: body,
+                footer: [view.cost, movingNote, cancelBtn, startOverBtn, primaryBtn],
+                onClose: function () {
+                    if (model.view === view) model.view = null;
+                }
+            });
+            model.view = view;
+            view.modal = modal;
+            view.refresh();
+        },
+
+        /**
+         * @method _pickSendableField
+         * @description Chooses the field of a send relationship when the user ticks the box or changes its kind: the field already
+         * chosen if it is still of a type the relationship takes, else the first of them that is named like the relationship
+         * (SubscriberKey, ContactKey, EmailAddress), else the first of them, else none. Nothing else picks a field.
+         * @param {Object} model
+         */
+        _pickSendableField: function (model) {
+            if (saveSendableField(model)) return;
+            var candidates = saveCandidates(model, model.sendable.kind);
+            var likely = model.sendable.kind === 'emailAddress' ? /e-?mail/i : /subscriber|contact.?key/i;
+            var named = candidates.filter(function (i) { return likely.test(model.fields[i].name); });
+            model.sendable.fieldIndex = named.length ? named[0] : (candidates.length ? candidates[0] : -1);
+        },
+
+        /**
+         * @method _drawFooter
+         * @description Draws the overlay's top notice, the cost and the buttons for the model's state: the check of the run's Data
+         * Extension and what it found, a refusal (the create's, which keeps the form, or the move's, which says the Data Extension was
+         * created and kept and offers the move again), a move whose end SQL Studio could not confirm, a save in progress with the step
+         * it is at, or the form ready to save. Move the rows again is off while the check runs, when nothing is left to move, and when
+         * the query would run again into a Data Extension whose fields the user renamed, which it would leave empty.
+         * @param {Object} tab
+         * @param {Object} model
+         * @param {Object} view
+         * @param {Object} errors - saveValidate's answer
+         * @param {Object} buttons - { movingNote, cancelBtn, startOverBtn, primaryBtn }
+         */
+        _drawFooter: function (tab, model, view, errors, buttons) {
+            var save = tab.activeSave;
+            var created = model.created;
+            var renamed = created ? model.fields.filter(saveIsRenamed).map(function (f) { return f.name.trim(); }) : [];
+            var url = created ? dataExtensionUrl(Session.data && Session.data.stackKey, created.objectId) : null;
+            clearNode(view.notice);
+            var notices = [];
+            if (model.checkState === 'pending' && !save) {
+                notices.push(h('p', { class: 'ss-save__note' }, [spinner(), ' Checking that the results are still there…']));
+            } else if (model.checkState === 'done' && model.mode === 'sql') {
+                if (!created) {
+                    notices.push(h('div', { class: 'ss-message-item ss-message-item--info', 'data-save': 'gone' }, 'The temporary Data Extension that holds these results is gone. Saving runs the query again, into the new Data Extension, so each field takes its column\'s name.' +
+                        (model.namesReset ? ' The names you changed are the columns\' names again.' : '')));
+                } else if (renamed.length) {
+                    notices.push(h('div', { class: 'ss-message-item ss-message-item--error', 'data-save': 'gone' }, 'The temporary Data Extension that held these results is gone. Running the query again into ' + created.name +
+                        ' would leave the fields you renamed empty: ' + renamed.join(', ') + '. Save to a new Data Extension instead.'));
+                } else {
+                    notices.push(h('div', { class: 'ss-message-item ss-message-item--info', 'data-save': 'gone' }, 'The temporary Data Extension that held these results is gone. Moving the rows again runs the query again, into ' + created.name + '.'));
+                };
+            } else if (model.checkState === 'done' && model.mode === 'none') {
+                notices.push(h('div', { class: 'ss-message-item ss-message-item--error', 'data-save': 'gone' }, created
+                    ? 'These results and the query that made them are gone, so SQL Studio cannot move the rows into ' + created.name + '. Run the query again, then save.'
+                    : 'These results and the query that made them are gone. Run the query again, then save.'));
+            };
+            if (model.error) {
+                var children = [];
+                if (model.error.stage === 'create' && model.error.mayExist) {
+                    children.push(h('div', null, saveCreateUnknownText(model.error.name, model.error)));
+                } else if (model.error.stage === 'create') {
+                    children.push(h('div', null, saveCreateRefusedBy(model.error) + ' did not create the Data Extension, and nothing was made: ' + model.error.message));
+                } else if (model.error.isUnconfirmed) {
+                    children.push(h('div', null, saveUnconfirmedText(created.name, model.error)));
+                } else {
+                    children.push(h('div', null, 'The Data Extension ' + created.name + ' was created and kept, but its rows were not moved. ' + model.error.message));
+                    /* Its fields are set, so the form's are locked: a Backspace in one went nowhere (the author's RC8 test). */
+                    children.push(h('div', { class: 'ss-save__locked', 'data-save': 'locked-note' }, 'Its fields are set now. To change one, save to a new Data Extension instead.'));
+                };
+                if (model.error.stage !== 'create' && url) children.push(h('a', { class: 'ss-save__link', href: url, target: '_blank', rel: 'noopener noreferrer' }, 'Open it in Contact Builder'));
+                var isWarning = model.error.isUnconfirmed || model.error.mayExist;
+                notices.push(h('div', { class: 'ss-message-item ss-message-item--' + (isWarning ? 'warning' : 'error'), role: 'alert', 'data-save': 'error' }, children));
+            };
+            appendChildren(view.notice, notices);
+            /* Next to Close, and only once the Data Extension exists: what is made, what goes on, and that closing stops nothing. As first
+             * built a line at the top said "You can close this window" from the check on, before anything was made (the author's RC7
+             * test, 2026-10-09). */
+            /* Two lines, so each reads at a glance: what is made and going on, then that the window can close (the author's RC8 test). */
+            clearNode(buttons.movingNote);
+            if (save && save.phase === 'moving' && created) {
+                appendChildren(buttons.movingNote, [
+                    h('span', { class: 'ss-save__moving-line' }, 'The Data Extension ' + created.name + ' is created. The query is moving the rows into it now.'),
+                    h('span', { class: 'ss-save__moving-line' }, 'You can close this window: a message says when the move ends.')
+                ]);
+            };
+            var isMoveAgain = !!created && !save;
+            var canMoveAgain = isMoveAgain && model.checkState === 'done' && model.mode !== 'none' && !(model.mode === 'sql' && renamed.length > 0);
+            view.cost.textContent = save ? '' : saveCostText(model);
+            var isReady = errors.count === 0 && model.checkState === 'done' && model.mode !== 'none';
+            view.fix.textContent = (!save && !isMoveAgain && errors.count > 0) ? 'Fix the marked values to save. ' + errors.count + (errors.count === 1 ? ' value needs' : ' values need') + ' a change.' : '';
+            clearNode(buttons.primaryBtn);
+            if (save) {
+                var step = {
+                    checking: 'Checking…',
+                    creating: 'Creating…',
+                    moving: 'Moving rows…'
+                };
+                buttons.primaryBtn.disabled = true;
+                buttons.primaryBtn.setAttribute('aria-busy', 'true');
+                buttons.primaryBtn.appendChild(spinner());
+                buttons.primaryBtn.appendChild(document.createTextNode(step[save.phase] || step.moving));
+            } else {
+                buttons.primaryBtn.removeAttribute('aria-busy');
+                buttons.primaryBtn.disabled = isMoveAgain ? !canMoveAgain : !isReady;
+                buttons.primaryBtn.textContent = isMoveAgain ? 'Move the rows again' : 'Save';
+            };
+            buttons.cancelBtn.textContent = (save || isMoveAgain) ? 'Close' : 'Cancel';
+            buttons.startOverBtn.style.display = isMoveAgain ? '' : 'none';
+        },
+
+        /**
+         * @method _redraw
+         * @description Draws what a save's step changes: the header's buttons, and the overlay when it is open.
+         * @param {?Object} model
+         */
+        _redraw: function (model) {
+            UI._syncExportCost();
+            if (model && model.view) model.view.refresh();
+        },
+
+        /**
+         * @method _start
+         * @description Starts the save of a model: the check of the run's temporary Data Extension when the save moves its rows, the create
+         * and then the move, or the move alone into the Data Extension a refused move left (model.created). The tab's activeSave holds its
+         * other actions meanwhile, and the buttons show the step. A check that finds the Data Extension gone switches the save to the
+         * query (_check): before the create, a field the user renamed takes its column's name again, and the save stops there so the user
+         * sees the names it will make. Into a created Data Extension with renamed fields the query cannot move the rows, and the save
+         * stops too. A failure of the create ends with the form as it was and the refusal's message. A failure of the move, or an error
+         * in its task, ends with the Data Extension kept: its Schema entry stays, and the overlay offers the move again (_settle).
+         * @param {Object} tab
+         * @param {Object} model - the save model, which saveValidate passes (the move alone needs none)
+         */
+        _start: function (tab, model) {
+            var self = this;
+            if (tab.activeSave) return;
+            var isMoveOnly = !!model.created;
+            if (model.checkState !== 'done' || model.mode === 'none') return;
+            if (!isMoveOnly && saveValidate(model).count > 0) return;
+            var owner = { _calls: [] };
+            var stage = isMoveOnly ? 'move' : 'create';
+            model.error = null;
+            var save = {
+                phase: model.mode === 'from' ? 'checking' : (isMoveOnly ? 'moving' : 'creating'),
+                name: isMoveOnly ? model.created.name : model.name.trim(),
+                /* The run's count, which the toast gives, or null when the query runs again on newer data and no count is known. */
+                rowCount: model.mode === 'sql' ? null : model.rowCount,
+                /* The query activity the move uses, which QueryTabs.pickSlot keeps from every run and other save until the save ends. */
+                slot: null,
+                made: isMoveOnly ? model.created : null,
+                /* The move's task once it has started, which the tab's snapshot keeps (snapshotOf). */
+                task: null
+            };
+            tab.activeSave = save;
+            self._redraw(model);
+            var checked = model.mode === 'from' ? self._check(tab, model, owner) : Promise.resolve();
+            var namesBefore = model.fields.map(function (f) { return f.name; }).join('\n');
+            var saved = checked.then(function () {
+                var stop = null;
+                if (model.mode === 'none') {
+                    stop = 'These results and the query that made them are gone, so SQL Studio saved nothing. Run the query again, then save.';
+                } else if (!isMoveOnly && model.fields.map(function (f) { return f.name; }).join('\n') !== namesBefore) {
+                    stop = 'The temporary Data Extension of these results is gone, so SQL Studio saved nothing yet. Saving runs the query again, so each field takes its column\'s name: open Save to DE to save that way.';
+                } else if (isMoveOnly && model.mode === 'sql' && model.fields.some(saveIsRenamed)) {
+                    stop = 'The temporary Data Extension of these results is gone, and running the query again into ' + model.created.name + ' would leave the fields you renamed empty. Open Save to DE to save to a new Data Extension instead.';
+                };
+                if (stop) {
+                    var stopped = new Error(stop);
+                    stopped.isStop = true;
+                    throw stopped;
+                };
+                if (isMoveOnly) return model.created;
+                save.phase = 'creating';
+                self._redraw(model);
+                return Api.call('createDataExtension', saveCreatePayload(model), owner).then(function (res) {
+                    var made = {
+                        objectId: res.objectId || null,
+                        key: res.key,
+                        name: res.name || model.name.trim(),
+                        /* What binds the key to this user: the Backend moves rows only into a Data Extension with it. */
+                        targetSig: typeof res.targetSig === 'string' ? res.targetSig : null
+                    };
+                    model.created = made;
+                    Schema.addCreatedDataExtension(made, model);
+                    return made;
+                }, function (err) {
+                    /* An answer that never came, or one the Backend could not read as a refusal (CREATE_UNCONFIRMED), may still
+                     * have made it, and the Backend's CREATED_NO_KEY made it: none says that nothing was made (mayExist). */
+                    if (err && (err.code === 'NETWORK' || err.code === 'CREATE_UNCONFIRMED' || err.code === 'CREATED_NO_KEY')) err.mayExist = true;
+                    throw err;
+                });
+            }).then(function (made) {
+                stage = 'move';
+                save.made = made;
+                save.name = made.name;
+                /* The check may have switched the save to the query. */
+                save.rowCount = model.mode === 'sql' ? null : model.rowCount;
+                save.phase = 'moving';
+                self._redraw(model);
+                return self._move(tab, model, save, owner);
+            });
+            self._settle(tab, model, save, owner, saved, function () { return stage; });
+        },
+
+        /**
+         * @method _move
+         * @description Moves the rows into the created Data Extension with moveToDataExtension: the run's temporary Data Extension
+         * and its columns (aliased where the user renamed a field), or the run's SQL when that Data Extension is gone, with the key's
+         * signature from the create, and the slot's cached activity and the SQL Studio query folder, as a run sends them, so a slot that
+         * has no activity yet gets one in that folder. Its query activity is the lowest slot no run, save or held slot of this window uses
+         * (QueryTabs.pickSlot), picked once the run start before it has answered, as a run's is, and held in the save until it ends, and
+         * after an unconfirmed end until POLL_MAX_MS after it started (_settle): a move waiting in Marketing Cloud Engagement's queue
+         * reads as not running, so a run sent to its activity would take it over. The request itself is _sendMove. The task it answers
+         * goes into the save, where the tab's snapshot keeps it, and is then followed (_follow).
+         * @param {Object} tab
+         * @param {Object} model
+         * @param {Object} save - the tab's activeSave, with made, the created Data Extension { objectId, key, name, targetSig }
+         * @param {Object} owner - { _calls }, where the calls of this save are noted
+         * @returns {Promise} resolves once the rows are moved
+         */
+        _move: function (tab, model, save, owner) {
+            var self = this;
+            return self._sendMove(tab, model, save, owner).then(function (moved) {
+                if (moved && moved.slot) save.slot = moved.slot;
+                /* The slot's activity, as a run caches it, for the next run or move of that slot. */
+                if (moved && moved.queryId) safeSet(adhocQueryKey(save.slot), moved.queryId);
+                save.task = {
+                    queryId: moved.queryId,
+                    taskId: moved.taskId || null,
+                    taskSig: (moved.taskId && typeof moved.taskSig === 'string') ? moved.taskSig : null,
+                    startedAt: Date.now(),
+                    /* How the last check read the task: 'wsproxy' or 'soap'. A check whose task read failed counts as 'soap', a paid one. */
+                    via: null,
+                    hasTaskRow: false,
+                    hasSeenRunning: false,
+                    notRunningSince: null
+                };
+                QueryTabs.markChanged(tab);
+                QueryTabs.persist();
+                return self._follow(tab, save, owner);
+            });
+        },
+
+        /**
+         * @method _sendMove
+         * @description Sends a save's moveToDataExtension request, once the run start before it has answered (runStartQueue), on the
+         * slot QueryTabs.pickSlot gives, with the SQL Studio query folder of Schema.workspace (none when that lookup fails, as a run
+         * sends none). From the moment it goes, the move may start: the save keeps the time (save.sentAt) and the tabs are saved, so
+         * a reload or Renew before the answer keeps the save as sent and unanswered, with its query activity held (snapshotOf,
+         * resume). A request that ends with no answer, at a time limit (both NETWORK) or with the Backend's START_UNCONFIRMED may have
+         * started the move, so it ends unconfirmed. One refused for a query folder deleted since the page cached it (isFolderRefusal)
+         * started nothing: as a run does, the folders' answer is forgotten and, when it came from the cache, looked up again for one
+         * more request. A second such refusal shows, and the next Move the rows again looks the folders up.
+         * @param {Object} tab
+         * @param {Object} model
+         * @param {Object} save - the tab's activeSave, with made
+         * @param {Object} owner - { _calls }
+         * @returns {Promise<Object>} the moveToDataExtension answer
+         */
+        _sendMove: function (tab, model, save, owner) {
+            var self = this;
+            /* The folders a run files its activity in, which the page has once a run has started: a failed lookup sends none, as a
+             * run does. */
+            var folders = Schema.workspace().catch(function () { return {}; });
+            return folders.then(function (ws) {
+                return runStartQueue.then(function () {
+                    save.slot = QueryTabs.pickSlot(tab);
+                    var payload = {
+                        slot: save.slot,
+                        targetKey: save.made.key
+                    };
+                    if (save.made.targetSig) payload.targetSig = save.made.targetSig;
+                    if (model.mode === 'sql') {
+                        payload.sql = model.sql;
+                    } else {
+                        payload.from = {
+                            deKey: model.runKey,
+                            columns: saveMoveColumns(model)
+                        };
+                    };
+                    if (ws && ws.queryFolderId) payload.queryFolderId = ws.queryFolderId;
+                    var cachedQueryId = safeGet(adhocQueryKey(save.slot));
+                    if (cachedQueryId) payload.queryId = cachedQueryId;
+                    /* From here the move may start: an unconfirmed end holds the slot from this time when no task came back, and the
+                     * saved tabs keep the save as sent until the answer comes (second verification pass, 2026-10-07). */
+                    save.sentAt = Date.now();
+                    QueryTabs.markChanged(tab);
+                    QueryTabs.persist();
+                    return Api.call('moveToDataExtension', payload, owner).catch(function (err) {
+                        /* An answer that never came, or the Backend's START_UNCONFIRMED, may still have started the move: it is no
+                         * refusal (reviews, 2026-10-07). NETWORK holds a network failure, the request's time limit and an HTTP 408 or
+                         * 504. */
+                        if (err && err.code === 'START_UNCONFIRMED') throw saveUnconfirmed(saveSentence(err.message));
+                        if (err && err.code === 'NETWORK') throw saveUnconfirmed('The move\'s request got no answer SQL Studio can read: ' + saveSentence(err.message) + ' SQL Studio cannot tell whether Marketing Cloud Engagement started the move.');
+                        /* A folder deleted since it was cached: the Backend refused before it started anything. */
+                        if (isFolderRefusal(err) && Schema.forgetWorkspace()) {
+                            save.sentAt = null;
+                            QueryTabs.markChanged(tab);
+                            QueryTabs.persist();
+                            return self._sendMove(tab, model, save, owner);
+                        };
+                        throw err;
+                    });
+                });
+            });
+        },
+
+        /**
+         * @method _follow
+         * @description Follows a move's task as the runner follows a run's: getRunStatus with the task ID, its signature and taskOnly, on a
+         * run's schedule (saveCheckWait), until the task is Complete, or ends in an error, which rejects with what Marketing Cloud
+         * Engagement said. The first check comes POLL_FAST_MS after the start, as a run's first poll, and one resumed after a reload comes
+         * at once. A status the app does not read counts as waiting. A check that finds no task row answers pending, and a move whose row
+         * never comes in TASK_ROW_WAIT_MS ends unconfirmed. A check whose task read failed answers isrunning: the next check asks for
+         * the task again, and a move that stops running while its task cannot be read ends unconfirmed after three more checks, never
+         * as saved. Without a task ID, from a REST start, isrunning alone is read: seen running and then not running is the end, which
+         * is unconfirmed too, as a refused move stops running as well and nothing says which. Not running when it was never seen
+         * running may be a queue, which Marketing Cloud Engagement reports as not running, so the checks go on for POLL_QUEUE_WAIT_MS
+         * before it ends unconfirmed, as a run without rows waits for its queue. A REST start therefore never ends as saved. Network
+         * failures and HTTP 429 refusals are ridden out up to POLL_MAX_NETWORK_FAILURES in a row, and an ended
+         * session waits for the background renewal, as a run's status checks do (QueryRunner._isWaitingForRenewal): when the dialog takes
+         * over, the save stays as it is, so the snapshot Renew saves holds it and the follow resumes after the sign-in. A wait past
+         * POLL_MAX_MS ends unconfirmed too. Each unconfirmed end says the rows may still arrive, except one that says the move has ended
+         * (saveUnconfirmed).
+         * @param {Object} tab
+         * @param {Object} save - the tab's activeSave, with its task, { queryId, taskId, taskSig, startedAt, via, hasTaskRow,
+         * hasSeenRunning, notRunningSince }
+         * @param {Object} owner - { _calls }
+         * @returns {Promise} resolves when the move is complete
+         */
+        _follow: function (tab, save, owner) {
+            var task = save.task;
+            return new Promise(function (resolve, reject) {
+                var failures = 0;
+                /**
+                 * @function isCurrent
+                 * @description Whether this follow still belongs to the tab's save.
+                 * @returns {boolean}
+                 */
+                function isCurrent() {
+                    return tab.activeSave === save;
+                };
+                /**
+                 * @function later
+                 * @description Schedules the next check on the run's schedule for this move.
+                 */
+                function later() {
+                    setTimeout(check, saveCheckWait(saveIsFreeFollow(task), Date.now() - task.startedAt));
+                };
+                /**
+                 * @function check
+                 * @description One check of the move's task, which schedules the next or ends the wait.
+                 */
+                function check() {
+                    if (!isCurrent()) return;
+                    var payload = { queryId: task.queryId };
+                    if (task.taskId && task.via !== 'none') {
+                        payload.taskId = task.taskId;
+                        if (task.taskSig) payload.taskSig = task.taskSig;
+                        payload.taskOnly = true;
+                    };
+                    /* A read through SOAP sends the checks to the paid schedule for good, unless it went out without the hint, as
+                     * a check resumed before whoami has said where the session is. */
+                    var isHinted = Session.isBackendBu();
+                    var noteVia = function (via) {
+                        if (via && (isHinted || via === 'wsproxy')) task.via = via;
+                    };
+                    Api.call('getRunStatus', payload, owner).then(function (res) {
+                        if (!isCurrent()) return;
+                        failures = 0;
+                        var now = Date.now();
+                        if (res && res.taskStatus) {
+                            noteVia(res.taskStatus.via);
+                            task.hasTaskRow = true;
+                            task.notRunningSince = null;
+                            var kind = classifyRunOutcome(res.taskStatus);
+                            if (kind === 'complete') {
+                                resolve();
+                                return;
+                            };
+                            if (kind === 'failed') {
+                                reject(new Error(saveFailureText(res.taskStatus, tab, tab.saveModel)));
+                                return;
+                            };
+                            if (kind === 'unknown') logUnknownRunStatus(res.taskStatus.status);
+                        } else if (res && res.pending === true) {
+                            noteVia(res.pendingVia === 'soap' ? 'soap' : 'wsproxy');
+                            if (!task.hasTaskRow && now - task.startedAt > TASK_ROW_WAIT_MS) {
+                                reject(saveUnconfirmed('Marketing Cloud Engagement gave no status for the move in 5 minutes.'));
+                                return;
+                            };
+                        } else if (res && (res.isRunning === true || res.isRunning === false)) {
+                            /* With a task ID the Backend answers isrunning only when its read of the task failed this time: the next check
+                             * asks for the task again, and isrunning alone never confirms the move, as a move that Marketing Cloud
+                             * Engagement refused stops running too and would read as saved (review, 2026-10-07). It is the end only
+                             * without a task ID, from a REST start, as for a run. Once the move is no longer running while its task cannot
+                             * be read, three more checks ask for the task, and then the move ends unconfirmed. */
+                            var isTaskUnread = !!payload.taskId;
+                            if (isTaskUnread) task.via = 'soap';
+                            if (res.isRunning) {
+                                task.hasSeenRunning = true;
+                                task.notRunningSince = null;
+                            } else if (task.hasSeenRunning && isTaskUnread) {
+                                task.unreadEnds = (task.unreadEnds || 0) + 1;
+                                if (task.unreadEnds > 3) {
+                                    reject(saveUnconfirmed(SAVE_ENDED_UNREAD_TEXT, true));
+                                    return;
+                                };
+                            } else if (task.hasSeenRunning) {
+                                /* A REST start, seen running and now not: the move has ended, but a refused move ends so too, and
+                                 * there is no task to read which (final review, 2026-10-07). */
+                                reject(saveUnconfirmed(SAVE_ENDED_UNREAD_TEXT, true));
+                                return;
+                            } else {
+                                if (!task.notRunningSince) task.notRunningSince = now;
+                                if (now - task.notRunningSince >= POLL_QUEUE_WAIT_MS) {
+                                    reject(saveUnconfirmed('Marketing Cloud Engagement never said the move was running, so SQL Studio cannot tell whether it ran or still waits in the queue.'));
+                                    return;
+                                };
+                            };
+                        };
+                        if (now - task.startedAt > POLL_MAX_MS) {
+                            reject(saveUnconfirmed('Marketing Cloud Engagement had not finished the move after 31 minutes.'));
+                            return;
+                        };
+                        later();
+                    }, function (err) {
+                        if (!isCurrent()) return;
+                        failures++;
+                        if (err && (err.code === 'NETWORK' || err.code === 'RATE_LIMITED') && failures < POLL_MAX_NETWORK_FAILURES) {
+                            later();
+                            return;
+                        };
+                        if (err && (err.code === 'SESSION_EXPIRED' || err.code === 'SESSION_INVALID')) {
+                            var recovery = Session.recovery();
+                            if (recovery) {
+                                recovery.then(function () {
+                                    failures = 0;
+                                    check();
+                                }, function () { /* the dialog has taken over: its snapshot holds the save, which goes on after Renew */ });
+                                return;
+                            };
+                            /* No background renewal: the dialog is on screen, and the save waits for Renew in the snapshot. */
+                            if (Session._expired) return;
+                        };
+                        reject(saveUnconfirmed('Checking the move failed: ' + saveSentence(err && err.message)));
+                    });
+                };
+                setTimeout(check, Math.max(0, task.startedAt + POLL_FAST_MS - Date.now()));
+            });
+        },
+
+        /**
+         * @method _settle
+         * @description Ends a save, whichever way it goes: _finish when the rows are moved, and otherwise the tab is free again and the
+         * overlay, or a toast when it is closed, says what happened. A save that stopped before it made anything (isStop) says why. A
+         * refused create keeps the form and says nothing was made, and a create that may have made the Data Extension (mayExist) keeps
+         * it too, with a warning to look in Contact Builder first. A move that failed says the Data Extension was created and kept, and
+         * one whose end SQL Studio could not confirm (isUnconfirmed) says so, with a link to the Data Extension in Contact Builder when
+         * the stack is known. An unconfirmed move may still wait in Marketing Cloud Engagement's queue, so its query activity stays held
+         * from this window's runs and saves, its own tab's included, until POLL_MAX_MS after the move started (QueryTabs.holdSlot). A
+         * move whose end is known, done or failed, frees it. After a move from the run's temporary Data Extension that failed, that
+         * Data Extension is checked again (_check), as a gone one fails the move, and Move the rows again then runs the query.
+         * @param {Object} tab
+         * @param {?Object} model - the save model, or null for a save resumed without one
+         * @param {Object} save - the tab's activeSave
+         * @param {Object} owner - { _calls }
+         * @param {Promise} promise - the save's steps, which resolve once the rows are moved
+         * @param {Function} stageOf - gives the step that failed: 'create' or 'move'
+         */
+        _settle: function (tab, model, save, owner, promise, stageOf) {
+            var self = this;
+            promise.then(function () {
+                if (tab.activeSave === save) self._finish(tab, model, save, owner);
+            }, function (err) {
+                if (tab.activeSave !== save) return;
+                var stage = stageOf();
+                var message = err && err.message ? err.message : 'No message.';
+                var isUnconfirmed = !!(err && err.isUnconfirmed);
+                var mayExist = !!(err && err.mayExist);
+                tab.activeSave = null;
+                if (isUnconfirmed && save.slot) {
+                    var movedAt = (save.task && save.task.startedAt) || save.sentAt;
+                    if (movedAt) QueryTabs.holdSlot(tab, save.slot, movedAt + POLL_MAX_MS);
+                };
+                QueryTabs.markChanged(tab);
+                QueryTabs.persist();
+                if (err && err.isStop) {
+                    if (model && model.view) {
+                        self._redraw(model);
+                    } else {
+                        UI._syncExportCost();
+                        Toast.show(message, 'info', { duration: 15000 });
+                    };
+                    return;
+                };
+                var name = save.made ? save.made.name : save.name;
+                var url = save.made ? dataExtensionUrl(Session.data && Session.data.stackKey, save.made.objectId) : null;
+                var error = {
+                    stage: stage,
+                    code: (err && err.code) || null,
+                    name: name,
+                    message: message,
+                    details: (err && err.details) || null,
+                    isUnconfirmed: isUnconfirmed,
+                    hasEnded: !!(err && err.hasEnded),
+                    mayExist: mayExist
+                };
+                if (model) model.error = error;
+                if (model && model.view) {
+                    self._redraw(model);
+                } else {
+                    UI._syncExportCost();
+                    if (stage === 'create' && mayExist) {
+                        Toast.show(saveCreateUnknownText(name, error), 'warning', { duration: 15000 });
+                    } else if (stage === 'create') {
+                        Toast.show(saveCreateRefusedBy(error) + ' did not create the Data Extension ' + name + ': ' + message, 'error', { duration: 15000 });
+                    } else if (isUnconfirmed) {
+                        Toast.show(saveUnconfirmedText(name, error), 'warning', url ? { duration: 15000, link: { text: 'Open in Contact Builder', href: url } } : { duration: 15000 });
+                    } else {
+                        Toast.show('The Data Extension ' + name + ' was created and kept, but its rows were not moved. ' + message + (model ? ' Open Save to DE to move them again.' : ''), 'error', { duration: 15000 });
+                    };
+                };
+                if (typeof console !== 'undefined') console.warn('[SQL Studio] Save to Data Extension ' + (isUnconfirmed ? 'could not confirm the move' : (mayExist ? 'could not read the create\'s answer' : 'failed at the ' + stage)) + ': ' + message);
+                if (model && stage === 'move' && !isUnconfirmed && model.mode === 'from') self._check(tab, model);
+            });
+        },
+
+        /**
+         * @method _finish
+         * @description Ends a save that worked: the tab is free again, the overlay closes, and a toast says how many rows the Data
+         * Extension holds, which are the run's, with a link to it in Contact Builder when the stack and its ObjectID are both known. A
+         * save that ran the query again knows no count (save.rowCount null), so its toast gives none. The console line says what the
+         * save cost. The model goes, as the save is done.
+         * @param {Object} tab
+         * @param {?Object} model
+         * @param {Object} save - the tab's activeSave, with made, the Data Extension { objectId, key, name }
+         * @param {Object} owner - { _calls }
+         */
+        _finish: function (tab, model, save, owner) {
+            var made = save.made;
+            tab.activeSave = null;
+            if (!model || tab.saveModel === model) tab.saveModel = null;
+            QueryTabs.markChanged(tab);
+            QueryTabs.persist();
+            var view = model ? model.view : null;
+            if (model) model.view = null;
+            if (view && view.modal) view.modal.close();
+            UI._syncExportCost();
+            var url = dataExtensionUrl(Session.data && Session.data.stackKey, made.objectId);
+            var what = typeof save.rowCount === 'number' ? fmtRows(save.rowCount) : 'the query\'s results';
+            Toast.show('Saved ' + what + ' to ' + made.name + '.', 'success', url ? { duration: 10000, link: { text: 'Open in Contact Builder', href: url } } : undefined);
+            if (typeof console !== 'undefined') {
+                var api = owner._calls.reduce(function (sum, c) { return sum + (c.apiCalls || 0); }, 0);
+                var wsproxy = owner._calls.reduce(function (sum, c) { return sum + (c.wsproxyCalls || 0); }, 0);
+                console.info('[SQL Studio] Saved ' + what + ' to the Data Extension ' + made.name + ' (' + made.key + ') with ' + callCountsText(api, wsproxy) + '.');
+            };
+        },
+
+        /**
+         * @method snapshotOf
+         * @description What a tab's snapshot keeps of its save once the move's request has gone, so a reload or Renew follows it on
+         * (resume): the slot it holds, the Data Extension (its key, the key's signature, its ObjectID and name), the run's row count
+         * (null for a save that runs the query again), the time the request went (sentAt), the move's task with what its checks found
+         * so far, or null while the request has not answered, and the save model without its view or error, so Move the rows again
+         * works after the reload. A request sent and unanswered may have started the move, so it is kept too, and its slot is held
+         * (unansweredHoldOf). Null for a tab that does not save, or whose move's request has not gone yet.
+         * @param {Object} tab
+         * @returns {?Object}
+         */
+        snapshotOf: function (tab) {
+            var save = tab.activeSave;
+            if (!save || !save.made || (!save.task && !save.sentAt)) return null;
+            var model = null;
+            if (tab.saveModel) {
+                model = {};
+                Object.keys(tab.saveModel).forEach(function (key) {
+                    if (key !== 'view' && key !== 'error') model[key] = tab.saveModel[key];
+                });
+            };
+            return {
+                slot: save.slot,
+                targetKey: save.made.key,
+                targetSig: save.made.targetSig || null,
+                objectId: save.made.objectId || null,
+                name: save.made.name,
+                rowCount: save.rowCount,
+                sentAt: save.sentAt || null,
+                task: save.task ? Object.assign({}, save.task) : null,
+                model: model
+            };
+        },
+
+        /**
+         * @method unansweredHoldOf
+         * @description The hold a tab's snapshot adds for a move whose request has gone and not answered: its slot until POLL_MAX_MS
+         * after the request went, as an unconfirmed end holds it (_settle). The page that loads the snapshot then keeps its runs off
+         * that query activity from the start (QueryTabs.applySaved), before the save itself is restored and ended (resume). Null when
+         * the tab has no such move.
+         * @param {Object} tab
+         * @returns {?{slot: number, until: number}}
+         */
+        unansweredHoldOf: function (tab) {
+            var save = tab.activeSave;
+            if (!save || save.task || !save.sentAt || !save.slot) return null;
+            return {
+                slot: save.slot,
+                until: save.sentAt + POLL_MAX_MS
+            };
+        },
+
+        /**
+         * @method resume
+         * @description Follows on, after a reload or Renew, the move a tab's snapshot kept (snapshotOf), as QueryRunner.resumeRun resumes a
+         * run: the save holds its slot and the tab's other actions again, the first check goes out at once, and it ends as a save does,
+         * with the same toast. A move whose request had not answered has no task to follow, and its request may have started it: the
+         * save ends unconfirmed at once, which holds its slot until POLL_MAX_MS after the request went (_settle), and Save to DE opens on
+         * the kept Data Extension with Move the rows again. A move that started more than POLL_MAX_MS ago is over either way and is left
+         * alone.
+         * @param {Object} tab
+         * @param {Object} entry - the snapshot's save entry
+         */
+        resume: function (tab, entry) {
+            if (tab.activeSave || !entry || !entry.targetKey) return;
+            var isUnanswered = !entry.task && typeof entry.sentAt === 'number';
+            if (!isUnanswered && !(entry.task && entry.task.queryId)) return;
+            var startedAt = isUnanswered ? entry.sentAt : (entry.task.startedAt || 0);
+            if (!(Date.now() - startedAt <= POLL_MAX_MS)) return;
+            var made = {
+                objectId: entry.objectId || null,
+                key: entry.targetKey,
+                name: entry.name || entry.targetKey,
+                targetSig: entry.targetSig || null
+            };
+            var model = (entry.model && typeof entry.model === 'object' && Array.isArray(entry.model.fields)) ? entry.model : null;
+            if (model) {
+                model.view = null;
+                model.error = null;
+                model.created = made;
+                tab.saveModel = model;
+            };
+            var save = {
+                phase: 'moving',
+                name: made.name,
+                /* None for a save that ran the query again, whose count no one knows. */
+                rowCount: typeof entry.rowCount === 'number' ? entry.rowCount : null,
+                slot: entry.slot || null,
+                made: made,
+                sentAt: typeof entry.sentAt === 'number' ? entry.sentAt : null,
+                task: isUnanswered ? null : Object.assign({}, entry.task)
+            };
+            tab.activeSave = save;
+            var owner = { _calls: [] };
+            UI._syncExportCost();
+            if (isUnanswered) {
+                if (typeof console !== 'undefined') console.info('[SQL Studio] The move into the Data Extension ' + made.name + ' had no answer before the page was reloaded.');
+                this._settle(tab, model, save, owner, Promise.reject(saveUnconfirmed(SAVE_UNANSWERED_TEXT)), function () { return 'move'; });
+                return;
+            };
+            if (typeof console !== 'undefined') console.info('[SQL Studio] Following the move into the Data Extension ' + made.name + ' again.');
+            this._settle(tab, model, save, owner, this._follow(tab, save, owner), function () { return 'move'; });
+        }
     };
 
     /* ======================================================================
@@ -27501,6 +32239,9 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             /* Now that whoami has said who this is, the history and the Data Extension list are theirs. */
             History.load();
             Schema.loadDataExtensionList().catch(function () { /* retried on first use, see above */ });
+            /* The snippets are the Business Unit's, which whoami has just named, and cost no API call. Where the Backend has them off,
+             * this does nothing and the sidebar has no Snippets section. */
+            Snippets.load();
             /* One-time cleanup: the per-browser "My Data Extensions" list this
             replaced is no longer read anywhere. */
             safeRemove(midKey('ss.myTables'));
@@ -27630,6 +32371,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         editor: Editor,
         grid: Grid,
         history: History,
+        snippets: Snippets,
         dialogs: Dialogs,
         settings: Settings,
         ui: UI
