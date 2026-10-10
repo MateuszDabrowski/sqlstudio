@@ -2,6 +2,28 @@
 
 All notable changes to SQL Studio are documented in this file.
 
+## 1.2.1 - 2026-10-10
+
+SQL Studio's lint now knows that Marketing Cloud Engagement runs SQL Server 2022, so it flags what SQL Server 2025 added before you run it, and Results grey out once you edit the query after a run. Updating means replacing the code of SQL Studio Frontend. The Backend and the Cloud Page changed only their version number, so updating them is optional.
+
+### Highlights
+
+- Lint flags what SQL Server 2025 added, such as REGEXP_LIKE, CURRENT_DATE, the || operator or the RETURNING clause, as Marketing Cloud Engagement runs SQL Server 2022 and refuses it.
+- No false warning on a + next to a value that cannot be NULL, such as REPLICATE('x', 4000) or ISNULL(x, '').
+- Validate and Format say what they did in Status, and Validate brings Status to the front.
+- Results grey out on a soft hatch when you edit the query after a run, until it matches again, and the first such edit brings Status to the front.
+- The editor colours a column called Position or Domain as a name, not as a keyword.
+- Replace SQL Studio Frontend: the Backend and the Cloud Page can stay as they are.
+
+### What is in it
+
+- **SQL Server 2025, flagged:** lint rule MCE074 marks as an error each function and piece of syntax that SQL Server 2025 added, with Marketing Cloud Engagement's own answer where the author's account was tested, and the SQL Server 2022 way to do the same. CURRENT_DATE, RETURNING, a cast to JSON and SUBSTRING with two arguments have a one-click fix, and Fix all applies the ones that leave the results as they are. Autocomplete offers none of them.
+- **Clearer syntax errors:** RETURNING, ||, REGEXP_LIKE in WHERE and JSON_OBJECTAGG no longer read as a missing ) or as text after the end of the query, and a word where , or ) belongs is named. CURRENT_TIMESTAMP and CURRENT_USER with an alias and no AS, as in CURRENT_TIMESTAMP Ts, no longer get MCE010 for a column with no name.
+- **MCE032:** a + next to a value that cannot be NULL, such as REPLICATE('x', 4000), UPPER('x') or ISNULL(x, ''), no longer gets the NULL warning, while a column next to it still does.
+- **Validate and Format:** Validate's error in the Status panel opens with "Validate:", as it sits under the last run's summary. A Validate that Marketing Cloud Engagement accepts says so in Status too, and either answer brings Status to the front, where the last run's rows of an earlier query read as Validate's answer. Format's button reads "Formatted" for a moment and Status says "Format: done.", in place of the "Already formatted." toast. A query Format cannot lay out, such as one with a text left open, says why.
+- **Results after an edit:** once a run is done, an edit that changes the query greys the rows and the column headers on a soft hatch, and "Edited since this run" shows before the run summary, at every window width, with a tip that says the rows come from the query as it last ran. The mark goes when the query matches the run again, as after an undo, when you run again and when you delete the results, and each query tab has its own. The first edit that greys a run's rows brings Status to the front, where lint speaks of the query as it is now, once a run, so a click back to Results stays. Layout, comments, letter case, AS, INNER or OUTER before JOIN and <> against != do not change what a query does, so a Format never greys the rows. A run of one selected statement stays current while that statement is unchanged, also in a tab that keeps several queries apart by blank lines with no ;, while a clause added to it greys its rows. A run of a selected subquery stays current while the subquery is unchanged. Validate's line in Status now goes only when the query changes, so a Format right after a Validate keeps it, and an edit made while Marketing Cloud Engagement checks the query takes it at once. "Format: done." goes with any change to the text, also in the plain text editor. A Validate answer that comes after you started a run no longer puts Status in front of the new rows.
+- **Keyword colours:** the editor colours as keywords only the words Marketing Cloud Engagement reads as keywords, and the data types CAST and CONVERT take. Its old word list came from SQLite and other SQL dialects, so a column called Position, Domain, Level or Value looked like a keyword, while NVARCHAR, DATETIME and MONEY did not. TEXT and TIMESTAMP stay plain, as Text and Timestamp are likely field names. The date parts HOUR, MINUTE and SECOND now take the colour of a name, as WEEK always did. DAY, MONTH and YEAR keep the colour of a function, as they are functions too.
+
 ## 1.2.0 - 2026-10-09
 
 This release is driven by feedback from Scott and Greg. Thank you both! Send yours to sqlstudio_feedback@mateuszdabrowski.pl. Save a run's results into a Data Extension you set up, join a table to your query from the sidebar, and keep shared snippets of SQL. 1.2.0 also holds 1.1.1, which was not announced on its own: a Business Unit with thousands of Data Extensions loads its Data Extension list again. Updating means replacing the code of SQL Studio Frontend and SQL Studio Backend: the settings stay as they are, and the Cloud Page changed only its version line, so it can stay too.

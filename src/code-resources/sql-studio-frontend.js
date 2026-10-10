@@ -1,11 +1,11 @@
-/* SQL Studio 1.2.0 - SQL Studio Frontend, the readable copy with its comments. Paste sql-studio-frontend.min.js instead: it is the same code, and Marketing Cloud Engagement served it in 2 s, against 18 s for this file, on the author's org. */
+/* SQL Studio 1.2.1 - SQL Studio Frontend, the readable copy with its comments. Paste sql-studio-frontend.min.js instead: it is the same code, and Marketing Cloud Engagement served it in 2 s, against 18 s for this file, on the author's org. */
 /* Copyright (c) 2026 Mateusz Dąbrowski. Free to use, change and share, commercial use included, as long as this notice stays. Licensed under the EUPL 1.2: https://github.com/MateuszDabrowski/sqlstudio/blob/main/LICENSE */
 /* Includes Salesforce Lightning Design System icons, unchanged: © Salesforce, Inc., CC BY-ND 4.0, https://creativecommons.org/licenses/by-nd/4.0/ */
 /* Contents (line numbers are where each part starts in this finished file):
      1. SQL data: Data Views, functions and keywords - line 10
      2. SQL tools: lint rules, formatter and parser - line 1185
-     3. Styles - line 13227
-     4. The interface: editor, tabs, results, dialogs and runs - line 13231
+     3. Styles - line 14012
+     4. The interface: editor, tabs, results, dialogs and runs - line 14016
 */
 /* ================================================ sqlstudio-sql-data.js == */
 /*
@@ -1267,6 +1267,19 @@ window.SQLStudioSQL = {
         return set;
     }());
 
+    // The words the editor colours as keywords: the ones the tokenizer reads as keywords, and the
+    // words that start the ORDER BY ... OFFSET ... FETCH NEXT ... ROW ONLY paging clause. Monaco's own
+    // SQL list mixes in SQLite and ANSI words that Marketing Cloud Engagement reads as plain names, so
+    // a column called Position or Domain looked like a keyword (the author's test, 2026-10-09).
+    var HIGHLIGHT_KEYWORDS = RESERVED_WORDS.concat(EXTRA_GRAMMAR_KEYWORDS, ['OFFSET', 'NEXT', 'FIRST', 'ROW', 'USING', 'ROLLUP', 'CUBE', 'NOLOCK']);
+    // The data types the editor colours as keywords, with the synonyms CAST and CONVERT take (INTEGER, DEC, CHARACTER). TEXT, NTEXT, IMAGE
+    // and TIMESTAMP stay names: Text and Timestamp are likely field names, and the first three types are deprecated.
+    var HIGHLIGHT_TYPES = [
+        'BIGINT', 'BINARY', 'BIT', 'CHAR', 'CHARACTER', 'DATE', 'DATETIME', 'DATETIME2', 'DATETIMEOFFSET', 'DEC', 'DECIMAL', 'FLOAT', 'INT',
+        'INTEGER', 'MONEY', 'NCHAR', 'NUMERIC', 'NVARCHAR', 'REAL', 'SMALLDATETIME', 'SMALLINT', 'SMALLMONEY', 'SQL_VARIANT', 'TIME', 'TINYINT',
+        'UNIQUEIDENTIFIER', 'VARBINARY', 'VARCHAR', 'XML'
+    ];
+
     var RESERVED_SET = (function () {
         var set = {};
         RESERVED_WORDS.forEach(function (w) { set[w] = true; });
@@ -1349,6 +1362,11 @@ window.SQLStudioSQL = {
     var DIGIT = /[0-9]/;
     var SPACE = /\s/;
     var OP_CHAR = /[=<>!+\-*\/%&|^~]/;
+    /* The operators a sign may follow with no space, for the tokenizer's operator run. */
+    var SIGN_SPLIT_OPERATORS = {
+        '=': 1, '<>': 1, '!=': 1, '<': 1, '>': 1, '<=': 1, '>=': 1, '!<': 1, '!>': 1, '*': 1, '/': 1, '%': 1, '+': 1, '-': 1, '||': 1, '&': 1,
+        '|': 1, '^': 1, '~': 1
+    };
 
     /**
      * @function isCombiningDot
@@ -1590,8 +1608,22 @@ window.SQLStudioSQL = {
             // operator run
             if (OP_CHAR.test(c)) {
                 var os = i;
-                while (i < n && OP_CHAR.test(sql.charAt(i))) i++;
+                /* A comment right after an operator, a line comment as in a=--c or a block comment right after the =, ends the run: as
+                 * first built the run took it in, so a block comment after = failed with MCE000, and Format turned a=-- c with -1 on the
+                 * next line into a = -- c - 1, which comments the value out (the third review after 1.2.0, 2026-10-09). */
+                while (i < n && OP_CHAR.test(sql.charAt(i)) && !(i > os && (sql.substr(i, 2) === '--' || sql.substr(i, 2) === '/*'))) i++;
                 var oraw = sql.slice(os, i);
+                /* Signs glued to an operator are tokens of their own, as in a=-1, a*-1, a<>-1, a=+-1, a!<-1, a=~1 or SQL Server 2025's
+                 * a ||-1, so the parser reads the operator and a signed value: as first built a=-1 failed with MCE000. The longest operator
+                 * goes first, and each sign is split off in turn on the next pass. ||=, += and -= stay one token (the reviews after 1.2.0,
+                 * 2026-10-09). */
+                for (var cut = oraw.length - 1; cut >= 1; cut--) {
+                    if (SIGN_SPLIT_OPERATORS[oraw.slice(0, cut)] && /^[+\-~]+$/.test(oraw.slice(cut))) {
+                        oraw = oraw.slice(0, cut);
+                        i = os + cut;
+                        break;
+                    };
+                };
                 emit('operator', oraw, oraw, os, i);
                 continue;
             };
@@ -2543,14 +2575,16 @@ window.SQLStudioSQL = {
             return Object.assign({}, base, { name: assignedName, kind: 'alias', nameStart: tokList[0].start, nameEnd: tokList[0].end, tokens: tokList });
         };
 
-        // implicit alias: prev is ')', identifier, string, number, END or NULL. Only `alias.col name`
-        // gets a source: a bare `col name` is too often two words of one expression.
+        // implicit alias: prev is ')', identifier, string, number, or a keyword that ends a value: END, NULL,
+        // CURRENT_TIMESTAMP and the like (OPERAND_END_KEYWORDS), as in CURRENT_TIMESTAMP Ts, which got a false
+        // MCE010 (the review of 1.2.1, 2026-10-10). Only `alias.col name` gets a source: a bare `col name` is
+        // too often two words of one expression.
         if (isName(last) && tokList.length >= 2 && !(prev && prev.type === 'punct' && prev.value === '.') &&
             (isKw(prev, 'COLLATE') === false) &&
             (
                 (prev.type === 'punct' && prev.value === ')') ||
                 isName(prev) || prev.type === 'string' || prev.type === 'number' ||
-                isKw(prev, 'END') || isKw(prev, 'NULL')
+                (prev.type === 'keyword' && OPERAND_END_KEYWORDS.indexOf(prev.upper) !== -1)
             )) {
             var implicitSource = tokList.length >= 4 ? plainColumnSource(tokList.slice(0, -1)) : null;
             return Object.assign({}, base, { name: last.value, kind: 'alias', nameStart: last.start, nameEnd: last.end, tokens: tokList }, implicitSource);
@@ -7594,6 +7628,344 @@ window.SQLStudioSQL = {
         return found;
     };
 
+    // ==================================================================
+    // SQL Server 2025 features, which MCE074 reports and the strict parser reads
+    // ==================================================================
+    /* No such feature may be in the lists that completion draws on (functions, keywords and dataTypes of
+    sqlstudio-sql-data.js): a test checks that against NEWER_THAN_2022. */
+    var NO_2022_EQUIVALENT = 'There is no SQL Server 2022 equivalent in a Query Activity.';
+    var ROUGH_MATCH = 'For a rough match, SQL Server 2022 has SOUNDEX and DIFFERENCE.';
+    var SUBSTRING_WITH_PATINDEX = 'Use SUBSTRING with PATINDEX or CHARINDEX.';
+    var JSON_BY_STRING_AGG = 'Build the JSON with STRING_AGG.';
+    var NO_BASE64 = 'SQL Server 2022 has no Base64 function.';
+
+    /* The functions of SQL Server 2025 that a name followed by ( calls, each with what to write in SQL Server 2022. Only the names of
+    REFUSED_AS_UNKNOWN_FUNCTION were checked on the author's org. The rest are refused by version, the author's rule: the linter
+    assumes SQL Server 2022 and lints every newer function and syntax. */
+    var NEWER_FUNCTIONS = {
+        REGEXP_LIKE: 'Use LIKE, or PATINDEX(pattern, text) > 0.',
+        REGEXP_REPLACE: 'Use REPLACE, or TRANSLATE for single characters.',
+        REGEXP_SUBSTR: SUBSTRING_WITH_PATINDEX,
+        REGEXP_INSTR: SUBSTRING_WITH_PATINDEX,
+        /* REGEXP_COUNT is the one the author's org refused first, on 2026-09-28: that test showed the engine to be SQL Server 2022. */
+        REGEXP_COUNT: 'For a fixed text, count with (LEN(x) - LEN(REPLACE(x, \'a\', \'\'))) / LEN(\'a\').',
+        REGEXP_MATCHES: NO_2022_EQUIVALENT,
+        REGEXP_SPLIT_TO_TABLE: NO_2022_EQUIVALENT,
+        EDIT_DISTANCE: ROUGH_MATCH,
+        EDIT_DISTANCE_SIMILARITY: ROUGH_MATCH,
+        JARO_WINKLER_DISTANCE: ROUGH_MATCH,
+        JARO_WINKLER_SIMILARITY: ROUGH_MATCH,
+        JSON_ARRAYAGG: JSON_BY_STRING_AGG,
+        JSON_OBJECTAGG: JSON_BY_STRING_AGG,
+        JSON_CONTAINS: 'Use JSON_VALUE or JSON_PATH_EXISTS.',
+        UNISTR: 'Use NCHAR(code) for a single character.',
+        BASE64_ENCODE: NO_BASE64,
+        BASE64_DECODE: NO_BASE64,
+        PRODUCT: 'Use EXP(SUM(LOG(x))) for positive values.',
+        VECTOR_DISTANCE: NO_2022_EQUIVALENT,
+        VECTOR_NORM: NO_2022_EQUIVALENT,
+        VECTOR_NORMALIZE: NO_2022_EQUIVALENT,
+        VECTORPROPERTY: NO_2022_EQUIVALENT,
+        VECTOR_SEARCH: NO_2022_EQUIVALENT,
+        AI_GENERATE_EMBEDDINGS: NO_2022_EQUIVALENT,
+        AI_GENERATE_CHUNKS: NO_2022_EQUIVALENT
+    };
+
+    /* The functions that the author's org answered "'NAME' is not a recognized built-in function name." for, in Validate, one query
+    at a time, on 2026-10-09: REGEXP_LIKE, REGEXP_REPLACE, JSON_ARRAYAGG, PRODUCT, EDIT_DISTANCE and BASE64_ENCODE. REGEXP_COUNT was
+    refused on 2026-09-28 and [Likely] with the same answer, as the exact text was not recorded. MCE074 quotes that answer for these
+    seven and for no other name. BASE64_DECODE was not tried on its own, so it has none, though it shares BASE64_ENCODE's message. */
+    var REFUSED_AS_UNKNOWN_FUNCTION = {
+        REGEXP_LIKE: 1,
+        REGEXP_REPLACE: 1,
+        REGEXP_COUNT: 1,
+        JSON_ARRAYAGG: 1,
+        PRODUCT: 1,
+        EDIT_DISTANCE: 1,
+        BASE64_ENCODE: 1
+    };
+
+    /* The JSON functions that SQL Server 2025 lets end with RETURNING and a type. The author's org refused RETURNING in JSON_VALUE and
+    JSON_OBJECT on 2026-10-09 with "Incorrect syntax near" the type. JSON_QUERY, JSON_ARRAY and the two aggregates are refused by version. */
+    var JSON_RETURNING_FUNCTIONS = {
+        JSON_VALUE: 1,
+        JSON_QUERY: 1,
+        JSON_OBJECT: 1,
+        JSON_ARRAY: 1,
+        JSON_ARRAYAGG: 1,
+        JSON_OBJECTAGG: 1
+    };
+
+    /* The data types RETURNING may name, so that RETURNING is the clause only with one of them after it. RETURNING is no reserved word in
+    SQL Server 2022, and a field named Returning, as in JSON_ARRAY(CASE WHEN a = 1 THEN Returning END) or JSON_ARRAY(Returning NULL ON
+    NULL), is a value (the review after 1.2.0, 2026-10-09). */
+    var RETURNING_TYPES = {
+        NVARCHAR: 1, VARCHAR: 1, NCHAR: 1, CHAR: 1, JSON: 1, VECTOR: 1, INT: 1, BIGINT: 1, SMALLINT: 1, TINYINT: 1, BIT: 1, DECIMAL: 1,
+        NUMERIC: 1, FLOAT: 1, REAL: 1, MONEY: 1, SMALLMONEY: 1, DATE: 1, DATETIME: 1, DATETIME2: 1, SMALLDATETIME: 1, DATETIMEOFFSET: 1,
+        TIME: 1, UNIQUEIDENTIFIER: 1, VARBINARY: 1, BINARY: 1, XML: 1, SQL_VARIANT: 1
+    };
+
+    /* The data types of SQL Server 2025 that CAST, TRY_CAST, CONVERT and TRY_CONVERT may name. The author's org refused CAST(x AS JSON)
+    on 2026-10-09, run on its own, with "Type json is not a defined system type." VECTOR was not tested: its message quotes no answer. */
+    var NEWER_TYPES = {
+        JSON: 1,
+        VECTOR: 1
+    };
+
+    /* Every name MCE074 reports, for the test that keeps them out of completion. CURRENT_DATE and RETURNING are keywords, JSON and VECTOR data types. */
+    var NEWER_THAN_2022 = {
+        functions: Object.keys(NEWER_FUNCTIONS),
+        keywords: ['CURRENT_DATE', 'RETURNING'],
+        types: Object.keys(NEWER_TYPES)
+    };
+
+    /**
+     * @function callClose
+     * @description Finds the ')' that closes the call of a name followed by '(', the name being the token at index i.
+     * @param {Array<Object>} core - Comment-free token stream.
+     * @param {number} i - Index of the name.
+     * @returns {number} Index of the closing ')', or -1 when no '(' follows the name or the '(' is never closed.
+     */
+    function callClose(core, i) {
+        var open = core[i + 1];
+        if (!open || open.type !== 'punct' || open.value !== '(') return -1;
+        var close = matchParen(core, i + 1);
+        var closeTok = core[close];
+        /* An unclosed ( makes matchParen answer the last token, which is a ) only of some group inside it. A ) closes the ( of its own depth. */
+        return closeTok && closeTok.type === 'punct' && closeTok.value === ')' && closeTok.depth === open.depth ? close : -1;
+    };
+
+    /**
+     * @function removalStart
+     * @description Finds where the removal of a word at pos should start so that the whitespace before it goes too, and the line a comment ends stays a line: a newline that ends a '--' comment is kept, as a ) after it would otherwise land inside the comment.
+     * @param {string} sql - Full SQL source text.
+     * @param {Array<Object>} tokens - Full token stream, comments included.
+     * @param {number} pos - Offset of the word.
+     * @returns {number} Offset to start the removal at.
+     */
+    function removalStart(sql, tokens, pos) {
+        var start = pos;
+        while (start > 0 && /\s/.test(sql.charAt(start - 1))) start--;
+        for (var i = 0; i < tokens.length; i++) {
+            if (tokens[i].end !== start) continue;
+            if (tokens[i].type === 'comment' && tokens[i].raw.indexOf('--') === 0) {
+                var newline = sql.indexOf('\n', start);
+                if (newline !== -1 && newline < pos) start = newline + 1;
+            };
+            break;
+        };
+        return start;
+    };
+
+    /* The functions whose result is NULL only when an argument is. MCE032 (the + concatenation) reads a call of one of them as a value that cannot be NULL when every argument is such a value too. TRY_CAST and TRY_CONVERT are left out: they answer NULL for a value they cannot convert. */
+    var NULL_ONLY_FOR_NULL_ARGUMENTS = {
+        REPLICATE: 1,
+        CAST: 1,
+        CONVERT: 1,
+        LEFT: 1,
+        RIGHT: 1,
+        UPPER: 1,
+        LOWER: 1,
+        LTRIM: 1,
+        RTRIM: 1,
+        TRIM: 1,
+        REPLACE: 1,
+        SPACE: 1
+    };
+
+    /**
+     * @function isInFromList
+     * @description Tells whether core[i] stands in a FROM clause's list of tables: the nearest clause word before it, at its own depth,
+     * is FROM or JOIN, with no SELECT, WHERE, GROUP, HAVING or ORDER after it. A join's ON is still in FROM.
+     * @param {Array<Object>} core - Comment-free token stream.
+     * @param {number} i - Index of the token.
+     * @returns {boolean}
+     */
+    function isInFromList(core, i) {
+        var depth = core[i].depth;
+        for (var j = i - 1; j >= 0; j--) {
+            var t = core[j];
+            if (t.depth < depth) return false;
+            if (t.depth !== depth || t.type !== 'keyword') continue;
+            if (t.upper === 'FROM' || t.upper === 'JOIN') return true;
+            /* ON stays in FROM: a comma after a join's condition, ON t.a = u.a, Product (NOLOCK), adds a table. */
+            if (t.upper === 'SELECT' || t.upper === 'WHERE' || t.upper === 'GROUP' || t.upper === 'HAVING' || t.upper === 'ORDER') return false;
+        };
+        return false;
+    };
+
+    /**
+     * @function callStartBefore
+     * @description Finds the name of the call whose ) is core[closeIndex]: the token before its matching (.
+     * @param {Array<Object>} core - Comment-free token stream.
+     * @param {number} closeIndex - Index of the ).
+     * @returns {number} Index of the call's name, or -1 when the ( has no name before it.
+     */
+    function callStartBefore(core, closeIndex) {
+        var balance = 0;
+        for (var j = closeIndex; j >= 0; j--) {
+            var t = core[j];
+            if (t.type !== 'punct') continue;
+            if (t.value === ')') balance++;
+            if (t.value === '(') {
+                balance--;
+                /* A name, or a keyword such as COALESCE, CONVERT or LEFT, which neverNullEnd then judges. */
+                if (balance === 0) return j > 0 && (isName(core[j - 1]) || core[j - 1].type === 'keyword') ? j - 1 : -1;
+            };
+        };
+        return -1;
+    };
+
+    /**
+     * @function isTextCall
+     * @description Tells whether a call returns text: a string function, CAST or CONVERT to a character type, or ISNULL or COALESCE with
+     * a text among the values that make it never NULL. A call of numbers, as ISNULL(s.Qty, 0), is no text.
+     * @param {Array<Object>} core - Comment-free token stream.
+     * @param {number} nameIndex - Index of the call's name.
+     * @param {number} closeIndex - Index of its ).
+     * @returns {boolean}
+     */
+    function isTextCall(core, nameIndex, closeIndex) {
+        var name = core[nameIndex].upper;
+        if (TEXT_RESULT_FUNCTIONS[name]) return true;
+        var depth = core[nameIndex + 1].depth + 1;
+        var isCharType = function (k) { return !!core[k] && CHAR_TYPES[core[k].upper]; };
+        if (name === 'CAST') {
+            for (var k = closeIndex - 1; k > nameIndex + 1; k--) {
+                if (core[k].depth === depth && isKw(core[k], 'AS')) return isCharType(k + 1);
+            };
+            return false;
+        };
+        if (name === 'CONVERT') return isCharType(nameIndex + 2);
+        if (name === 'ISNULL' || name === 'COALESCE') {
+            /* Text when a value that cannot be NULL among its arguments is text: '' in ISNULL(s.x, ''), not the 'a' inside
+             * ISNULL(CASE WHEN s.x = 'a' THEN 1 END, 0) (the third review after 1.2.0, 2026-10-09). */
+            var starts = [nameIndex + 2];
+            for (var m = nameIndex + 2; m < closeIndex; m++) {
+                if (core[m].type === 'punct' && core[m].value === ',' && core[m].depth === depth) starts.push(m + 1);
+            };
+            /* ISNULL answers in its first argument's type, so a text or a text call in it, outside a CASE, makes it text, as in
+             * ISNULL(s.FirstName + ' ', 0) (the review of 1.2.1, 2026-10-09). */
+            if (name === 'ISNULL') {
+                var firstEnd = starts.length > 1 ? starts[1] - 2 : closeIndex - 1;
+                var caseDepth = 0;
+                for (var q = starts[0]; q <= firstEnd; q++) {
+                    var tq = core[q];
+                    if (tq.depth !== depth) continue;
+                    if (isKw(tq, 'CASE')) {
+                        caseDepth++;
+                    } else if (isKw(tq, 'END') && caseDepth) {
+                        caseDepth--;
+                    } else if (!caseDepth && tq.type === 'string') {
+                        return true;
+                    } else if (!caseDepth && core[q + 1] && core[q + 1].type === 'punct' && core[q + 1].value === '(' && (isName(tq) || tq.type === 'keyword')) {
+                        var innerClose = callClose(core, q);
+                        if (innerClose !== -1 && innerClose <= firstEnd && isTextCall(core, q, innerClose)) return true;
+                    };
+                };
+            };
+            for (var n = 0; n < starts.length; n++) {
+                var argEnd = n + 1 < starts.length ? starts[n + 1] - 2 : closeIndex - 1;
+                var first = core[starts[n]];
+                if (neverNullEnd(core, starts[n]) !== argEnd) continue;
+                if (first.type === 'string') return true;
+                if (core[starts[n] + 1] && core[starts[n] + 1].type === 'punct' && core[starts[n] + 1].value === '(' && isTextCall(core, starts[n], argEnd)) return true;
+            };
+        };
+        return false;
+    };
+
+    /* The functions whose answer is text, and the character types, for isTextCall. */
+    var TEXT_RESULT_FUNCTIONS = {
+        REPLICATE: 1, UPPER: 1, LOWER: 1, LTRIM: 1, RTRIM: 1, TRIM: 1, REPLACE: 1, SPACE: 1, LEFT: 1, RIGHT: 1, CONCAT: 1, CONCAT_WS: 1
+    };
+    var CHAR_TYPES = {
+        VARCHAR: 1, NVARCHAR: 1, CHAR: 1, NCHAR: 1
+    };
+
+    /**
+     * @function typeNameEnd
+     * @description Finds the end of a data type name as CAST and CONVERT write it: a name, and for a length or a precision a parenthesis of numbers or MAX, as NVARCHAR(MAX) or DECIMAL(18, 2).
+     * @param {Array<Object>} core - Comment-free token stream.
+     * @param {number} i - Index of the type's first token.
+     * @returns {number} Index of the type's last token, or -1 when no type name starts at i.
+     */
+    function typeNameEnd(core, i) {
+        var t = core[i];
+        if (!t || t.type !== 'identifier') return -1;
+        var open = core[i + 1];
+        if (!open || open.type !== 'punct' || open.value !== '(') return i;
+        var close = callClose(core, i);
+        if (close === -1) return -1;
+        for (var j = i + 2; j < close; j++) {
+            var inner = core[j];
+            if (!(inner.type === 'number' || inner.upper === 'MAX' || (inner.type === 'punct' && inner.value === ','))) return -1;
+        };
+        return close;
+    };
+
+    /**
+     * @function neverNullEnd
+     * @description Reads a value that cannot be NULL from core[i]: a text or a number (with a sign), CONCAT or CONCAT_WS whatever their arguments (the author's rule: both are never NULL), ISNULL with a replacement that cannot be NULL, COALESCE with any value that cannot be, or a call of a NULL_ONLY_FOR_NULL_ARGUMENTS function with arguments that cannot be NULL either, CAST and CONVERT with their type name read as a type. A NULL, a column, a variable or any other call is a value that can be NULL.
+     * @param {Array<Object>} core - Comment-free token stream.
+     * @param {number} i - Index of the value's first token.
+     * @returns {number} Index of the value's last token, or -1 when the value starting at i can be NULL.
+     */
+    function neverNullEnd(core, i) {
+        var t = core[i];
+        if (!t) return -1;
+        if (t.type === 'string') return t.unterminated ? -1 : i;
+        if (t.type === 'number') return i;
+        if (t.type === 'operator' && (t.value === '-' || t.value === '+') && core[i + 1] && core[i + 1].type === 'number') return i + 1;
+        if ((t.type !== 'identifier' && t.type !== 'keyword') || t.quote) return -1;
+        var close = callClose(core, i);
+        if (close === -1) return -1;
+        if (t.upper === 'CONCAT' || t.upper === 'CONCAT_WS') return close;
+        if ((t.upper === 'ISNULL' || t.upper === 'COALESCE') && close > i + 2) {
+            /* ISNULL(value, replacement) cannot be NULL when its replacement cannot, and COALESCE(...) when any of its values cannot,
+             * whatever the column before it: MCE032's own advice is to wrap the operand with ISNULL, and the warning stayed after it
+             * (the review after 1.2.0, 2026-10-09). */
+            var argDepth = core[i + 1].depth + 1;
+            var starts = [i + 2];
+            for (var k = i + 2; k < close; k++) {
+                if (core[k].type === 'punct' && core[k].value === ',' && core[k].depth === argDepth) starts.push(k + 1);
+            };
+            var isArgSafe = function (n) { return neverNullEnd(core, starts[n]) === (n + 1 < starts.length ? starts[n + 1] - 2 : close - 1); };
+            if (t.upper === 'ISNULL') return (starts.length === 2 && isArgSafe(1)) ? close : -1;
+            for (var n = 0; n < starts.length; n++) {
+                if (isArgSafe(n)) return close;
+            };
+            return -1;
+        };
+        if (!NULL_ONLY_FOR_NULL_ARGUMENTS[t.upper] || close === i + 2) return -1;
+        var depth = core[i + 1].depth + 1;
+        var from = i + 2;
+        if (t.upper === 'CAST') {
+            /* CAST(value AS type) */
+            var valueEnd = neverNullEnd(core, from);
+            if (valueEnd === -1 || !isKw(core[valueEnd + 1], 'AS')) return -1;
+            return typeNameEnd(core, valueEnd + 2) === close - 1 ? close : -1;
+        };
+        if (t.upper === 'CONVERT') {
+            /* CONVERT(type, value [, style]) */
+            var typeEnd = typeNameEnd(core, from);
+            if (typeEnd === -1 || !core[typeEnd + 1] || core[typeEnd + 1].value !== ',') return -1;
+            from = typeEnd + 2;
+        };
+        /* The rest is a comma-separated list, each value of which cannot be NULL. REPLICATE and SPACE answer NULL for a negative count, so
+         * REPLICATE('x', -1) and SPACE(-1) can be NULL (the review after 1.2.0, 2026-10-09). */
+        var countArgument = t.upper === 'SPACE' ? 0 : (t.upper === 'REPLICATE' ? 1 : -1);
+        for (var argument = 0; ; argument++) {
+            if (argument === countArgument && core[from] && core[from].type === 'operator' && core[from].value === '-') return -1;
+            var end = neverNullEnd(core, from);
+            if (end === -1) return -1;
+            var after = core[end + 1];
+            if (end + 1 === close) return close;
+            if (!after || after.type !== 'punct' || after.value !== ',' || after.depth !== depth) return -1;
+            from = end + 2;
+        };
+    };
+
     var RULES = [
         // MCE001 - only SELECT/WITH statements run in MCE.
         /**
@@ -8476,27 +8848,36 @@ window.SQLStudioSQL = {
         // MCE032 - string concatenation with "+" turns NULL into NULL.
         /**
          * @function rule032
-         * @description MCE032: flags string concatenation with '+' inside the select list where NULL propagation would silently turn the whole expression into NULL; CONCAT() or ISNULL() should be used instead.
+         * @description MCE032: flags string concatenation with '+' inside the select list where NULL propagation would silently turn the whole expression into NULL; CONCAT() or ISNULL() should be used instead. It reads the token on each side of the +. A name followed by ( there is a function call, and it counts as a column unless its value cannot be NULL (neverNullEnd): REPLICATE('x', 4000), CAST('x' AS NVARCHAR(MAX)) or CONCAT(a, b) are never reason to warn, and UPPER(s.EmailAddress) is.
          * @param {string} sql - Full SQL source text (unused directly, kept for the shared rule signature).
-         * @param {Array<Object>} tokens - Full token stream.
-         * @param {Object} ctx - Shared per-lint-call context; used for ctx.getParsed().
+         * @param {Array<Object>} tokens - Full token stream (unused: the rule reads the comment-free stream).
+         * @param {Object} ctx - Shared per-lint-call context; used for ctx.getParsed() and ctx.getCoreTokens().
          * @returns {Array<Array>} Raw finding tuples, one per violation.
          */
         function rule032(sql, tokens, ctx) {
             var findings = [];
             var parsed = ctx.getParsed();
             if (!parsed) return findings;
+            var core = ctx.getCoreTokens();
             var rangeStart = parsed.selectList.start, rangeEnd = parsed.selectList.end;
-            for (var i = 0; i < tokens.length; i++) {
-                var t = tokens[i];
+            for (var i = 0; i < core.length; i++) {
+                var t = core[i];
                 if (t.start < rangeStart || t.end > rangeEnd) continue;
                 if (t.type === 'operator' && t.value === '+') {
-                    var prevT = tokens[i - 1], nextT = tokens[i + 1];
-                    var isPrevOperand = prevT && (prevT.type === 'string' || isName(prevT));
+                    var prevT = core[i - 1], nextT = core[i + 1];
+                    /* A call that cannot be NULL before the +, as ISNULL(s.FirstName, '') + s.LastName, is text like a literal: a column
+                     * after it still turns the whole value NULL (the review after 1.2.0, 2026-10-09). */
+                    var prevCallStart = prevT && prevT.type === 'punct' && prevT.value === ')' ? callStartBefore(core, i - 1) : -1;
+                    /* Only a call that returns text joins text: ISNULL(s.Qty, 0) + s.Extra is a sum, which CONCAT would turn into text
+                     * (the second review after 1.2.0, 2026-10-09). */
+                    var isPrevSafeCall = prevCallStart !== -1 && neverNullEnd(core, prevCallStart) === i - 1 && isTextCall(core, prevCallStart, i - 1);
+                    var isPrevOperand = prevT && (prevT.type === 'string' || isName(prevT) || isPrevSafeCall);
                     var isNextOperand = nextT && (nextT.type === 'string' || isName(nextT));
-                    var hasString = (prevT && prevT.type === 'string') || (nextT && nextT.type === 'string');
+                    var hasString = (prevT && prevT.type === 'string') || isPrevSafeCall || (nextT && nextT.type === 'string');
+                    /* A name followed by ( is a function call. One that cannot be NULL is no column. */
+                    var isNextSafeCall = isName(nextT) && !!core[i + 2] && core[i + 2].type === 'punct' && core[i + 2].value === '(' && neverNullEnd(core, i + 1) !== -1;
                     /* Two literals ('a' + 'b') can never be NULL: only a column side can. */
-                    var hasColumn = isName(prevT) || isName(nextT);
+                    var hasColumn = isName(prevT) || (isName(nextT) && !isNextSafeCall);
                     if (isPrevOperand && isNextOperand && hasString && hasColumn) {
                         findings.push(['MCE032', 'warning', 'This + concatenation returns NULL if either side is NULL. Use CONCAT() instead, which treats NULL as an empty string, or wrap the operand with ISNULL().', DOCS.STR, t, t]);
                     };
@@ -9257,6 +9638,145 @@ window.SQLStudioSQL = {
                     findings.push(['MCE073', 'warning', bare + ' is not in this Business Unit\'s Data Extension list' + loaded + '. Check the spelling, or reload the list if you created it since.', DOCS.FROM, nameTok, nameTok, null, reloadListAction()]);
                 });
             });
+            return findings;
+        },
+        // MCE074 - the functions and syntax of SQL Server 2025, which Marketing Cloud Engagement (SQL Server 2022) refuses.
+        /**
+         * @function rule074
+         * @description MCE074: reports what SQL Server 2025 added, as an error, one finding per occurrence. Marketing Cloud Engagement runs SQL Server 2022: REGEXP_COUNT was refused on the author's org (2026-09-28), and so was the RETURNING clause (2026-10-09). The linter assumes 2022 and lints every newer function and syntax. Each message names the feature, says it arrived in SQL Server 2025, and gives what 2022 has. Where the author's org was asked (2026-10-09, Validate, one query at a time) it also quotes MCE's answer: "'NAME' is not a recognized built-in function name." (REFUSED_AS_UNKNOWN_FUNCTION), "Incorrect syntax near the keyword 'CURRENT_DATE'.", "Incorrect syntax near '|'." for ||, "Incorrect syntax near" the type for RETURNING, "The substring function requires 3 argument(s)." and "Type json is not a defined system type." for CAST to JSON. The other names are refused by version, the author's rule, and quote nothing. It reports: a call of a NEWER_FUNCTIONS name (a name followed by a parenthesis, never a column or alias of that name), the bare CURRENT_DATE (fix: CAST(GETDATE() AS DATE), safe), the || and ||= operators, RETURNING and its type after the arguments of a JSON_RETURNING_FUNCTIONS function (fix: remove them with the whitespace before, safe except for JSON_VALUE, whose default type cuts a value at 4,000 characters and whose result's type changes), CAST, TRY_CAST, CONVERT or TRY_CONVERT to the JSON type (fix: NVARCHAR(MAX), not safe: the JSON type also checks and normalises its text) or the VECTOR type (no fix), and SUBSTRING with two arguments (fix: add 2147483647 as the length, safe: it reads to the end, as the two arguments do, with no copy of the first argument).
+         * @param {string} sql - Full SQL source text.
+         * @param {Array<Object>} tokens - Full token stream, comments included (for the whitespace before a removed RETURNING).
+         * @param {Object} ctx - Shared per-lint-call context; used for ctx.getCoreTokens().
+         * @returns {Array<Array>} Raw finding tuples, one per violation.
+         */
+        function rule074(sql, tokens, ctx) {
+            var findings = [];
+            var core = ctx.getCoreTokens();
+            var arrived = ' arrived in SQL Server 2025, and Marketing Cloud Engagement runs SQL Server 2022, so it refuses it';
+            for (var i = 0; i < core.length; i++) {
+                var t = core[i];
+                var prev = core[i - 1];
+                var next = core[i + 1];
+                var isAfterDot = !!prev && prev.type === 'punct' && prev.value === '.';
+                /* The || and ||= operators. The tokenizer reads a run of operator characters as one token, so ||- is the || and a sign. */
+                if (t.type === 'operator' && t.value.indexOf('||') === 0) {
+                    var operatorLength = t.value.indexOf('||=') === 0 ? 3 : 2;
+                    /* The author's org answered the || with "Incorrect syntax near '|'" on 2026-10-09. The ||= was not tried. */
+                    var operatorAnswer = operatorLength === 2 ? ': Incorrect syntax near \'|\'' : '';
+                    findings.push(['MCE074', 'error', 'The ' + t.value.slice(0, operatorLength) + ' operator' + arrived + operatorAnswer + '. Use CONCAT(a, b), which also treats NULL as empty text.', DOCS.BASICS, t.start, t.start + operatorLength]);
+                    continue;
+                };
+                /* CURRENT_DATE is a reserved word of SQL Server 2022 too, but only as a name that cannot be used: bare, it is the new date. A qualifier, an alias after AS or a call is not it. */
+                if (t.type === 'keyword' && t.upper === 'CURRENT_DATE') {
+                    if (isAfterDot || isKw(prev, 'AS') || (next && next.type === 'punct' && next.value === '.')) continue;
+                    var isCall = !!next && next.type === 'punct' && next.value === '(';
+                    /* The author's org answered "Incorrect syntax near the keyword 'CURRENT_DATE'" on 2026-10-09. */
+                    findings.push(['MCE074', 'error', 'CURRENT_DATE' + arrived + ': Incorrect syntax near the keyword \'' + t.raw + '\'. Use CAST(GETDATE() AS DATE).', DOCS.BASICS, t, t,
+                        isCall ? null : [{ title: 'Use CAST(GETDATE() AS DATE)', edits: [{ start: t.start, end: t.end, text: 'CAST(GETDATE() AS DATE)' }], isSafe: true, isInFixAll: true }]]);
+                    continue;
+                };
+                /* Everything else is a call: a name, not after a dot, with its ( and its ). */
+                if (!((t.type === 'identifier' && !t.quote) || t.type === 'keyword') || isAfterDot) continue;
+                var close = callClose(core, i);
+                if (close === -1) continue;
+                var open = core[i + 1];
+                var name = t.upper;
+                if (NEWER_FUNCTIONS[name]) {
+                    /* A table or CTE of that name, as FROM Product (NOLOCK) or WITH Product (a, b) AS (...), is no call of the aggregate, and
+                     * neither is a derived table's alias with its column list, AS Product (n) or ) Product (n), nor a table after a comma in
+                     * FROM, FROM T AS t, Product (NOLOCK) (the review after 1.2.0, 2026-10-09). */
+                    var isTableName = name === 'PRODUCT' && (isKwAny(prev, ['FROM', 'JOIN', 'APPLY', 'WITH']) ||
+                        ((isKw(prev, 'AS') || (!!prev && prev.type === 'punct' && (prev.value === ')' || prev.value === ','))) && isInFromList(core, i)) ||
+                        (isKw(core[close + 1], 'AS') && !!core[close + 2] && core[close + 2].value === '('));
+                    var functionAnswer = REFUSED_AS_UNKNOWN_FUNCTION[name] ? ': \'' + t.raw + '\' is not a recognized built-in function name' : '';
+                    if (!isTableName) findings.push(['MCE074', 'error', name + arrived + functionAnswer + '. ' + NEWER_FUNCTIONS[name], DOCS.BASICS, t, t]);
+                };
+                if (JSON_RETURNING_FUNCTIONS[name]) {
+                    /* RETURNING type, at the call's own depth. */
+                    for (var j = i + 2; j < close; j++) {
+                        var word = core[j];
+                        if (word.depth !== open.depth + 1 || !(word.type === 'identifier' || word.type === 'keyword') || word.upper !== 'RETURNING') continue;
+                        /* The clause is RETURNING, a data type and the call's ). A field named Returning, with any other word or none after it, is
+                         * a value, and RETURNING without a type is the parser's MCE000 (the review after 1.2.0, 2026-10-09). */
+                        var typeTok = j + 1 < close && (core[j + 1].type === 'identifier' || core[j + 1].type === 'keyword') && RETURNING_TYPES[core[j + 1].upper] ? core[j + 1] : null;
+                        /* The clause follows a value: a text, a number, a ) or a name. After a dot, a colon, a comma or an operator, as in
+                         * s.Returning, 'a': Returning or a + Returning, a field named Returning is the value itself (the second review after
+                         * 1.2.0, 2026-10-09). With a type, it may also open the call, as in JSON_OBJECT(RETURNING JSON). */
+                        var before = core[j - 1];
+                        /* A name, quoted or not, a variable, NULL, END, CURRENT_TIMESTAMP and the other keyword values count as a value, and so
+                         * do ASC and DESC, which end the ORDER BY of JSON_ARRAYAGG; BY, as in ORDER BY Returning, does not (the third review
+                         * after 1.2.0 and the review of 1.2.1, 2026-10-09). */
+                        var isAfterValue = before.type === 'string' || before.type === 'number' || before.type === 'identifier' || before.type === 'variable' ||
+                            (before.type === 'punct' && before.value === ')') ||
+                            (before.type === 'keyword' && (OPERAND_END_KEYWORDS.indexOf(before.upper) !== -1 || before.upper === 'ASC' || before.upper === 'DESC'));
+                        var isFirstInCall = before.type === 'punct' && before.value === '(' && j - 1 === i + 1;
+                        if (!isAfterValue && !(typeTok && isFirstInCall)) continue;
+                        if (!typeTok) {
+                            if (j + 1 !== close || !isAfterValue) continue;
+                            findings.push(['MCE074', 'error', 'RETURNING' + arrived + '. Remove RETURNING.' + (name === 'JSON_VALUE' ? ' Without it, a value over 4,000 characters comes back as NULL.' : ''), DOCS.BASICS, word, word,
+                                [{ title: 'Remove RETURNING', edits: [{ start: removalStart(sql, tokens, word.start), end: word.end, text: '' }], isSafe: false, isInFixAll: false }]]);
+                            break;
+                        };
+                        var typeLastIndex = j + 1;
+                        if (core[j + 2] && core[j + 2].type === 'punct' && core[j + 2].value === '(' && j + 2 < close) {
+                            var typeClose = callClose(core, j + 1);
+                            if (typeClose === -1 || typeClose >= close) continue;
+                            typeLastIndex = typeClose;
+                        };
+                        if (typeLastIndex + 1 !== close) continue;
+                        var typeLast = core[typeLastIndex];
+                        var typeText = sql.slice(typeTok.start, typeLast.end).replace(/\s+/g, ' ');
+                        var typeKey = typeText.replace(/ /g, '').toUpperCase();
+                        var message = 'RETURNING' + arrived + ': it answers Incorrect syntax near \'' + typeTok.raw + '\'. Remove RETURNING and its type.';
+                        if (name === 'JSON_VALUE') message += ' Without it, a value over 4,000 characters comes back as NULL.';
+                        /* A JSON text only changes its label when RETURNING JSON or a MAX type goes. JSON_VALUE without it answers NVARCHAR(4000), and any other type is a cut or a conversion. */
+                        var isSafe = name !== 'JSON_VALUE' && (typeKey === 'JSON' || /\(MAX\)$/.test(typeKey));
+                        findings.push(['MCE074', 'error', message, DOCS.BASICS, word, typeLast,
+                            [{ title: 'Remove RETURNING ' + typeText, edits: [{ start: removalStart(sql, tokens, word.start), end: typeLast.end, text: '' }], isSafe: isSafe, isInFixAll: isSafe }]]);
+                        break;
+                    };
+                };
+                if (name === 'CAST' || name === 'TRY_CAST' || name === 'CONVERT' || name === 'TRY_CONVERT') {
+                    /* CAST(value AS type) names its type last, at the call's own depth, and CONVERT(type, value) first. */
+                    var newTypeIndex = -1;
+                    if (name === 'CONVERT' || name === 'TRY_CONVERT') {
+                        newTypeIndex = i + 2;
+                    } else {
+                        for (var k = close - 1; k > i + 1; k--) {
+                            if (core[k].depth === open.depth + 1 && isKw(core[k], 'AS')) {
+                                newTypeIndex = k + 1;
+                                break;
+                            };
+                        };
+                    };
+                    var newType = newTypeIndex !== -1 && newTypeIndex < close ? core[newTypeIndex] : null;
+                    if (newType && newType.type === 'identifier' && NEWER_TYPES[newType.upper]) {
+                        var newTypeLast = newType;
+                        if (core[newTypeIndex + 1] && core[newTypeIndex + 1].type === 'punct' && core[newTypeIndex + 1].value === '(') {
+                            var newTypeClose = callClose(core, newTypeIndex);
+                            if (newTypeClose !== -1 && newTypeClose < close) newTypeLast = core[newTypeClose];
+                        };
+                        /* Only the JSON type has a fix: a vector is no text to put in NVARCHAR(MAX) as it is. */
+                        var typeAnswer = newType.upper === 'JSON' ? ': Type json is not a defined system type' : '';
+                        findings.push(['MCE074', 'error', 'The ' + newType.upper + ' data type' + arrived + typeAnswer + '. Use NVARCHAR(MAX).', DOCS.CONV, newType, newTypeLast,
+                            newType.upper === 'JSON' ? [{ title: 'Use NVARCHAR(MAX)', edits: [{ start: newType.start, end: newTypeLast.end, text: 'NVARCHAR(MAX)' }], isSafe: false, isInFixAll: false }] : null]);
+                    };
+                };
+                if (name === 'SUBSTRING') {
+                    /* SQL Server 2025 made the length optional: two arguments, counted at the call's own depth. */
+                    var commas = [];
+                    for (var m = i + 2; m < close; m++) {
+                        if (core[m].depth === open.depth + 1 && core[m].type === 'punct' && core[m].value === ',') commas.push(m);
+                    };
+                    if (commas.length !== 1 || commas[0] === i + 2 || commas[0] === close - 1) continue;
+                    /* The author's org answered "The substring function requires 3 argument(s)." on 2026-10-09. The largest INT as the length
+                     * reads to the end of the text, as SQL Server 2025's two arguments do, also from a start of 0 and with trailing spaces, so
+                     * the fix is safe. LEN(first argument), as first built, cut a character from a start of 0, dropped trailing spaces and
+                     * ran the argument twice (the review after 1.2.0, 2026-10-09). */
+                    findings.push(['MCE074', 'error', 'SUBSTRING with two arguments' + arrived + ': The substring function requires 3 argument(s). Add 2147483647 as the length, to read to the end.', DOCS.STR, t, t,
+                        [{ title: 'Add 2147483647 as the length', edits: [{ start: core[close - 1].end, end: core[close - 1].end, text: ', 2147483647' }], isSafe: true, isInFixAll: true }]]);
+                };
+            };
             return findings;
         }
         // MCE065 was the comment-before-SELECT error. Removed 2026-09-28: a query that starts with a
@@ -10967,6 +11487,211 @@ window.SQLStudioSQL = {
         };
     };
 
+    // ---- sameQuery(ranSql, editorSql): does the editor still hold the query that ran? ----
+    // Results marks its rows as stale when the editor stops matching the SQL that produced them. "Matches" ignores what does not
+    // change what the query does, and these are exactly the rewrites Format makes (see sameTokensBag), so a Format never marks
+    // rows stale. Unlike sameTokens, which compares multisets, the keys are compared IN ORDER: SELECT a, b becoming SELECT b, a
+    // is a different query.
+    /**
+     * @function sameQueryKeys
+     * @description Turns SQL text into the ordered list of keys sameQuery compares: comments are dropped, a keyword or an
+     * identifier (a quoted one the same as the bare name) is keyed by its upper-case text, a string and a number by their exact
+     * text, every AS is dropped, and so are an INNER or an OUTER right before JOIN. '<>' and '!=' share one key, a date-part
+     * abbreviation as the first argument of a date function takes its full name as the formatter gives it, and the ';'
+     * that ends the text goes (all of them, as an empty statement does nothing).
+     * @param {string} sqlStr - SQL text
+     * @returns {Array<string>} the keys in source order
+     */
+    function sameQueryKeys(sqlStr) {
+        return sameQueryKeyList(sqlStr).keys;
+    };
+
+    /**
+     * @function sameQueryKeyList
+     * @description sameQueryKeys with where each key's token starts in the text, which runScope needs to find the selection that ran.
+     * @param {string} sqlStr - SQL text
+     * @returns {{keys: Array<string>, starts: Array<number>}} the keys in source order, and the offset of each key's token
+     */
+    function sameQueryKeyList(sqlStr) {
+        var toks = tokenize(sqlStr);
+        var core = [];
+        for (var i = 0; i < toks.length; i++) {
+            if (toks[i].type !== 'comment') core.push(toks[i]);
+        };
+        var keys = [];
+        var starts = [];
+        /* For each open (, whether AS stands before it, as before a CTE's body: its ) gets the key 'P:)c', which joins the SELECT after
+         * it to the statement, where any other ) before a SELECT ends one, as DATEADD(DAY, -7, GETDATE()) ends a query above another
+         * (the second review of 1.2.1, 2026-10-10). */
+        var opens = [];
+        for (var k = 0; k < core.length; k++) {
+            var tok = core[k];
+            var next = core[k + 1];
+            var key;
+            if (tok.type === 'keyword' || tok.type === 'identifier') {
+                if (tok.type === 'keyword') {
+                    if (tok.upper === 'AS') continue;
+                    if ((tok.upper === 'INNER' || tok.upper === 'OUTER') && next && next.type === 'keyword' && next.upper === 'JOIN') continue;
+                };
+                /* The first argument of a date function, as sameTokensBag reads it: DATEADD(dd, ...) is DATEADD(DAY, ...). */
+                var isDatePart = tok.type === 'identifier' && !tok.quote && k >= 2 && core[k - 1].type === 'punct' && core[k - 1].value === '(' &&
+                    (core[k - 2].type === 'identifier' || core[k - 2].type === 'keyword') && !core[k - 2].quote && !!FORMATTER_DATE_FUNCS[core[k - 2].upper];
+                key = 'W:' + (isDatePart ? (FORMATTER_DATE_PART_MAP[tok.upper] || tok.upper) : tok.upper);
+            } else if (tok.type === 'operator') {
+                key = 'O:' + (tok.value === '<>' ? '!=' : tok.value);
+            } else if (tok.type === 'temp') {
+                key = 'T:' + tok.upper;
+            } else {
+                key = tok.type.charAt(0).toUpperCase() + ':' + tok.raw;
+                if (tok.type === 'punct' && tok.value === '(') opens.push(k > 0 && core[k - 1].type === 'keyword' && core[k - 1].upper === 'AS');
+                if (tok.type === 'punct' && tok.value === ')' && opens.pop() === true) key = 'P:)c';
+            };
+            keys.push(key);
+            starts.push(tok.start);
+        };
+        while (keys.length && keys[keys.length - 1] === 'P:;') {
+            keys.pop();
+            starts.pop();
+        };
+        return {
+            keys: keys,
+            starts: starts
+        };
+    };
+
+    /* The neighbours runScope records and sameQuery compares at the start and at the end of the text, where there is no key. */
+    var SAME_QUERY_TEXT_START = '^';
+    var SAME_QUERY_TEXT_END = '$';
+    /* The keys right before a SELECT that make it a part of the statement before it rather than a statement of its own: a subquery's
+     * bracket, the ) that ends a CTE's body ('P:)c', see sameQueryKeyList), a list's comma, an operator, and the set operators. */
+    var SAME_QUERY_JOINS_SELECT = {
+        'P:(': true, 'P:)c': true, 'P:,': true, 'W:UNION': true, 'W:ALL': true, 'W:EXCEPT': true, 'W:INTERSECT': true
+    };
+
+    /**
+     * @function isStatementBreakBefore
+     * @description Whether a key right before a query's keys ends the statement before it, so the query is a statement of its own:
+     * the start of the text or a ';', and, for a query that starts with SELECT or WITH, any key that cannot carry on into it. T-SQL
+     * needs no ';' between statements, so SELECT a FROM T and SELECT b FROM U kept on lines of their own, as in a tab that holds
+     * several queries, are two statements, while SELECT a FROM T UNION SELECT b FROM U and a ( before the SELECT are one.
+     * @param {string} key - the key before, or SAME_QUERY_TEXT_START
+     * @param {string} firstKey - the query's own first key
+     * @returns {boolean}
+     */
+    function isStatementBreakBefore(key, firstKey) {
+        if (key === SAME_QUERY_TEXT_START || key === 'P:;') return true;
+        if (firstKey !== 'W:SELECT' && firstKey !== 'W:WITH') return false;
+        return !SAME_QUERY_JOINS_SELECT[key] && key.indexOf('O:') !== 0;
+    };
+
+    /**
+     * @function isStatementBreakAfter
+     * @description Whether a key right after a query's keys starts something else than more of that query: the end of the text, a ';'
+     * or the SELECT of the next statement, as no clause of a SELECT starts with SELECT, a GO line, and a WITH that starts the next
+     * statement's CTE. A WITH before ( does not count: after a table it is a table hint, as in FROM T WITH (NOLOCK), which a JOIN can
+     * follow (the second review of 1.2.1, 2026-10-10).
+     * @param {string} key - the key after, or SAME_QUERY_TEXT_END
+     * @param {string} [nextKey] - the key after that one, for a WITH
+     * @returns {boolean}
+     */
+    function isStatementBreakAfter(key, nextKey) {
+        return key === SAME_QUERY_TEXT_END || key === 'P:;' || key === 'W:SELECT' || key === 'W:GO' || (key === 'W:WITH' && nextKey !== 'P:(');
+    };
+
+    /**
+     * @function sameQuery
+     * @description Tells whether the editor's SQL is still the query whose rows are on screen, for the stale mark on Results. The
+     * two texts match when their keys (see sameQueryKeys) are the same in the same order, or when the ran query is one or more
+     * whole statements of the editor's text: a run of a selected statement stays current while that statement is unchanged. A
+     * statement is whole when a statement break sits on both sides of it (isStatementBreakBefore, isStatementBreakAfter): ';', an end
+     * of the text, or another query's SELECT on lines of its own, so adding a WHERE after the ran query, or a CTE before it, is a change.
+     * A run of a selection that is no whole statement, as a subquery is, matches where its keys sit in a row between the neighbours
+     * runScope recorded at the run's start, each the same key as then, or a statement break where there was one then. So a WHERE
+     * added inside the subquery is a change, and an edit of the query around it is not. With scope true, a run saved without its
+     * neighbours, or with neighbours that are not two texts, the keys match wherever they sit. Never throws.
+     * @param {string} ranSql - the SQL the rows came from (QueryRunner.currentRunSql)
+     * @param {string} editorSql - the SQL in the editor now
+     * @param {boolean|{before: string, after: string}} [scope] - runScope's answer at the run's start: false or none for whole statements,
+     *   the neighbours for a part of a statement, or true for a part of a statement whose neighbours are not known
+     * @returns {boolean} false for anything that is not text, and when the keys could not be read
+     */
+    function sameQuery(ranSql, editorSql, scope) {
+        try {
+            if (typeof ranSql !== 'string' || typeof editorSql !== 'string') return false;
+            var ran = sameQueryKeys(ranSql);
+            var editor = sameQueryKeys(editorSql);
+            if (!ran.length) return !editor.length;
+            var hasNeighbours = !!scope && typeof scope === 'object' && typeof scope.before === 'string' && typeof scope.after === 'string';
+            for (var start = 0; start + ran.length <= editor.length; start++) {
+                var end = start + ran.length;
+                var before = start > 0 ? editor[start - 1] : SAME_QUERY_TEXT_START;
+                var after = end < editor.length ? editor[end] : SAME_QUERY_TEXT_END;
+                var isBreakAfter = isStatementBreakAfter(after, editor[end + 1]);
+                if (hasNeighbours) {
+                    if (before !== scope.before && !(isStatementBreakBefore(scope.before, ran[0]) && isStatementBreakBefore(before, ran[0]))) continue;
+                    /* runScope records a break after the selection as SAME_QUERY_TEXT_END, so any break now matches it. */
+                    if (after !== scope.after && !(isStatementBreakAfter(scope.after) && isBreakAfter)) continue;
+                } else if (!scope) {
+                    if (!isStatementBreakBefore(before, ran[0]) || !isBreakAfter) continue;
+                };
+                var at = 0;
+                while (at < ran.length && editor[start + at] === ran[at]) at++;
+                if (at === ran.length) return true;
+            };
+            return false;
+        } catch (e) {
+            return false;
+        };
+    };
+
+    /**
+     * @function runScope
+     * @description What sameQuery compares a run with, worked out when the run starts: false when the SQL that runs is the editor's
+     * whole text or whole statements of it, and otherwise, as for a selected subquery, the keys right before and after the selection
+     * in the text (SAME_QUERY_TEXT_START and SAME_QUERY_TEXT_END at its ends). A later edit that puts a WHERE right after the
+     * subquery, inside its brackets, changes the key after it, so the run's rows are marked as stale. True when the selection's keys
+     * are not found in the text, as for a selection that starts inside a comment: sameQuery then finds them anywhere. Never throws.
+     * @param {string} ranSql - the SQL the run starts with, the editor's selection when there is one
+     * @param {string} text - the editor's whole text at the run's start
+     * @param {number} [offset] - where the selection starts in the text; without it, the first place its keys sit
+     * @returns {boolean|{before: string, after: string}}
+     */
+    function runScope(ranSql, text, offset) {
+        try {
+            if (typeof ranSql !== 'string' || typeof text !== 'string') return false;
+            if (ranSql === text) return false;
+            var ran = sameQueryKeys(ranSql);
+            var list = sameQueryKeyList(text);
+            var editor = list.keys;
+            if (!ran.length) return true;
+            var found = -1;
+            for (var start = 0; start + ran.length <= editor.length; start++) {
+                var at = 0;
+                while (at < ran.length && editor[start + at] === ran[at]) at++;
+                if (at !== ran.length) continue;
+                /* The selection itself, where its text is in the editor more than once: the first place at or after its start. */
+                if (found === -1) found = start;
+                if (typeof offset === 'number' && list.starts[start] >= offset) {
+                    found = start;
+                    break;
+                };
+            };
+            if (found === -1) return true;
+            var end = found + ran.length;
+            var before = found > 0 ? editor[found - 1] : SAME_QUERY_TEXT_START;
+            var isBreakAfter = end >= editor.length || isStatementBreakAfter(editor[end], editor[end + 1]);
+            /* Whole statements where the selection itself sits, not where its text first sits: a copy of a whole query inside another's
+             * brackets is a part of a statement, as the copy above it is not (the second review of 1.2.1, 2026-10-10). */
+            if (isStatementBreakBefore(before, ran[0]) && isBreakAfter) return false;
+            return {
+                before: before,
+                after: isBreakAfter ? SAME_QUERY_TEXT_END : editor[end]
+            };
+        } catch (e) {
+            return true;
+        };
+    };
+
     // ---- top-level entry point -------------------------------------------
     // Splits on top-level (depth-0) ';' into separate statements (rule: several
     // statements separated by ';' format each statement and join them with ';'
@@ -10984,9 +11709,13 @@ window.SQLStudioSQL = {
             changed: false
         };
         var allTokens = tokenize(sql);
+        /* Each bail-out gives its reason, so Format does not answer as if the query were already laid out (the review after 1.2.0,
+         * 2026-10-09). skipped stays for the token check after a rewrite. An empty query, or one of comments only, has nothing to lay
+         * out and is no bail-out. */
         if (!formatterTokensValid(allTokens)) return {
             sql: sql,
-            changed: false
+            changed: false,
+            reason: 'This query has a text, a comment or a ( that is not closed, so Format left it as it is.'
         };
         var extracted = formatterExtractComments(allTokens);
         var coreTokens = extracted.core;
@@ -10998,7 +11727,8 @@ window.SQLStudioSQL = {
         for (var gi = 0; gi < coreTokens.length; gi++) {
             if (isGoLine(sql, coreTokens, gi)) return {
                 sql: sql,
-                changed: false
+                changed: false,
+                reason: 'This query has a GO line, which Format would turn into an alias, so it left it as it is.'
             };
         };
         var ctx = {
@@ -11039,7 +11769,8 @@ window.SQLStudioSQL = {
             if (!(coreTokens[nonEmptySegs[vi].start].type === 'keyword' && coreTokens[nonEmptySegs[vi].start].upper === 'SELECT')) {
                 return {
                     sql: sql,
-                    changed: false
+                    changed: false,
+                    reason: 'Format lays out a query that starts with SELECT, so it left this one as it is.'
                 };
             };
         };
@@ -11091,7 +11822,8 @@ window.SQLStudioSQL = {
         } catch (e) {
             return {
                 sql: sql,
-                changed: false
+                changed: false,
+                reason: 'Format could not read this query, so it left it as it is.'
             };
         };
     };
@@ -11435,7 +12167,7 @@ window.SQLStudioSQL = {
 
     /**
      * @method expectCloseParen
-     * @description Consumes a ')' if the current token is one, otherwise throws a StrictError naming the unmatched '(' opened at openTok.
+     * @description Consumes a ')' if the current token is one, otherwise throws a StrictError naming the unmatched '(' opened at openTok. When the token in the way is a word, the message names that word and does not tell the user to add a ) the query may not lack: JSON_VALUE(x, '$.a' RETURNING INT) has its ), and an added one makes it worse.
      * @param {Object} openTok - The '(' token this close paren is expected to match.
      * @returns {Object} The consumed ')' token.
      */
@@ -11443,6 +12175,9 @@ window.SQLStudioSQL = {
         if (this.isPunct(')')) return this.advance();
         var t = this.cur();
         if (!t) this.failBare(openTok, openTok, 'This ( from line ' + openTok.line + ' is never closed. Add ) to close it, near the end of the query.');
+        if (t.type === 'keyword' || t.type === 'identifier') {
+            this.failBare(t, t, 'SQL Studio did not expect ' + t.raw + ' here. Check the arguments before it, or add ) to close the ( from line ' + openTok.line + '.');
+        };
         this.fail(t, 'This ( from line ' + openTok.line + ' is missing its closing ). Add )');
     };
 
@@ -11675,14 +12410,15 @@ window.SQLStudioSQL = {
     };
     /**
      * @method parseAdditive
-     * @description Parses a chain of one or more multiplicative expressions joined by '+' or '-'.
+     * @description Parses a chain of one or more multiplicative expressions joined by '+', '-' or '||'.
      * @param {boolean} [isEnforced] - True when the leftmost operand must be predicate-shaped; propagated only to that operand.
      * @returns {Object} {pure, bool}.
      */
     StrictParser.prototype.parseAdditive = function (isEnforced) {
         var r = this.parseMultiplicative(isEnforced);
         var isPureOperand = r.pure, isBooleanShaped = r.bool;
-        while (this.isOp('+') || this.isOp('-')) {
+        /* || is SQL Server 2025's string concatenation, parsed like + so that MCE074 can be the one to report it. */
+        while (this.isOp('+') || this.isOp('-') || this.isOp('||')) {
             this.advance();
             this.parseMultiplicative(false);
             isPureOperand = false;
@@ -11814,10 +12550,13 @@ window.SQLStudioSQL = {
             bool: false
         }; }
         if (t.type === 'punct' && t.value === '(') return this.parseParenExpr(isEnforced);
-        if (t.type === 'identifier') { this.parseIdentifierPrimary(); return {
-            pure: true,
-            bool: false
-        }; }
+        if (t.type === 'identifier') {
+            var isCondition = this.parseIdentifierPrimary();
+            return {
+                pure: true,
+                bool: isCondition
+            };
+        };
         // A handful of built-in function names (LEFT, RIGHT, COALESCE, NULLIF, ...)
         // and niladic literals (CURRENT_TIMESTAMP, SYSTEM_USER, ...) are also
         // T-SQL reserved words, so the tokenizer types them 'keyword'; match them
@@ -11894,19 +12633,26 @@ window.SQLStudioSQL = {
     /**
      * @method parseIdentifierPrimary
      * @description Parses a dotted identifier chain, then, if it's immediately followed by '(', its call arguments and any WITHIN GROUP or OVER window clause.
+     * @returns {boolean} True for REGEXP_LIKE(...), SQL Server 2025's yes-or-no condition, which stands where a condition does: in WHERE, ON, HAVING and CASE WHEN. Every other name or call is a value.
      */
     StrictParser.prototype.parseIdentifierPrimary = function () {
         var chainLast = this.advance();
+        /* Only REGEXP_LIKE itself is a condition: x.REGEXP_LIKE(a) is a value, which MCE074 does not read as the 2025 function either
+         * (the review after 1.2.0, 2026-10-09). */
+        var isQualified = false;
         while (this.isPunct('.')) {
+            isQualified = true;
             this.advance();
             var nt = this.cur();
             if (!nt || !(nt.type === 'identifier' || nt.type === 'number')) this.fail(nt, "A name is missing after '.'. Add the column or table name");
             chainLast = this.advance();
         };
+        var isPredicateCall = false;
         if (this.isPunct('(')) {
             var openTok = this.advance();
             this.parseArgList(chainLast.upper);
             this.expectCloseParen(openTok);
+            isPredicateCall = !isQualified && chainLast.upper === 'REGEXP_LIKE';
             if (this.isWord('WITHIN')) {
                 this.advance();
                 this.expectWord('GROUP', 'WITHIN needs GROUP after it. Add GROUP');
@@ -11923,21 +12669,24 @@ window.SQLStudioSQL = {
                 var oOpen = this.advance();
                 this.parseOverBody();
                 this.expectCloseParen(oOpen);
+                isPredicateCall = false;
             };
         };
-        void chainLast;
+        return isPredicateCall;
     };
 
     /**
      * @method parseArgList
-     * @description Parses a function call's comma-separated argument list, allowing a bare '*', for COUNT(*), and an optional leading DISTINCT on the first argument.
+     * @description Parses a function call's comma-separated argument list, allowing a bare '*', for COUNT(*), and an optional leading DISTINCT on the first argument. JSON_OBJECT and JSON_OBJECTAGG take key: value pairs, JSON_ARRAYAGG an ORDER BY after its value, and the JSON constructors a NULL ON NULL or ABSENT ON NULL clause. The six JSON functions of JSON_RETURNING_FUNCTIONS may end with SQL Server 2025's RETURNING and a type, which is read so that MCE074 and not MCE000 reports it.
+     * @param {string} functionName - The called function's name in upper case.
      */
     StrictParser.prototype.parseArgList = function (functionName) {
         /* SQL Server 2022's JSON constructors, which run in a Query Activity (org check, 2026-09-28):
         JSON_OBJECT('key': value, ...) and JSON_ARRAY(value, ...), each with an optional closing
-        NULL ON NULL or ABSENT ON NULL. */
-        var isJsonObject = functionName === 'JSON_OBJECT';
-        var isJsonConstructor = isJsonObject || functionName === 'JSON_ARRAY';
+        NULL ON NULL or ABSENT ON NULL. JSON_OBJECTAGG(key: value) and JSON_ARRAYAGG(value) are SQL Server
+        2025's aggregates, read the same way. */
+        var isJsonObject = functionName === 'JSON_OBJECT' || functionName === 'JSON_OBJECTAGG';
+        var isJsonConstructor = isJsonObject || functionName === 'JSON_ARRAY' || functionName === 'JSON_ARRAYAGG';
         var self = this;
         var skipNullClause = function () {
             if (!isJsonConstructor || !(self.isWord('NULL') || self.isWord('ABSENT')) || !self.isWordAt(1, 'ON') || !self.isWordAt(2, 'NULL')) return false;
@@ -11946,7 +12695,30 @@ window.SQLStudioSQL = {
             self.advance();
             return true;
         };
-        if (this.isPunct(')') || skipNullClause()) return;
+        /* RETURNING type, after the arguments. A missing type is an error: parseTypeName names it. */
+        /* RETURNING is the clause with a data type after it. After the arguments, where no value can stand, it is the clause with a ) after
+         * it too, which parseTypeName reports as a type missing; first in the call, JSON_ARRAY(Returning) is a field. */
+        var isReturningClause = function (isAfterArguments) {
+            var typeTok = self.at(1);
+            if (!JSON_RETURNING_FUNCTIONS[functionName] || !self.isWord('RETURNING') || !typeTok) return false;
+            if ((typeTok.type === 'identifier' || typeTok.type === 'keyword') && RETURNING_TYPES[typeTok.upper]) return true;
+            return isAfterArguments && typeTok.type === 'punct' && typeTok.value === ')';
+        };
+        var skipReturning = function () {
+            if (!isReturningClause(true)) return;
+            self.advance();
+            self.parseTypeName();
+        };
+        if (this.isPunct(')')) return;
+        /* JSON_OBJECT(RETURNING JSON) has no arguments. A column named Returning is one unless a data type follows it. */
+        if (isReturningClause(false)) {
+            skipReturning();
+            return;
+        };
+        if (skipNullClause()) {
+            skipReturning();
+            return;
+        };
         /* TRIM([LEADING | TRAILING | BOTH] [characters FROM] string): the FROM form is SQL Server 2017,
         the direction words SQL Server 2022. A column named Leading, TRAILING(x) or both stays a column. */
         if (functionName === 'TRIM') {
@@ -11978,9 +12750,14 @@ window.SQLStudioSQL = {
                 var colon = this.cur();
                 if (isJsonObject && colon && colon.value === ':') {
                     this.advance();
-                    var fb3 = this.setFallback('This JSON_OBJECT key has no value after its colon. Add a value');
+                    var fb3 = this.setFallback('This ' + functionName + ' key has no value after its colon. Add a value');
                     this.parseOrExpr();
                     this.restoreFallback(fb3);
+                };
+                if (functionName === 'JSON_ARRAYAGG' && this.isWord('ORDER') && this.isWordAt(1, 'BY')) {
+                    this.advance();
+                    this.advance();
+                    this.parseOrderByList('ORDER BY needs a column or expression. Add a column or expression');
                 };
             };
             if (skipNullClause()) break;
@@ -11994,6 +12771,7 @@ window.SQLStudioSQL = {
             };
             break;
         };
+        skipReturning();
     };
 
     /**
@@ -12217,7 +12995,9 @@ window.SQLStudioSQL = {
      */
     StrictParser.prototype.parseTypeName = function () {
         var t = this.cur();
-        if (!t || t.type !== 'identifier') this.fail(t, 'A data type is missing here. Add a data type such as VARCHAR or INT');
+        /* A type name the tokenizer marks as a keyword, as TIME in CAST(x AS TIME), is a type too: as first built it failed with MCE000
+         * (the second review after 1.2.0, 2026-10-09). */
+        if (!t || !(t.type === 'identifier' || (t.type === 'keyword' && RETURNING_TYPES[t.upper]))) this.fail(t, 'A data type is missing here. Add a data type such as VARCHAR or INT');
         this.advance();
         if (this.isPunct('(')) {
             var openTok = this.advance();
@@ -13196,6 +13976,8 @@ window.SQLStudioSQL = {
         buildFullSelect: buildFullSelect,
         formatSql: formatSql,
         sameTokens: sameTokens,
+        sameQuery: sameQuery,
+        runScope: runScope,
         parseStrict: parseStrict,
         buildIndex: buildIndex,
         lookupTable: lookupTable,
@@ -13214,6 +13996,9 @@ window.SQLStudioSQL = {
         WSPROXY_EXPORT_MAX_COLUMNS: WSPROXY_EXPORT_MAX_COLUMNS,
         RESULT_CHUNK_CACHE_MAX: RESULT_CHUNK_CACHE_MAX,
         RESERVED_WORDS: RESERVED_WORDS,
+        HIGHLIGHT_KEYWORDS: HIGHLIGHT_KEYWORDS,
+        HIGHLIGHT_TYPES: HIGHLIGHT_TYPES,
+        NEWER_THAN_2022: NEWER_THAN_2022,
         TRACKING_VIEWS: TRACKING_VIEWS,
         SEND_LOG_KEYS: SEND_LOG_KEYS,
         subscriberFieldKind: subscriberFieldKind
@@ -13225,7 +14010,7 @@ window.SQLStudioSQL = {
 
 
 /* ======================================================== sqlstudio.css == */
-window.SQLStudioEmbeddedCss = "/* ==========================================================================\n   SQL Studio styles\n\n   Brand: SQL Studio follows the same design tokens and Lightning-adjacent\n   chrome as its sibling app Diagramforce. The dark tokens\n   are the base, and .ss[data-theme=\"light\"] overrides them. The App picks\n   the theme from the user's choice or the operating system's mode. Everything is scoped under .ss so the app can be\n   dropped into a Cloud Page without leaking styles or claiming <html>.\n\n   Sections:\n   1. Design tokens (brand, semantic, surfaces, sizing, shadows)\n   2. Reset and base\n   3. Layout shell (toolbar-on-top anatomy: header, sidebar, main - no status bar)\n   4. Buttons and form controls\n   5. Sidebar tree and search\n   6. Toolbar, help/theme menu, and problems strip\n   7. Editor pane and split resizer\n   8. Results grid, header, notice, error panel and pager\n   9. Dialogs, dropdown managers and modal\n   10. Toasts\n   11. Misc (badges, scrollbars, focus, responsive)\n   ========================================================================== */\n\n/* -------------------------------------------------------------------- */\n/* 1. Design tokens                                                      */\n/* -------------------------------------------------------------------- */\n.ss {\n  /* Brand (theme-stable) */\n  --brand-blue: #1D73C9;\n  --brand-red: #DA4E55;\n  --brand-amber: #F6B355;\n  --brand-amber-strong: #D4911F;\n  --brand-green: #27AE60;\n\n  /* Semantic: the primary hue flips between themes (deliberate, matches\n     Diagramforce); danger is always the brand red. --color-action is a separate accent hue for the\n     Run button, primary dialog buttons, and results/pager accents - it\n     also flips between themes, but independently of --color-primary. */\n  --color-primary: var(--brand-red);\n  --color-primary-hover: color-mix(in srgb, var(--color-primary) 82%, black);\n  --color-danger: var(--brand-red);\n  --color-accent: var(--brand-amber);\n  --color-action: var(--brand-amber);\n  --color-action-hover: color-mix(in srgb, var(--color-action) 82%, black);\n  --color-action-fg: #1C1E21;\n  --tint-danger: color-mix(in srgb, var(--color-danger) 14%, transparent);\n  --tint-warning: color-mix(in srgb, var(--warning-color, var(--brand-amber)) 16%, transparent);\n  --tint-info: color-mix(in srgb, var(--brand-blue) 14%, transparent);\n  /* The focused completion row and the header strip of its details panel, in both themes: brand blue with white\n     text, which reads at 4.8:1 on it, and the row reads at 4.4:1 against the light list and 3.2:1 against the dark\n     one. The Monaco theme writes the same pair (Editor._registerThemes). The rest of the panel is a card in a light\n     tint of the same blue, under which the note's secondary text keeps 4.5:1 in the light theme. */\n  --focus-band: var(--brand-blue);\n  --focus-band-fg: #FFFFFF;\n  --focus-card: color-mix(in srgb, var(--brand-blue) 8%, transparent);\n  --tint-success: color-mix(in srgb, var(--brand-green) 14%, transparent);\n\n  /* Dark theme surfaces and text (default) */\n  --bg-app: #212121;\n  --bg-surface: #18191A;\n  --bg-surface-raised: #242526;\n  --bg-elevated: rgba(127, 127, 127, 0.08);\n  --bg-hover: rgba(255, 255, 255, 0.10);\n  --text-primary: #F5F6F7;\n  --text-secondary: #B0B3B8;\n  --text-muted: #9CA3AF;\n  --text-inverse: #1C1E21;\n  --border-color: #3A3B3C;\n  --border-color-strong: #4E4F50;\n  --toolbar-bg: #242526;\n  --toolbar-button-hover: rgba(255, 255, 255, 0.10);\n  --toolbar-button-active: rgba(218, 78, 85, 0.15);\n  /* The quick tip (.ss-tip): a step lighter than the sidebar, with a border and a tight shadow that set it off from the rows\n     under it (the author's RC11 test, 2026-10-09: the surface and border colours left it hard to tell from the list). */\n  --tooltip-bg: #333437;\n  --tooltip-fg: var(--text-primary);\n  --tooltip-border: #6A6D72;\n  --shadow-tooltip: 0 4px 14px rgba(0, 0, 0, 0.55);\n  --modal-btn-neutral-bg: #E4E6EB;\n  --modal-btn-neutral-hover: #D2D6DC;\n  --modal-btn-neutral-fg: #1C1E21;\n  /* The severity colours: --warning-color, --color-danger and --brand-blue\n     mark (squiggles, rulers, borders, dots) at 3:1 or more, and the -text\n     variants colour words at 4.5:1 or more on the tints, the active tab and\n     the hovered tab they sit on. The dark theme's error red and info blue are\n     a shade lighter as text. */\n  --warning-color: var(--brand-amber);\n  --warning-text: var(--warning-color);\n  --danger-text: #E89397;\n  --info-text: #73AFEB;\n  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);\n  --shadow-md: 0 5px 40px rgba(0, 0, 0, 0.35);\n  --shadow-lg: 0 12px 28px 0 rgba(0, 0, 0, 0.4), 0 2px 4px 0 rgba(0, 0, 0, 0.2);\n  --shadow-dropdown: 0 14px 24px -10px rgba(0, 0, 0, 0.55);\n\n  /* Editor tokens: keywords/functions use the\n     flipping primary/accent hues, data views stay brand blue in both\n     themes, strings are always green, comments always --text-muted.\n     Each reads at 4.5:1 or more on --editor-bg, which the details\n     panel's code blocks share too: where a brand colour falls short,\n     the token takes the same hue a step lighter here, and a step darker\n     in the light theme below. Dark: the keyword red is #DB545B (the\n     brand red is 4.36:1), the Data View blue #2884E0 (the brand blue\n     is 3.65:1). */\n  --editor-bg: var(--bg-surface);\n  --editor-fg: var(--text-primary);\n  --editor-keyword: #DB545B;\n  --editor-function: var(--brand-amber);\n  --editor-string: var(--brand-green);\n  --editor-identifier: var(--text-primary);\n  --editor-dataview: #2884E0;\n  --editor-comment: var(--text-muted);\n  --editor-operator: #778899;\n\n  /* Sizing and type */\n  --toolbar-height: 50px;\n  --panel-header-height: 45px;\n  --border-radius-sm: 6px;\n  --border-radius-md: 8px;\n  --spacing-xs: 4px;\n  --spacing-sm: 8px;\n  --spacing-md: 12px;\n  --spacing-lg: 16px;\n  --spacing-xl: 24px;\n  --font-family: system-ui, -apple-system, \"Segoe UI\", Roboto, Ubuntu, Cantarell, \"Noto Sans\", sans-serif;\n  --font-mono: ui-monospace, SFMono-Regular, \"SF Mono\", Menlo, Consolas, \"Liberation Mono\", monospace;\n  --font-size-xs: 11px;\n  --font-size-sm: 12px;\n  --font-size-md: 14px;\n  --font-size-lg: 16px;\n  --line-height: 1.65;\n  --logo-data-uri: url(\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAABGdBTUEAALGPC/xhBQAAAERlWElmTU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAQKADAAQAAAABAAAAQAAAAABGUUKwAAABy2lUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iWE1QIENvcmUgNi4wLjAiPgogICA8cmRmOlJERiB4bWxuczpyZGY9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkvMDIvMjItcmRmLXN5bnRheC1ucyMiPgogICAgICA8cmRmOkRlc2NyaXB0aW9uIHJkZjphYm91dD0iIgogICAgICAgICAgICB4bWxuczpleGlmPSJodHRwOi8vbnMuYWRvYmUuY29tL2V4aWYvMS4wLyI+CiAgICAgICAgIDxleGlmOkNvbG9yU3BhY2U+MTwvZXhpZjpDb2xvclNwYWNlPgogICAgICAgICA8ZXhpZjpQaXhlbFhEaW1lbnNpb24+MTk2PC9leGlmOlBpeGVsWERpbWVuc2lvbj4KICAgICAgICAgPGV4aWY6UGl4ZWxZRGltZW5zaW9uPjE5NjwvZXhpZjpQaXhlbFlEaW1lbnNpb24+CiAgICAgIDwvcmRmOkRlc2NyaXB0aW9uPgogICA8L3JkZjpSREY+CjwveDp4bXBtZXRhPgosnlo7AAAMIklEQVR4AeVba2wdxRX+9u7eh31jO7ZjB2xwchMCAURCHhWPQsEhIWlTKlIeKvTxB1X9gUAV/0qlItoK2kogVX0L8SeIP6gtqC0VJLQxSdoqPOI4AkNMXnZiOwlx8OPavs/dfmf2Pnbvrl+xHYN9lPHenZmdme+bc86cmc1qmIRYlhVhtVqmaqZFTGEmnenzJFkOJskUZ/qMqU/TtASv44o2VilBC8htTDsAaz2vjUxRQDN4T/BjPspqcyEWO9VIgpXhj2Gmbt4f5PVVpjdIhpAzOSH4rUz/Y5ovIli2+qH3TCMr/ogVn2YK2g8Is19kKUBME8VT1IRnnWgKpZKZA/+MXeGLDtwJU34XoD7pJKGQS/BbWOt1Js78fAMvBIgouKIJ20nC7kIOwZcR9F5W2Dh/wQtcESHBeo/Xr5CE0YDKA+5eGOAFrVotONGCGcgTcJ/cLDBRmANUfwly1i0w8AJ3nWAXDWCEZzUsPAIU5lohoIaJEd6CE8FcQwIyjO0lvF1oIpgzi0iAEaIJfN42NpdgNgSzERIT+BxubC4Bfjso0j2qr2JA/tH8okFN+JqJKDEXgFqmP1KtEKD6lI9VdnHjKiFAw7njXfjJy+9hRA+7SMhmTTTVV+HpR25DyBCLubgOhVozPoSfvrAHHSMBGE48bNLQA/jZI7ejsa4i14eGVDqDH7+4H73n4zCMAMIhA3VVZbiqsRprV9ZhdVMNysK5vdsUx1VCAFA51IfIBwfREr2Gpx5yxmCLwG09eh7N65tw95di+eyLuva1tODwgQ/RHm1EyKEFFjsJEmAiVexXOjCZ336iD8fP9CuCBKPJylJfyFi+tAKbNy7HjtuuQsMSIU6EhZMQ0WmXWIEAtmW6UKunybauBiSDCjHpuoadu9qRysgAnVPnamKcGw3ZkTj69ryBUCSIEGdb2i5NfhZgj0FX2hcK6ogQeFnYgNQ93juA373aiod//jr+9Pc2jCZlvzO58XkIyJKAK41BfDlzGqlCpGxjEtVvO/op9rR2jQNy/KKBAy3IDnQjQAAzIQJTzEbI6I8n8es/v48fPLcbR0/LqdjEJHgIED+nRXVs00+gikdslk8jLxW0YCoQaPujcQy+uwuhqiC0WVh49YCmiDjYcRbff+4tHOw4MyEJXgJkYGU6lkXiuF3v9mpBMEAtOJfTgokZdlIUP7wX5lAPgtEgAhzsJM1UNSH2ztjdTs5GfX5rRhBGqg/mu88je+ET1hh7nF4CODCjTINWHsD26ElU8SzRLG2Ahjc1LeDsJ4YxfHgXjKgBnacPJdblA8OdFSLx4vDE/oW5RCqDZDqrHKGzZsoMoDE6il/d9AFWR05h6MAfqXkXWMWfBI8higkYEVamL4hpw2jO9OC14RjCcuCaE3GIbcdsX7BVrQgTe9zRjr3ASC+C5Qw8uaSqkCLf4LhXC2GCf/7RZqT5nGjN0GgKR7ouYO/h0zjwUS8SyYwixgafwLMb2nB1xSCSZhjWYA9G2l7GopseJQdeEjwEyMzoigCpHMA91Z1oSTRi2DR45wRq4aU329G8rkmtEGNjYEiVHMbox7sRiEh31C6TyaN747TAgV9ZX+mqsHZlPR5sXo3WT87iN39txX/azyC2OIVfbDiEVZUDSGZtJ6MZYaROHUCq6VaEGjawDScGH0WUgemcJElWSENsURybKukLqFpOkRXh8PFzePvQKWZ7mXXWTRzfB3O4VxEQYLsa28UUfYA9cBm8O61btRR/eGILHv3qSjy95j2sqiiCz49BfEfiyD8ZPMgrA7e4UbFM48D0MNd8bhMkgene+lOoNlIeXyBD2fnmh7m4wN2wfcfZTw0jcfQttexpEvbRfAJBasD4nPk1NkaemIiOx791C9asuQEJ+oVS0fQgMn0dSJ/vYJG7Yy8BLM9rgNIC2t+Kyji2LOnx1YJDx86h5VCXp+H8IJIn9yEb74Emzov/ZBOqiHCPI1/9Iq8yFQYia74LvYJnO6aXBCubQar7HU/7HgKEIE1myJGynLV7G7pQHeSKYHlHLr7AGx3K7MeROMbZp7mIacnar9Z/2xV4BjO9DEYs4UpErt7KlcFLgBYwkPn0CKxsytWNPwFUVZmlfDIZacUqh7Glvpda4CZAfMEhrggtyhe42kaycz+yg920d0HOf3kSNNuO5e9MS6hxIwJlfIfr2GOoPti5OcLYQC2JxV59CVBbNGWvHHXuKpzefwPPkCrCaiNSbML+9ZL4goL9FW1fK91xc2D6ohrolZdTVcfYDpc2Pul7i462GkZVE/GXaAGdjpVJKBKczXkIEOeUV1XnNaOZWNVUja/fskIFIM5GJC4o9QXJTtr+EGdf6byjtplGcPmdDLTqmFkySEe16fzUK5dSe2kSDi1WfidAwtPy4rgo3jiAZaKqJc5SrT5ZLicPbVqNf+zvQJzBiApnC23Z0WHz+mUImqPK84vduYS2GYjWIxJrJvYDrqKZvIl36ejbn+Zq455fM52CEeMENBZ7KxkhC3K26k8AD0XqothOLZDlT3ZgeSloQVsvttS0K9uXIMQp4okjK5qhRaroqGZa/Ys9xU8Mor89xeW8mCe/TB6sLB2lP3KIm6J8AUlQBJRec+UP33UtaiojPr4ggJ2vv4MLH+2i3yuSox5Ttl+P8Io7c63MxoUDpl9J9narGKbUBCQSDVZXuTr2J8BVxXvTtLSSvmCljy/Q0HZyEHuPWQyPhb2iWLT9sMx+eDEzZ8P/230lensx0tlF+y+ZABJjRKMI14nvKcpFESCPKy2ooBbIeZVT6PRe6VyORIZrfz5fZp9OLxy7M58za9dP/92CzNAQNbjQu+rLzGYRabicGiD/zakoF0mABdGCe3y0IEhP+8Fni7HvbB2PvGwvb8/+Ji5Rszn7GkY7O3HujTfp/PIHpEWgYhpVN67lojQZH+B4bryfD22+FrW+vgB45WSTrQX0/HqUs0/1nz3RkBkYwPHf/t6efW7lXcLVSy8vR/UtN7uy5aakpqd8nAxqAbeoX7uZcUHJKW5BC87VI8QzpXBMZl+cT4m5jNP65IpEzTUkunvQ8cwvEf/4iO/sm6k0Fm9Yj/LlyzxjKPEUk+vWWevbm6/D3/57TB1IBhx2l6Zv2PnxZbj1iiTqZmT23TYtY5BZP//2PvS++hpS589zx8m9dqlQ9fXyCC6/75sskTbckzBNAmxf8NiOG3GIB5ByjO6UbLYR/SvuQP00Z98iiIH3W3mkPqKaT/f3Y+TECQx92I7EmbPKrn3Bs7aZSqHxvh2IXrWSd27w0tg0CZAmLDy8+XqV5M5fvB371/PLZQzPAKbzhRcxevq07cRo0zKbstSNBVxaMhNJLN64AQ0P3O/XsMqbAQKknekAHHNsrgKNnl3AlnpxVyXHjZlMYtE1VyP2+GMIhCUk9B/jDBHg6Hmuf1I7BHzl2jVY+cQPEaqV///hD16GOq8IMNPcADEEv+wb9+CK732Hx+9y/j42+HlBgDhIi8DFNCqvvw4NDz6AqnU3CjbK+OClhlcDGLZaWf7HarUnliq2WJkUDxnkpePMiLzUGOV5ftYRSotvy/L0WU5xS0W8uah20Qdo9Al8wVpbi4rrVqP2jjsY6a1huUDyPl/aXv7eQ0CgfAki12xneUmMxCNlozqWf27a1+0MoG6ILVFvnAuNcdwBRnGLuccoCg82eCRXv3ULMv0DPFjVua6XIVRTg0hjI8quvAJGRf6VuDw1efBSWyPbm3j9l9zYD3sDDrss/3dqHeSf8l6n2s949ac6pkJbd4kGcMciDeQzp9qYF9rkcqbaz1TrTzQKhTkrei4GPzuHcxONYU7LFeakEMBTQvWZyZwO59J3bn9aIwTIu2P3UemlH81c9CiYLwgBfTSBnrkYwdz2qTD3cQerPi1rndvBzEnvrYJdNEDkL/ZlQf1VmPME7KIjlM9IFgADglGwgphz4R5VYZTgn+Q9Y935TILCJhjlyzFidsS7zNjN+6ckc36SUJhY+XZQsCrJm4C6YYF8VOjQhMJDdu0v5F/BkJ95uL4ZHBMO9wcL99PZPCskQc6Rch9Pgx9PW42852cm6usS9+ln/qG5v8q+JvfxtMZ385jw4+lJ6TjJkP0pP65yfj7Pd18+xwlzw4FgNmQ/w33N1D6f/z9nGYh4iZaoUAAAAABJRU5ErkJggg==\");\n  --transition-fast: 150ms ease;\n  --transition-normal: 400ms cubic-bezier(0.08, 0.52, 0.52, 1);\n\n  color-scheme: dark;\n  background: var(--bg-app);\n  color: var(--text-primary);\n}\n\n.ss[data-theme=\"light\"] {\n  --color-primary: var(--brand-blue);\n  --color-primary-hover: color-mix(in srgb, var(--color-primary) 85%, black);\n  --color-action: var(--brand-blue);\n  --color-action-hover: color-mix(in srgb, var(--color-action) 85%, black);\n  --color-action-fg: #FFFFFF;\n\n  --bg-app: #F5F6F7;\n  --bg-surface: #FFFFFF;\n  --bg-surface-raised: #FFFFFF;\n  --bg-elevated: rgba(127, 127, 127, 0.08);\n  --bg-hover: rgba(0, 0, 0, 0.06);\n  --text-primary: #1C1E21;\n  --text-secondary: #606770;\n  --text-muted: #65707B;\n  --text-inverse: #FFFFFF;\n  --border-color: #DADDE1;\n  --border-color-strong: #BEC3C9;\n  --toolbar-bg: #FFFFFF;\n  --toolbar-button-hover: rgba(0, 0, 0, 0.06);\n  --toolbar-button-active: rgba(53, 120, 229, 0.12);\n  --tooltip-bg: #FFFFFF;\n  --tooltip-fg: var(--text-primary);\n  --tooltip-border: #A9AFB6;\n  --shadow-tooltip: 0 4px 14px rgba(0, 0, 0, 0.16);\n  --modal-btn-neutral-bg: #E4E6EB;\n  --modal-btn-neutral-hover: #D2D6DC;\n  --modal-btn-neutral-fg: #1C1E21;\n  /* The light theme's severity colours: the warning amber a shade darker\n     than the strong one, which marked at 2.67:1 on white, and every -text\n     variant a shade darker again, for 4.5:1 as text. */\n  --warning-color: #B47B1A;\n  --warning-text: #825913;\n  --danger-text: #B9272E;\n  --info-text: #1962AC;\n  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.1);\n  --shadow-md: 0 5px 40px rgba(0, 0, 0, 0.12);\n  --shadow-lg: 0 12px 28px 0 rgba(0, 0, 0, 0.2), 0 2px 4px 0 rgba(0, 0, 0, 0.1);\n  --shadow-dropdown: 0 14px 24px -10px rgba(0, 0, 0, 0.18);\n\n  /* The light theme's editor tokens at 4.5:1 or more on white: the keyword\n     and Data View blue as they are, the amber a step darker than the\n     strong one (2.67:1), the green a step darker than the brand green\n     (2.87:1), the operator grey a step darker than Monaco's (3.64:1), and\n     the second bracket pair's green a step darker than Monaco's (3.93:1). */\n  --editor-keyword: var(--color-primary);\n  --editor-function: #9E6C17;\n  --editor-string: #1E864A;\n  --editor-dataview: var(--brand-blue);\n  --editor-operator: #667788;\n  --editor-bracket-2: #2D872D;\n\n  color-scheme: light;\n}\n\n/* -------------------------------------------------------------------- */\n/* 2. Reset and base                                                     */\n/* -------------------------------------------------------------------- */\n.ss, .ss * {\n  box-sizing: border-box;\n}\n.ss {\n  position: relative;\n  display: flex;\n  flex-direction: column;\n  /* The viewport, not 100%: the Cloud Page gives html, body and #sqlstudio no height, so a\n     percentage resolved to auto there and the app grew with its content (a 100-row page made\n     it about 3,000px tall, scrolling the whole page instead of the grid). */\n  height: 100vh;\n  min-height: 640px;\n  font-family: var(--font-family);\n  font-size: var(--font-size-sm);\n  line-height: var(--line-height);\n}\n/* :where() keeps this reset at zero specificity, so every component's own\n   color rule (.ss-btn, .ss-toolbar__button, .ss-tab, ...) always wins\n   without needing !important or selector-weight tricks. */\n:where(.ss button, .ss input, .ss select, .ss textarea) {\n  font-family: inherit;\n  font-size: inherit;\n  color: inherit;\n}\n/* A page without a doctype renders in quirks mode, where tables do not inherit\n   the text colour or font: the results grid came out black on the dark theme\n   on the first org deployment. */\n:where(.ss table) {\n  color: inherit;\n  font-size: inherit;\n  font-weight: inherit;\n  font-style: inherit;\n  line-height: inherit;\n}\n.ss a {\n  color: var(--color-primary);\n}\n.ss svg {\n  fill: currentColor;\n}\n.ss :focus-visible {\n  outline: 2px solid var(--color-primary);\n  outline-offset: 1px;\n}\n.ss ul {\n  margin: 0;\n  padding: 0;\n  list-style: none;\n}\n.ss h1, .ss h2, .ss h3, .ss p {\n  margin: 0;\n}\n\n/* -------------------------------------------------------------------- */\n/* 3. Layout shell                                                       */\n/* -------------------------------------------------------------------- */\n.ss-toolbar__brand {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  text-decoration: none;\n  white-space: nowrap;\n  flex: 0 0 auto;\n  padding: 0 var(--spacing-xs);\n}\n.ss-toolbar__brand-logo {\n  width: 32px;\n  height: 32px;\n  flex: 0 0 auto;\n  border-radius: var(--border-radius-sm);\n  background-image: var(--logo-data-uri);\n  background-size: contain;\n  background-repeat: no-repeat;\n  background-position: center;\n}\n.ss-toolbar__brand-name {\n  font-size: 16px;\n  font-weight: 700;\n  letter-spacing: -0.3px;\n  color: var(--color-primary);\n}\n.ss-about-logo {\n  width: 64px;\n  height: 64px;\n  border-radius: var(--border-radius-md);\n  background-image: var(--logo-data-uri);\n  background-size: contain;\n  background-repeat: no-repeat;\n  background-position: center;\n}\n.ss-header__actions {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n}\n\n.ss-body {\n  display: flex;\n  flex: 1 1 auto;\n  min-height: 0;\n  position: relative;\n}\n\n.ss-sidebar {\n  display: flex;\n  flex-direction: column;\n  width: 280px;\n  min-width: 240px;\n  max-width: 480px;\n  flex: 0 0 auto;\n  position: relative;\n  border-left: 1px solid var(--border-color); /* the sidebar sits on the right, like Diagramforce's stencil */\n  background: var(--bg-elevated);\n  overflow: hidden;\n}\n.ss-sidebar.is-collapsed {\n  width: 0 !important;\n  min-width: 0;\n  border-left: none;\n}\n.ss-sidebar__resizer {\n  position: absolute;\n  top: 0;\n  bottom: 0;\n  left: 0;\n  width: 6px;\n  cursor: col-resize;\n  z-index: 5;\n}\n.ss-sidebar__search {\n  position: relative;\n  display: flex;\n  align-items: center;\n  height: var(--panel-header-height);\n  padding: 0 var(--spacing-sm);\n  border-bottom: 1px solid var(--border-color);\n}\n.ss-sidebar__search .ss-input {\n  padding-right: 26px;\n}\n.ss-sidebar__search-clear {\n  position: absolute;\n  right: 14px;\n  top: 50%;\n  transform: translateY(-50%);\n  border: none;\n  background: none;\n  padding: 2px;\n  color: var(--text-secondary);\n  cursor: pointer;\n  border-radius: var(--border-radius-sm);\n}\n.ss-sidebar__search-clear:hover {\n  color: var(--color-primary);\n  background: var(--bg-hover);\n}\n.ss-sidebar__tree {\n  flex: 1 1 auto;\n  overflow-y: auto;\n  overflow-x: hidden;\n  padding: var(--spacing-xs) 0;\n}\n.ss-tree__section-title {\n  padding: var(--spacing-sm) var(--spacing-md) 2px var(--spacing-sm);\n  font-size: var(--font-size-sm);\n  font-weight: 700;\n  color: var(--text-primary);\n  text-transform: uppercase;\n  letter-spacing: 0.03em;\n}\n/* What is under a section title starts one indent step in from it, as a folder's children do from the\n   folder, so the title reads as the outermost level: the title's caret is at the sidebar's left padding, a\n   top-level row's caret one step in and a subfolder's another. */\n.ss-tree__section-body {\n  padding-left: var(--spacing-lg);\n}\n/* The lines in a section body (the hint, a group title, a message, the footer) start in line with the carets\n   of its rows, not a step further in. */\n.ss-tree__section-body > .ss-tree__hint,\n.ss-tree__section-body > .ss-tree__group-title,\n.ss-tree__section-body > .ss-tree__empty,\n.ss-tree__section-body > .ss-tree__loading,\n.ss-tree__section-body > .ss-tree__list-status {\n  padding-left: var(--spacing-sm);\n}\n/* A section title as a button: pressing it collapses or expands the section, as a Data View group's\n   caret does. It keeps the title's type, and adds the caret and a hover. */\n.ss-tree__section-toggle {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  width: 100%;\n  border: none;\n  background: none;\n  line-height: var(--line-height);\n  text-align: left;\n  cursor: pointer;\n}\n.ss-tree__section-toggle:hover {\n  background: var(--bg-hover);\n}\n.ss-tree__section-caret {\n  flex: 0 0 auto;\n  width: 14px;\n  text-align: center;\n  color: var(--text-secondary);\n}\n/* The Snippets title holds its toggle and its save button side by side, as a table row holds its toggle and its actions, so\n   no control sits inside another. The toggle fills the row and the save button keeps the right end. */\n.ss-tree__section-head {\n  display: flex;\n  align-items: center;\n  padding-right: var(--spacing-xs);\n}\n.ss-tree__section-head > .ss-tree__section-toggle {\n  flex: 1 1 auto;\n  width: auto;\n  min-width: 0;\n}\n/* The app's own tooltip (UI._wireTips), for elements with a data-tip: it comes sooner than a title's. */\n.ss-tip {\n  position: absolute;\n  z-index: 300;\n  max-width: min(420px, calc(100% - 16px));\n  /* Its line breaks and the SQL's indentation are kept, as a snippet's and a tab's tip show SQL. */\n  white-space: pre-wrap;\n  tab-size: 4;\n  overflow-wrap: anywhere;\n  padding: 4px 8px;\n  border: 1px solid var(--tooltip-border);\n  border-radius: var(--border-radius-sm);\n  background: var(--tooltip-bg);\n  box-shadow: var(--shadow-tooltip);\n  font-size: var(--font-size-xs);\n  color: var(--tooltip-fg);\n  pointer-events: none;\n}\n.ss-tip[hidden] {\n  display: none;\n}\n/* The reload icon of a section's title turns while its list loads (UI._renderReloadButton). */\n.ss-tree__section-action.is-busy svg {\n  animation: ss-spin 0.8s linear infinite;\n}\n/* A line of a section's list state, under its hint: the pages of a first load, a list that stops short, a reload that failed. */\n.ss-tree__list-status {\n  padding: 2px var(--spacing-md) var(--spacing-xs);\n  color: var(--text-muted);\n  font-size: 11px;\n}\n.ss-tree__section-head > .ss-tree__section-action {\n  margin-top: var(--spacing-xs);\n}\n/* The section titles dock (1.2.0, the author's RC3 test, 2026-10-08: the Snippets section was out of sight below a long Data\n   Extension list until the others were collapsed). Each sticks to the top of the sidebar's scroll while its section scrolls\n   by, below the titles before it, and to the bottom while its section is further down, above the titles after it, so every\n   title is always in sight. Each title is one height (--ss-dock-h, the height the title had already), and\n   UI._dockSectionTitles gives each the number of titles above and below it, so they stack without a gap or an overlap,\n   whatever the sidebar's state when the tree is drawn. The background covers the rows that scroll under them: the sidebar's\n   own --bg-elevated is a see-through grey over the app's --bg-app, so the title lays the same two on each other. */\n.ss-tree__dock {\n  --ss-dock-h: 30px;\n  position: sticky;\n  z-index: 2;\n  /* Less the scroll's own padding, which sticky offsets start inside: rows showed through that strip above the top title. */\n  top: calc(var(--ss-dock-h) * var(--ss-dock-above, 0) - var(--spacing-xs));\n  bottom: calc(var(--ss-dock-h) * var(--ss-dock-below, 0) - var(--spacing-xs));\n  box-sizing: border-box;\n  height: var(--ss-dock-h);\n  background: linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-app);\n}\n/* The Data Views title is its own toggle, with no head around it: its hover lays --bg-hover over the same two, as the hover's\n   see-through grey alone let the rows under it show through (the author's RC10 test, 2026-10-09). */\n.ss-tree__dock.ss-tree__section-toggle:hover {\n  background: linear-gradient(var(--bg-hover), var(--bg-hover)), linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-app);\n}\n/* The line under a snippet's name in its dialog: what is saved, and who sees it. */\n.ss-snippet-note {\n  margin: var(--spacing-sm) 0;\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n}\n/* The SQL a new snippet saves, in the dialog that asks for its name: monospace, its lines kept, as tall as a dozen of them\n   before it scrolls. */\n.ss-snippet-preview {\n  max-height: 14em;\n  margin: 0;\n  padding: var(--spacing-sm);\n  overflow: auto;\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  background: var(--bg-app);\n  color: var(--text-primary);\n  font-family: var(--font-mono);\n  font-size: 12px;\n  white-space: pre;\n  user-select: text;\n  -webkit-user-select: text;\n}\n/* The line above the Data Extension tree that gives the totals and says to search. */\n.ss-tree__hint {\n  padding: 2px var(--spacing-md) var(--spacing-xs);\n  color: var(--text-muted);\n  font-size: 11px;\n}\n/* A folder of the Data Extension tree reads heavier than the Data Extensions beside it, which have no count. */\n.ss-tree__folder--de > .ss-tree__name {\n  font-weight: 600;\n}\n/* The made-up group of the Data Extensions in no loaded folder reads in italics, so it does not pass\n   for a real folder of that name. */\n.ss-tree__folder--made-up > .ss-tree__name {\n  font-style: italic;\n}\n/* The number of Data Extensions below a folder, at the right end of its row. */\n.ss-tree__count {\n  flex: 0 0 auto;\n  color: var(--text-muted);\n  font-size: 11px;\n}\n/* The \"Show N more\" button under a folder's first Data Extensions, in line with their names. It is\n   a .ss-tree__link too, which comes later in this file, hence the two classes. */\n.ss-tree__link.ss-tree__more {\n  display: block;\n  padding: 3px var(--spacing-sm) 3px 26px;\n  text-align: left;\n}\n/* Inline text link inside a sidebar/Save As hint row (Retry on a failed\n   Data Extension list load, Reload in the list-loaded footer). */\n.ss-tree__link {\n  display: inline;\n  border: none;\n  background: none;\n  padding: 0;\n  color: var(--color-primary);\n  cursor: pointer;\n  font: inherit;\n}\n.ss-tree__link:hover {\n  text-decoration: underline;\n}\n/* Shared DE name prefix, replacing the old SHARED badge. */\n.ss-tree__ent-prefix {\n  color: var(--text-muted);\n}\n/* A parent Business Unit Data Extension's folder path, on its own line under its row, in line with the name. */\n.ss-tree__path {\n  padding: 0 var(--spacing-sm) 3px 26px;\n  color: var(--text-muted);\n  font-size: 11px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n/* The \"Parent BU\" heading above the parent's shared and synchronized Data Extensions in a search. */\n.ss-tree__group-title {\n  padding: var(--spacing-sm) var(--spacing-md) 2px;\n  color: var(--text-secondary);\n  font-size: 11px;\n  font-weight: 700;\n  text-transform: uppercase;\n  letter-spacing: 0.03em;\n}\n.ss-sidebar-overlay-bg {\n  display: none;\n}\n\n.ss-main {\n  display: flex;\n  flex-direction: column;\n  flex: 1 1 auto;\n  min-width: 0;\n  min-height: 0;\n}\n\n/* -------------------------------------------------------------------- */\n/* 4. Buttons and form controls                                          */\n/* -------------------------------------------------------------------- */\n/* Neutral dialog/modal button: used for\n   Cancel and other non-primary actions in modals and dropdown panels. */\n.ss-btn {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  gap: var(--spacing-xs);\n  height: 28px;\n  padding: 0 var(--spacing-md);\n  border: 1px solid transparent;\n  border-radius: var(--border-radius-sm);\n  background: var(--modal-btn-neutral-bg);\n  color: var(--modal-btn-neutral-fg);\n  cursor: pointer;\n  white-space: nowrap;\n  line-height: 1;\n  transition: background-color var(--transition-fast);\n}\n.ss-btn:hover {\n  background: var(--modal-btn-neutral-hover);\n}\n.ss-btn:disabled {\n  opacity: 0.35;\n  cursor: not-allowed;\n}\n.ss-btn--primary {\n  background: var(--color-action);\n  border-color: var(--color-action);\n  color: var(--color-action-fg);\n}\n.ss-btn--primary:hover {\n  background: var(--color-action-hover);\n  border-color: var(--color-action-hover);\n}\n.ss-btn--icon {\n  width: 28px;\n  padding: 0;\n}\n.ss-btn--sm {\n  height: 24px;\n  padding: 0 var(--spacing-sm);\n  font-size: var(--font-size-sm);\n}\n.ss-btn--link {\n  border-color: transparent;\n  background: transparent;\n  color: var(--color-primary);\n  text-decoration: underline;\n}\n.ss-btn--link:hover {\n  background: transparent;\n  color: var(--color-primary-hover);\n}\n\n.ss-field {\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n  margin-bottom: var(--spacing-md);\n}\n.ss-label {\n  font-size: var(--font-size-sm);\n  font-weight: 600;\n  color: var(--text-secondary);\n}\n.ss-hint {\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n}\n/* The History dialog's line on where its entries are kept, between the search box and the list. */\n.ss .ss-history__where {\n  margin: 6px 0 8px;\n}\n.ss-input, .ss-select, .ss-textarea {\n  height: 30px;\n  padding: 0 var(--spacing-sm);\n  border: 1px solid var(--border-color-strong);\n  border-radius: var(--border-radius-sm);\n  background: var(--bg-surface-raised);\n  color: var(--text-primary);\n  width: 100%;\n}\n.ss-textarea {\n  height: auto;\n  padding: var(--spacing-sm);\n  resize: vertical;\n  font-family: var(--font-mono);\n}\n.ss-input:focus, .ss-select:focus, .ss-textarea:focus {\n  border-color: var(--color-primary);\n}\n.ss-radio-group {\n  display: flex;\n  flex-direction: column;\n  gap: var(--spacing-sm);\n}\n/* Three equal cards in one row (Save As update type). */\n.ss-radio-group--row {\n  flex-direction: row;\n}\n.ss-radio-group--row .ss-radio-option {\n  flex: 1 1 0;\n}\n.ss-radio-option {\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  padding: var(--spacing-sm);\n  cursor: pointer;\n  transition: border-color var(--transition-fast), outline-color var(--transition-fast);\n}\n.ss-radio-option.is-selected {\n  border-color: var(--color-action);\n  outline: 2px solid var(--color-action);\n  outline-offset: -1px;\n}\n.ss-radio-option strong {\n  display: block;\n}\n.ss-radio-option span {\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n}\n\n/* -------------------------------------------------------------------- */\n/* 5. Sidebar tree and search                                            */\n/* -------------------------------------------------------------------- */\n.ss-tree__row {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  padding: 3px var(--spacing-sm);\n  cursor: pointer;\n  border-radius: var(--border-radius-sm);\n  white-space: nowrap;\n  overflow: hidden;\n}\n.ss-tree__row:hover {\n  background: var(--bg-hover);\n}\n/* A table row holds its toggle and its actions side by side, so no control sits inside another. The\n   toggle, which opens and closes the fields, fills the row and has the row's padding, so its arrow and\n   name sit where a folder row has them and a click anywhere on the name's side of the row hits it. The\n   row does not clip, so the toggle's focus outline shows in full, as a focused row's did: the toggle cuts\n   the name short itself.\n   The actions, Insert name and Insert table query (SELECT with all fields), sit at the right end of the row. They take\n   no width of their own: hidden, they leave the whole row to the name, and shown, while the row is\n   hovered or the keyboard's focus is on its toggle or on one of them, they lie over the end of the row on\n   its own background (the sidebar's, made opaque, with the hover tint on a hovered row). So a long name\n   is cut only while they show, and nothing in the row moves. Their left edge fades, so what they cover\n   fades out instead of breaking off (the mask's colour only gives its opacity). Hidden, they stay in the\n   tab order and take no click. */\n.ss-tree__row--table {\n  position: relative;\n  padding: 0;\n  overflow: visible;\n}\n.ss-tree__toggle {\n  display: flex;\n  flex: 1 1 auto;\n  align-items: center;\n  gap: 4px;\n  min-width: 0;\n  padding: 3px var(--spacing-sm);\n  border-radius: var(--border-radius-sm);\n  overflow: hidden;\n}\n.ss-tree__actions {\n  position: absolute;\n  top: 0;\n  right: 0;\n  bottom: 0;\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  padding: 0 var(--spacing-xs) 0 var(--spacing-md);\n  /* The row's own corners, as the row does not clip them. */\n  border-top-right-radius: inherit;\n  border-bottom-right-radius: inherit;\n  background: linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-app);\n  -webkit-mask-image: linear-gradient(to right, transparent, var(--bg-app) var(--spacing-md));\n  mask-image: linear-gradient(to right, transparent, var(--bg-app) var(--spacing-md));\n  opacity: 0;\n  pointer-events: none;\n}\n.ss-tree__row:hover > .ss-tree__actions,\n.ss-field-item:hover > .ss-tree__actions {\n  background: linear-gradient(var(--bg-hover), var(--bg-hover)), linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-app);\n}\n.ss-tree__row:hover > .ss-tree__actions,\n.ss-tree__toggle:focus-visible ~ .ss-tree__actions,\n.ss-field-item:hover > .ss-tree__actions,\n.ss-field-row:focus-visible ~ .ss-tree__actions,\n.ss-tree__actions:focus-within {\n  opacity: 1;\n  pointer-events: auto;\n}\n/* One action: the toolbar icon-button style, scaled to 24px for the sidebar tree. */\n.ss-tree__action {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  flex: 0 0 auto;\n  width: 24px;\n  height: 24px;\n  padding: 0;\n  border: none;\n  border-radius: var(--border-radius-sm);\n  background: transparent;\n  color: var(--text-secondary);\n  cursor: pointer;\n  transition: background-color var(--transition-fast), color var(--transition-fast);\n}\n.ss-tree__action:hover {\n  background: var(--toolbar-button-hover);\n  color: var(--color-primary);\n}\n/* An action that is off, such as Join to the query while the query has no table: dimmed, with its title saying why. */\n.ss-tree__action:disabled {\n  opacity: 0.4;\n  cursor: default;\n}\n.ss-tree__action:disabled:hover {\n  background: transparent;\n  color: var(--text-secondary);\n}\n.ss-tree__caret {\n  flex: 0 0 auto;\n  width: 14px;\n  text-align: center;\n  color: var(--text-secondary);\n  background: none;\n  border: none;\n  padding: 0;\n  cursor: pointer;\n}\n.ss-tree__name {\n  flex: 1 1 auto;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n/* Object-kind marker: DE, SHARED, VIEW, QUERY. */\n.ss-type-badge {\n  flex: 0 0 auto;\n  font-size: 10px;\n  font-weight: 700;\n  text-transform: uppercase;\n  letter-spacing: 0.02em;\n  color: var(--color-primary);\n  border: 1px solid currentColor;\n  border-radius: 2px;\n  padding: 0 3px;\n}\n/* A badge in a folder tree row: smaller type and less space around it, so the name keeps the room. */\n.ss-type-badge--compact {\n  font-size: 9px;\n  letter-spacing: 0;\n  padding: 0 2px;\n}\n.ss-tree__children {\n  padding-left: var(--spacing-lg);\n}\n.ss-tree__fields {\n  padding-left: var(--spacing-xl);\n}\n/* A field holds its row and its Insert name button side by side, as a table row holds its toggle and its\n   actions: the button lies over the end of the row while the field is hovered or the keyboard's focus is\n   on the row or on the button, and takes no width while hidden. The hover tint is the holder's, so it\n   stays while the pointer is on the button. */\n.ss-field-item {\n  position: relative;\n  border-radius: var(--border-radius-sm);\n}\n.ss-field-item:hover {\n  background: var(--bg-hover);\n}\n.ss-field-row {\n  display: flex;\n  align-items: baseline;\n  gap: 6px;\n  padding: 2px var(--spacing-sm);\n  cursor: pointer;\n  border-radius: var(--border-radius-sm);\n  overflow: hidden;\n}\n/* A field row is shorter than a table row: its button fits it. */\n.ss-field-item .ss-tree__action {\n  width: 20px;\n  height: 20px;\n}\n.ss-field-row__name {\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.ss-field-row__type {\n  flex: 0 0 auto;\n  color: var(--text-secondary);\n  font-size: 11px;\n  font-family: var(--font-mono);\n}\n/* The primary key's mark: the SLDS key icon, as tall as the field's text, in the warning text colour, which reads at\n   4.5:1 on the sidebar in both themes. */\n.ss-field-row__key {\n  display: inline-flex;\n  flex: 0 0 auto;\n  align-self: center;\n  color: var(--warning-text);\n}\n.ss-field-row__key .ss-icon {\n  width: 12px;\n  height: 12px;\n}\n.ss-tree__empty, .ss-tree__loading {\n  padding: var(--spacing-md);\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n}\n/* A hint line in a dialog's list (\"Loading...\", \"Could not load: ...\"), padded as the list's empty and loading rows are. */\n.ss-list > .ss-hint {\n  padding: var(--spacing-md);\n}\n\n/* -------------------------------------------------------------------- */\n/* 6. Toolbar and problems strip                                         */\n/* -------------------------------------------------------------------- */\n/* Toolbar, sidebar tree and tab labels are controls, not text: a drag or a select-all never paints\n   them. The query, the grid, the Status messages and the run summary stay selectable. */\n.ss-toolbar,\n.ss-sidebar__tree,\n.ss-tab {\n  -webkit-user-select: none;\n  user-select: none;\n}\n\n.ss-toolbar {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n  height: var(--toolbar-height);\n  padding: 0 var(--spacing-sm);\n  background: var(--toolbar-bg);\n  border-bottom: 1px solid var(--border-color);\n  flex: 0 0 auto;\n  flex-wrap: nowrap;\n  min-width: 0;\n  overflow: visible;\n}\n.ss-icon {\n  width: 16px;\n  height: 16px;\n  flex: 0 0 auto;\n  fill: currentColor;\n}\n/* Toolbar buttons: transparent by default, icon (16px) + label. Run is the one filled/primary button. */\n.ss-toolbar__button {\n  display: inline-flex;\n  align-items: center;\n  gap: 5px;\n  min-height: 32px;\n  padding: var(--spacing-xs) 10px;\n  border: none;\n  border-radius: var(--border-radius-sm);\n  background: transparent;\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n  font-weight: 500;\n  white-space: nowrap;\n  cursor: pointer;\n  transition: background-color var(--transition-fast), color var(--transition-fast);\n}\n.ss-toolbar__button:hover {\n  background: var(--toolbar-button-hover);\n  color: var(--color-primary);\n}\n.ss-toolbar__button.is-active,\n.ss-toolbar__button[aria-expanded=\"true\"] {\n  background: var(--toolbar-button-active);\n  color: var(--color-primary);\n}\n.ss-toolbar__button:disabled {\n  opacity: 0.35;\n  cursor: not-allowed;\n}\n.ss-toolbar__button:disabled:hover {\n  background: transparent;\n  color: var(--text-secondary);\n}\n.ss-toolbar__button--primary {\n  background: var(--color-action);\n  color: var(--color-action-fg);\n}\n.ss-toolbar__button--primary:hover {\n  background: var(--color-action-hover);\n  color: var(--color-action-fg);\n}\n/* Focus rings on primary controls use --color-action too: amber in dark mode, blue in light mode, same as their fill. */\n.ss-toolbar__button--primary:focus-visible,\n.ss-btn--primary:focus-visible {\n  outline-color: var(--color-action);\n}\n.ss-toolbar__button--icon-only {\n  padding: var(--spacing-xs);\n  min-width: 32px;\n  justify-content: center;\n}\n/* Run while a run is in flight: a spinner in place of the play icon, at full\n   strength rather than the faded disabled look, so it reads as busy. */\n.ss-toolbar__button--primary.is-running:disabled,\n.ss-toolbar__button--primary.is-running:disabled:hover {\n  opacity: 1;\n  cursor: progress;\n  background: var(--color-action);\n  color: var(--color-action-fg);\n}\n/* Validate while Marketing Cloud Engagement checks the query: busy, not faded. */\n.ss-toolbar__button.is-running:disabled {\n  opacity: 1;\n  cursor: progress;\n}\n.ss-toolbar__button.is-running > svg {\n  display: none;\n}\n.ss-toolbar__button.is-running::before {\n  content: '';\n  width: 14px;\n  height: 14px;\n  box-sizing: border-box;\n  border: 2px solid currentColor;\n  border-right-color: transparent;\n  border-radius: 50%;\n  animation: ss-spin 0.8s linear infinite;\n  flex: 0 0 auto;\n}\n\n/* Monaco's hovers and suggestion details can sit outside .ss, so these rules are not scoped\n   to it. Tables there inherit the hover's colour and size, even in quirks mode, and read as a\n   compact list rather than bold oversized headers. */\n.monaco-hover table,\n.suggest-details table {\n  border-collapse: collapse;\n  margin: 4px 0;\n  color: inherit;\n  font-size: inherit;\n  line-height: inherit;\n}\n.monaco-hover th,\n.monaco-hover td,\n.suggest-details th,\n.suggest-details td {\n  padding: 1px 16px 1px 0;\n  text-align: left;\n  vertical-align: top;\n}\n.monaco-hover th,\n.suggest-details th {\n  font-weight: 600;\n  opacity: 0.7;\n  border-bottom: 1px solid rgba(128, 128, 128, 0.35);\n}\n\n/* Off-site links end with the arrow mateuszdabrowski.pl uses. Inline-block keeps the link's\n   underline off it. Monaco's hovers and suggestion details can sit outside .ss. */\n.monaco-hover a::after,\n.suggest-details a::after,\n.ss a[target=\"_blank\"]:not(.ss-btn):not(.ss-toolbar__brand)::after {\n  content: '\\2197';\n  display: inline-block;\n  margin-left: 0.3em;\n  font-size: 0.85em;\n  opacity: 0.6;\n  text-decoration: none;\n}\n\n/* The suggestion details panel and its list (Monaco's suggest widget, set up by Editor._watchSuggestDetails in\n   sqlstudio.js). The widget and the panel sit inside .ss, so the tokens reach them. The script says where the panel\n   is against the list with data-ss-details on both: right, left or below. */\n/* The border-box rule of the reset above reaches Monaco's own boxes. It sizes the panel by its content, so the panel\n   gets Monaco's content-box back, and its two border lines no longer cut off the last 2px of its text. */\n.ss .suggest-details {\n  box-sizing: content-box;\n}\n/* The tie between the focused row and the panel: the row's band (the theme's editorSuggestWidget.selectedBackground,\n   the same blue as --focus-band) goes on over the panel's header strip, and the panel has no border on the side that\n   faces the list. Monaco lays the panel 1px over the list's border on that side, so with no border of its own the\n   panel covers it, and the row and the strip meet with no line between them. At the list's left, Monaco stops the\n   panel 1px short of that border, so the panel moves 1px over it. */\n.ss .suggest-details-container[data-ss-details=\"right\"] .suggest-details {\n  border-left-width: 0;\n}\n.ss .suggest-details-container[data-ss-details=\"left\"] .suggest-details {\n  position: relative;\n  left: 1px;\n  border-right-width: 0;\n}\n.ss .suggest-details-container[data-ss-details=\"below\"] .suggest-details {\n  border-top-width: 0;\n}\n/* The card: Monaco keeps the panel at the list's top, wherever the focused row is, so the rest of the panel takes a\n   light tint of the band's blue, and the whole panel reads as the focused row's own. */\n.ss .suggest-details > .monaco-scrollable-element {\n  background: var(--focus-card);\n}\n/* The close button sits on the header strip in every panel, so it takes the strip's text colour. The selectors are as\n   long as Monaco's own, which load later and would win a tie. */\n.ss .suggest-details > .monaco-scrollable-element > .body > .header > .codicon-close,\n.ss .suggest-details > .monaco-scrollable-element > .body > .header > .codicon-close::before {\n  color: var(--focus-band-fg);\n}\n/* The header strip of any other item: Monaco's own header line, with the item's detail at full opacity, or, for an\n   item with none, the first line of its text, which runs under the close button to the panel's edge. */\n.ss .suggest-details:not(.no-type):not(.ss-join-details) > .monaco-scrollable-element > .body > .header {\n  color: var(--focus-band-fg);\n  background: var(--focus-band);\n}\n.ss .suggest-details:not(.no-type):not(.ss-join-details) > .monaco-scrollable-element > .body > .header > .type {\n  opacity: 1;\n}\n.ss .suggest-details.no-type:not(.ss-join-details) > .monaco-scrollable-element > .body > .docs.markdown-docs {\n  margin-right: 0;\n}\n.ss .suggest-details.no-type:not(.ss-join-details) > .monaco-scrollable-element > .body > .docs.markdown-docs > .rendered-markdown > p:first-child {\n  margin: -4px -5px 0;\n  padding: 4px 29px 4px 5px;\n  color: var(--focus-band-fg);\n  background: var(--focus-band);\n}\n/* A code block in any panel has the editor's own background, so its tokens read as they do in the editor. */\n.ss .suggest-details .rendered-markdown > div {\n  margin: 4px 0;\n  padding: 4px 8px;\n  border-radius: var(--border-radius-sm);\n  background: var(--editor-bg);\n}\n/* A recommended join (class set by the script): its label in bold on the first line, the key columns under it,\n   the SQL it writes in a block, and the note last, smaller and in the secondary text colour, which keeps 4.5:1 on\n   the card. The label takes the place of the panel's own header line, which would only repeat the key columns, so\n   the header keeps its close button alone. The label and the key columns are the header strip, out to the panel's\n   edges, the label clear of the close button. */\n.ss .suggest-details.ss-join-details .header > .type {\n  display: none;\n}\n.ss .suggest-details.ss-join-details > .monaco-scrollable-element > .body > .docs.markdown-docs > .rendered-markdown > p:first-child {\n  margin: -4px -5px 0;\n  padding: 4px 25px 2px 5px;\n  color: var(--focus-band-fg);\n  background: var(--focus-band);\n}\n.ss .suggest-details.ss-join-details > .monaco-scrollable-element > .body > .docs.markdown-docs > .rendered-markdown > p:nth-child(2) {\n  margin: 0 -5px 6px;\n  padding: 0 5px 6px;\n  color: var(--focus-band-fg);\n  font-size: var(--font-size-sm);\n  background: var(--focus-band);\n}\n.ss .suggest-details.ss-join-details .rendered-markdown > div {\n  margin: 6px 0;\n  padding: 6px 8px;\n}\n.ss .suggest-details.ss-join-details .rendered-markdown > div ~ p {\n  margin: 6px 0 0;\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n  line-height: 1.5;\n}\n\n/* Run summary parts that open a breakdown (UI.showHint): after a short hover, on focus, or pinned\n   by a click. */\n.ss-run-summary__hint {\n  text-decoration: underline dotted;\n  text-underline-offset: 3px;\n  cursor: help;\n}\n.ss-run-summary__hint:focus-visible {\n  outline: 2px solid var(--color-action);\n  outline-offset: 2px;\n}\n/* Temp DE when it links to Contact Builder: a click goes there instead of pinning the hint. It keeps the summary's own colour and\n   dotted underline, as the other parts with a hover do, so it does not read as a second red link beside Delete results. */\n.ss a.ss-run-summary__link {\n  cursor: pointer;\n  color: inherit;\n}\n/* The run summary's card (UI.showHint), with the quick tip's look. Only the card: as first written for every .ss-hint, the rule hid the\n   hint lines of the dialogs too, such as History's line on where it is kept and \"Could not load: ...\" (the author's RC12 test, 2026-10-09). */\n.ss-hint[role=\"tooltip\"] {\n  display: none;\n  position: absolute;\n  z-index: 150;\n  max-width: 380px;\n  padding: 10px 12px;\n  border: 1px solid var(--tooltip-border);\n  border-radius: var(--border-radius-sm);\n  background: var(--tooltip-bg);\n  box-shadow: var(--shadow-tooltip);\n  font-size: var(--font-size-xs);\n  color: var(--text-secondary);\n}\n.ss .ss-hint__title {\n  margin: 0 0 4px;\n  font-weight: 600;\n  color: var(--text-primary);\n}\n.ss .ss-hint__title:not(:first-child) {\n  margin-top: 10px;\n}\n/* The run's total split between calls through the API and through WSProxy, above the two tables. */\n.ss .ss-hint__split {\n  margin: 0 0 6px;\n  color: var(--text-primary);\n}\n.ss .ss-hint__line {\n  margin: 2px 0;\n}\n.ss-hint__table {\n  border-collapse: collapse;\n  width: 100%;\n}\n.ss-hint__table td {\n  padding: 2px 0;\n  vertical-align: top;\n}\n.ss-hint__table td + td {\n  padding-left: 16px;\n  text-align: right;\n  white-space: nowrap;\n  color: var(--text-primary);\n}\n/* The Status tab's first line during a run. */\n.ss-status-run-note {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  padding: var(--spacing-sm) var(--spacing-md);\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n  border-bottom: 1px solid var(--border-color);\n}\n\n/* Update notice: a small outlined pill next to the theme toggle. */\n.ss-update-badge {\n  margin-right: var(--spacing-sm);\n  padding: 2px 10px;\n  border: 1px solid var(--color-action);\n  border-radius: 12px;\n  background: transparent;\n  color: var(--color-action);\n  font-size: 12px;\n  font-weight: 600;\n  white-space: nowrap;\n  cursor: pointer;\n}\n.ss-update-badge:hover {\n  background: var(--color-action);\n  color: var(--color-action-fg);\n}\n.ss .ss-update-list {\n  margin: var(--spacing-sm) 0;\n  padding-left: 18px;\n  list-style: disc;\n}\n/* A link that looks like a button takes the button's text colour: `.ss a` gave it the link red, on the neutral grey and on the\n   amber of a primary button alike, in the update dialog's \"All changes\" and \"Update guide\" (the author, 2026-10-05). A link-style\n   button keeps the link colour it asks for. */\n.ss a.ss-btn {\n  text-decoration: none;\n  color: var(--modal-btn-neutral-fg);\n}\n.ss a.ss-btn.ss-btn--primary {\n  color: var(--color-action-fg);\n}\n.ss a.ss-btn.ss-btn--link {\n  color: var(--color-primary);\n}\n.ss .ss-update-list li {\n  margin: 4px 0;\n}\n\n/* Spinner. One turn takes 0.8 s: SPINNER_TURN_MS in sqlstudio.js must match. */\n@keyframes ss-spin {\n  to { transform: rotate(360deg); }\n}\n.ss-spinner {\n  display: inline-block;\n  width: 12px;\n  height: 12px;\n  box-sizing: border-box;\n  border: 2px solid currentColor;\n  border-right-color: transparent;\n  border-radius: 50%;\n  animation: ss-spin 0.8s linear infinite;\n  flex: 0 0 auto;\n}\n@media (prefers-reduced-motion: reduce) {\n  .ss-spinner,\n  .ss-toolbar__button.is-running::before {\n    animation: none;\n  }\n}\n\n/* Theme toggle icon: Diagramforce's\n   moon/sun swap, translated from df- to ss- and scoped to .ss. */\n.ss svg.ss-toolbar__icon--theme,\n.ss svg.ss-toolbar__icon--theme * {\n  /* Diagramforce draws the moon and sun as wire icons; the generic `.ss svg { fill }` rule must not apply. */\n  fill: none;\n  stroke: currentColor;\n  stroke-width: 2;\n  stroke-linecap: round;\n  stroke-linejoin: round;\n}\n.ss-toolbar__icon--theme {\n  width: 18px;\n  height: 18px;\n  fill: none;\n  stroke: currentColor;\n  stroke-width: 2;\n  stroke-linecap: round;\n  stroke-linejoin: round;\n}\n.ss[data-theme=\"dark\"] .ss-icon-sun { display: none; }\n.ss[data-theme=\"dark\"] .ss-icon-moon { display: inline; }\n.ss[data-theme=\"light\"] .ss-icon-sun { display: inline; }\n.ss[data-theme=\"light\"] .ss-icon-moon { display: none; }\n/* The system icon's right half is solid, which the wire-icon rule above would clear. */\n.ss svg.ss-toolbar__icon--theme .ss-icon-system__half { fill: currentColor; }\n.ss .ss-icon-system { display: none; }\n.ss[data-theme-choice=\"system\"] .ss-icon-sun,\n.ss[data-theme-choice=\"system\"] .ss-icon-moon { display: none; }\n.ss[data-theme-choice=\"system\"] .ss-icon-system { display: inline; }\n\n/* Help menu: Diagramforce's\n   ss-toolbar__menu, absolute under its button rather than the centred\n   dropdown-manager system (History keeps that; see section 9). */\n.ss-toolbar__dropdown {\n  position: relative;\n}\n.ss-toolbar__menu {\n  display: none;\n  position: absolute;\n  top: 100%;\n  right: 0;\n  margin-top: 4px;\n  min-width: 180px;\n  background: var(--toolbar-bg);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-md);\n  box-shadow: var(--shadow-md);\n  padding: 4px 0;\n  max-height: calc(100dvh - 64px);\n  overflow-y: auto;\n  z-index: 200;\n}\n.ss-toolbar__dropdown--open > .ss-toolbar__menu {\n  display: block;\n}\n.ss-toolbar__menu-item {\n  display: block;\n  width: 100%;\n  padding: 6px 14px;\n  border: none;\n  background: transparent;\n  color: var(--text-secondary);\n  font-weight: 500;\n  font-size: var(--font-size-sm);\n  font-family: var(--font-family);\n  text-align: left;\n  text-decoration: none;\n  cursor: pointer;\n  white-space: nowrap;\n}\n.ss-toolbar__menu-item:hover {\n  background: var(--toolbar-button-hover);\n  color: var(--text-primary);\n}\n.ss-toolbar__menu-item--icon {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n}\n.ss-toolbar__menu-icon {\n  flex-shrink: 0;\n  opacity: 0.7;\n}\n.ss-toolbar__menu-separator {\n  border-top: 1px solid var(--border-color);\n  margin: 4px 0;\n}\n\n.ss-toolbar__divider {\n  width: 1px;\n  height: 20px;\n  background: var(--border-color);\n  margin: 0 var(--spacing-xs);\n}\n.ss-toolbar__spacer {\n  flex: 1 1 auto;\n}\n/* Save and Disconnect, shown only while the tab on screen has a Query Activity open. */\n.ss-toolbar__group {\n  display: inline-flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n}\n.ss-toolbar__group[hidden] {\n  display: none;\n}\n/* Lint findings list, now inside the Status tab of the bottom panel (see\n   .ss-status-panel below); the whole panel scrolls as one unit, so the\n   list itself carries no height cap of its own. */\n/* The Status tab's Show filter: the size of the small buttons next to it. */\n.ss-select--sm {\n  width: auto;\n  height: 24px;\n  padding-top: 0;\n  padding-bottom: 0;\n  font-size: var(--font-size-sm);\n}\n.ss-problem-hidden-note {\n  padding: 3px var(--spacing-md);\n  border-top: 1px solid var(--border-color);\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n}\n.ss-problem {\n  display: flex;\n  gap: var(--spacing-sm);\n  padding: 3px var(--spacing-md);\n  cursor: pointer;\n  border-top: 1px solid var(--border-color);\n  font-size: var(--font-size-sm);\n  align-items: baseline;\n  flex-wrap: wrap;\n}\n.ss-problem:hover {\n  background: var(--bg-hover);\n}\n.ss-problem__loc {\n  color: var(--text-secondary);\n  font-family: var(--font-mono);\n  flex: 0 0 auto;\n}\n.ss-problem__id {\n  color: var(--text-secondary);\n  flex: 0 0 auto;\n}\n.ss-problem__message {\n  flex: 1 1 auto;\n  min-width: 160px;\n}\n/* One-click fix button on a lint row:\n   the neutral small button style, pushed to the row's right edge. A\n   \"changes results\" fix keeps the same neutral look plus a small accent\n   dot; the actual \"changes results\" wording lives only in the title\n   tooltip, never as visible row text. */\n.ss-problem__fix {\n  flex: 0 0 auto;\n  margin-left: auto;\n}\n.ss-problem__fix--changes-results::before {\n  content: '';\n  display: inline-block;\n  width: 6px;\n  height: 6px;\n  margin-right: var(--spacing-xs);\n  border-radius: 50%;\n  background: var(--brand-amber);\n}\n.ss[data-theme=\"light\"] .ss-problem__fix--changes-results::before {\n  background: var(--warning-color);\n}\n/* Beside Fix all, in the panel header: how many fixes it leaves, with the dot their buttons carry. */\n.ss-fix-review-note {\n  display: inline-flex;\n  align-items: center;\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n  white-space: nowrap;\n}\n.ss-fix-review-note::before {\n  content: '';\n  display: inline-block;\n  width: 6px;\n  height: 6px;\n  margin-right: var(--spacing-xs);\n  border-radius: 50%;\n  background: var(--brand-amber);\n}\n.ss[data-theme=\"light\"] .ss-fix-review-note::before {\n  background: var(--warning-color);\n}\n\n/* -------------------------------------------------------------------- */\n/* 7. Editor pane and split resizer                                       */\n/* -------------------------------------------------------------------- */\n.ss-split {\n  display: flex;\n  flex-direction: column;\n  flex: 1 1 auto;\n  min-height: 0;\n}\n/* The resizable column: the query tab strip (fixed height) above the editor pane, which fills\n   whatever is left. The split resizer/applyInitialSplit set this\n   element's height, not .ss-editor-pane's, so the strip's own height never eats into the ratio\n   the user dragged. */\n.ss-editor-column {\n  display: flex;\n  flex-direction: column;\n  flex: 0 0 auto;\n  height: 300px;\n  min-height: 120px;\n}\n.ss-editor-pane {\n  position: relative;\n  flex: 1 1 auto;\n  min-height: 0;\n}\n.ss-editor-container {\n  /* Plain wrapper only: it deliberately does not carry the \"monaco-editor\"\n     class, which would tie with this rule's specificity against Monaco's\n     own editor.main.css (loaded later) and lose the position:absolute. */\n  position: absolute;\n  inset: 0;\n}\n.ss-split-resizer {\n  height: 6px;\n  cursor: row-resize;\n  background: var(--bg-elevated);\n  border-top: 1px solid var(--border-color);\n  border-bottom: 1px solid var(--border-color);\n  flex: 0 0 auto;\n}\n.ss-split-resizer:hover {\n  background: var(--toolbar-button-active);\n}\n\n/* Query tab strip: 4 fixed tabs, always visible with their state, styled\n   after Diagramforce's css/tabs.css. The strip shares the editor's background. The tabs sit in a tinted\n   tray, as Diagramforce's ungrouped tray: an inactive tab shows the tray through it, and the active tab\n   is taller, takes the editor's background and outline, and runs into the editor with no line between. */\n.ss-querytabs {\n  display: flex;\n  align-items: center;\n  height: 36px;\n  padding: 0 4px;\n  background: var(--editor-bg);\n  flex: 0 0 auto;\n}\n.ss-querytabs__tray {\n  display: flex;\n  align-items: stretch;\n  gap: 2px;\n  flex: 1 1 auto;\n  min-width: 0;\n  height: 28px;\n  box-sizing: border-box;\n  padding-right: 3px;\n  border-radius: var(--border-radius-sm);\n  background: color-mix(in srgb, var(--text-muted) 9%, transparent);\n}\n.ss-querytab {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  flex: 1 1 0;\n  min-width: 0;\n  height: 28px;\n  box-sizing: border-box;\n  padding: 4px 10px;\n  border: 1px solid transparent;\n  border-bottom: none;\n  border-radius: var(--border-radius-sm) var(--border-radius-sm) 0 0;\n  background: transparent;\n  color: var(--text-muted);\n  font-size: var(--font-size-sm);\n  font-weight: 500;\n  white-space: nowrap;\n  cursor: pointer;\n  position: relative;\n  overflow: hidden;\n  /* A narrow tab drops the run time first, then the row count, and keeps its icon and name (below). */\n  container-type: inline-size;\n  transition: background var(--transition-fast), color var(--transition-fast);\n}\n.ss-querytab:hover {\n  background: color-mix(in srgb, var(--text-muted) 14%, transparent);\n  color: var(--text-secondary);\n}\n.ss-querytab.is-active {\n  align-self: flex-start;\n  height: 32px;\n  background: var(--editor-bg);\n  color: var(--text-primary);\n  border-color: var(--border-color);\n  font-weight: 600;\n  box-shadow: inset 0 2.5px 0 color-mix(in srgb, var(--text-muted) 30%, transparent);\n  z-index: 1;\n}\n.ss-querytab.is-active:hover {\n  background: color-mix(in srgb, var(--text-primary) 7%, var(--editor-bg));\n}\n/* The state icon at the left edge: a query glyph while idle, a spinner while the run is in flight,\n   a check once done, an error mark after a failure. */\n.ss-querytab__icon {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  width: 12px;\n  height: 12px;\n  flex: 0 0 auto;\n}\n.ss-querytab__icon .ss-icon {\n  width: 12px;\n  height: 12px;\n}\n.ss-querytab__icon--idle {\n  opacity: 0.6;\n}\n.ss-querytab__icon--done {\n  color: var(--brand-green);\n}\n.ss-querytab__icon--failed {\n  color: var(--color-danger);\n}\n.ss-querytab__label {\n  flex: 0 1 auto;\n  min-width: 3em;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  text-align: left;\n}\n/* An idle, never-run tab is muted: its glyph and label fade further. */\n.ss-querytab.is-empty:not(.is-active) .ss-querytab__label {\n  opacity: 0.75;\n}\n.ss-querytab__time {\n  flex: 0 0 auto;\n  font-weight: 500;\n  color: var(--text-muted);\n  font-variant-numeric: tabular-nums;\n}\n/* Unsaved changes to the tab's Query Activity: grey, apart from the orange dot of an unseen finish. */\n.ss-querytab__unsaved {\n  width: 6px;\n  height: 6px;\n  border-radius: 50%;\n  background: var(--text-muted);\n  flex: 0 0 auto;\n}\n.ss-querytab__meta {\n  margin-left: auto;\n  padding-left: 8px;\n  flex: 0 1 auto;\n  min-width: 0;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  font-weight: 500;\n  color: var(--text-muted);\n  font-variant-numeric: tabular-nums;\n}\n.ss-querytab__meta--failed {\n  color: var(--danger-text);\n}\n@container (max-width: 300px) {\n  .ss-querytab__time {\n    display: none;\n  }\n}\n@container (max-width: 190px) {\n  .ss-querytab__meta {\n    display: none;\n  }\n}\n/* A tab that finished or failed while another one was on screen, until it is opened. */\n.ss-querytab__dot {\n  width: 6px;\n  height: 6px;\n  border-radius: 50%;\n  background: var(--color-action);\n  flex: 0 0 auto;\n}\n.ss-editor-fallback {\n  width: 100%;\n  height: 100%;\n  border: none;\n  resize: none;\n  padding: var(--spacing-md);\n  font-family: var(--font-mono);\n  background: var(--editor-bg);\n  color: var(--editor-fg);\n}\n.ss-banner {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  padding: 6px var(--spacing-md);\n  background: var(--tint-warning);\n  color: var(--warning-text);\n  border-bottom: 1px solid var(--border-color);\n  font-size: var(--font-size-sm);\n  flex: 0 0 auto;\n}\n.ss-banner--error {\n  background: var(--tint-danger);\n  color: var(--danger-text);\n}\n.ss-banner__close {\n  margin-left: auto;\n  border: none;\n  background: none;\n  cursor: pointer;\n  color: inherit;\n}\n\n/* -------------------------------------------------------------------- */\n/* 8. Results grid, tabs, inspector                                       */\n/* -------------------------------------------------------------------- */\n.ss-results-pane {\n  display: flex;\n  flex-direction: column;\n  flex: 1 1 auto;\n  min-height: 120px;\n}\n/* Bottom panel header: the Status/Results tabs on the left, the run\n   summary next to them (shown on either tab), then the page filter and\n   Export CSV, shown only while Results is active (UI.setActiveTab). */\n.ss-results-header {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  height: var(--panel-header-height);\n  padding: 0 var(--spacing-md);\n  border-bottom: 1px solid var(--border-color);\n  background: var(--bg-elevated);\n  flex: 0 0 auto;\n  /* Lets the cost beside Export CSV shorten when the header has little room (.ss-export-cost, below). */\n  container-type: inline-size;\n}\n.ss-tabs {\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  flex: 0 0 auto;\n}\n.ss-tab {\n  display: inline-flex;\n  align-items: center;\n  gap: 6px;\n  height: 26px;\n  padding: 0 var(--spacing-sm);\n  border: none;\n  border-radius: var(--border-radius-sm);\n  background: transparent;\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n  font-weight: 600;\n  cursor: pointer;\n}\n.ss-tab:hover {\n  background: var(--toolbar-button-hover);\n}\n.ss-tab[aria-selected=\"true\"] {\n  background: var(--toolbar-button-active);\n  color: var(--color-primary);\n}\n.ss-tab__counts {\n  display: inline-flex;\n  align-items: center;\n  gap: 6px;\n}\n.ss-tab__count {\n  display: inline-flex;\n  align-items: center;\n  gap: 3px;\n  font-size: 11px;\n  font-weight: 600;\n}\n.ss-tab__count::before {\n  content: '';\n  display: inline-block;\n  width: 6px;\n  height: 6px;\n  border-radius: 50%;\n  background: currentColor;\n}\n.ss-tab__count--error {\n  color: var(--danger-text);\n}\n.ss-tab__count--warning {\n  color: var(--warning-text);\n}\n.ss-tab__count--info {\n  color: var(--info-text);\n}\n.ss-run-summary {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n/* The link takes no padding of its own: the summary's gap already spaces it, and since the WSProxy calls got their own\n   number (\"4 API calls · 2 WSProxy\") the summary is 7 px too long for a 1,280 px window with the sidebar open, which\n   the padding of a link button cut off. */\n.ss-run-summary__delete {\n  flex: 0 0 auto;\n  padding-left: 0;\n  padding-right: 0;\n}\n/* The page filter keeps its 180 px: in a tight header the run summary, which ends in an ellipsis, gives up room first,\n   as the cost beside Export CSV (below) takes some. */\n.ss-results-filter {\n  flex: 0 0 auto;\n}\n/* Beside Export CSV: what a click costs, said before the click (UI._syncExportCost). It never shrinks or wraps, so the\n   button stays on screen and the run summary gives up its room first. A header with little room shows the short form,\n   and with less still, nothing. The full text then stays for assistive technology (clipped out of sight, not removed)\n   and in the button's title. The widths are the header's own (its container), as the sidebar takes room from it. */\n.ss-export-cost {\n  position: relative;\n  flex: 0 0 auto;\n  color: var(--text-muted);\n  font-size: var(--font-size-sm);\n  white-space: nowrap;\n}\n.ss-export-cost__short {\n  display: none;\n}\n/* In a header of 1,100 px or less, as at 1,280 px with the sidebar open, the run summary's row count, which the Results tab\n   shows too, and Temp DE, a convenience, give way, so the two call counts and Delete results stay whole. */\n@container (max-width: 1100px) {\n  .ss-run-summary__rows,\n  .ss-run-summary__temp {\n    display: none;\n  }\n}\n@container (max-width: 640px) {\n  .ss-export-cost__full {\n    position: absolute;\n    width: 1px;\n    height: 1px;\n    overflow: hidden;\n    clip: rect(0 0 0 0);\n  }\n  .ss-export-cost__short {\n    display: inline;\n  }\n}\n@container (max-width: 540px) {\n  .ss-export-cost {\n    position: absolute;\n    width: 1px;\n    height: 1px;\n    overflow: hidden;\n    clip: rect(0 0 0 0);\n  }\n}\n/* Export CSV shows an export's progress itself (UI._syncExportButton): a spinner in place of the download icon, and\n   \"Exporting 1,200 of 2,715…\" in place of the label. The label is two layers in one grid cell, the text and a hidden copy of\n   its widest form (.ss-export-btn__sizer), so the button is as wide as the widest text and the header does not move on each\n   update. Tabular numbers make \"1,200\" as wide as \"2,715\". The button is disabled meanwhile, and keeps full strength as\n   Run does while it runs, so it reads as busy rather than as unavailable. */\n.ss-export-btn__label {\n  display: inline-grid;\n  font-variant-numeric: tabular-nums;\n}\n.ss-export-btn__label > * {\n  grid-area: 1 / 1;\n}\n.ss-export-btn__sizer {\n  visibility: hidden;\n}\n.ss-export-btn.is-exporting > svg {\n  display: none;\n}\n.ss-export-btn.is-exporting:disabled,\n.ss-export-btn.is-exporting:disabled:hover {\n  opacity: 1;\n  cursor: progress;\n  background: var(--modal-btn-neutral-bg);\n}\n/* Save to DE, beside Export CSV (UI._syncSaveButton). The header has room for its label only when it is wider than 1,280 px, which\n   is a window of about 1,560 px with the sidebar open. Below that it is the icon alone, 24 px wide, which keeps the run summary's\n   Delete results, the cost and Export CSV whole at 1,280 px with the sidebar open (the label stays for assistive technology, clipped\n   out of sight, and in the title). A header of 640 px or less has no room for the run summary, which was already cut to nothing,\n   so it goes, with the spacer that pushed the controls right, and the button and Export CSV fit as before. */\n.ss-save-btn {\n  position: relative;\n  flex: 0 0 auto;\n}\n@container (max-width: 1280px) {\n  .ss-save-btn {\n    width: 24px;\n    padding: 0;\n  }\n  .ss-save-btn__label {\n    position: absolute;\n    width: 1px;\n    height: 1px;\n    overflow: hidden;\n    clip: rect(0 0 0 0);\n  }\n}\n@container (max-width: 640px) {\n  .ss-results-header .ss-run-summary,\n  .ss-results-header .ss-toolbar__spacer {\n    display: none;\n  }\n}\n/* Where an export's progress is announced to a screen reader (aria-live), out of sight. */\n.ss-export-status {\n  position: absolute;\n  width: 1px;\n  height: 1px;\n  overflow: hidden;\n  clip: rect(0 0 0 0);\n  white-space: nowrap;\n}\n/* Status tab content: the lint findings list (.ss-problem, above), then\n   the error panel and the notice lines below it. The whole panel scrolls\n   as one unit; .ss-empty-state (shared with the grid) covers the \"no\n   problems\" case. */\n.ss-status-panel {\n  flex: 1 1 auto;\n  min-height: 0;\n  overflow-y: auto;\n}\n/* An MCE or validation error (red left border, the message, a Details\n   disclosure with the raw response); lives in Status, never in place of\n   the grid. */\n.ss-error-panel {\n  margin: var(--spacing-md);\n  padding: var(--spacing-md);\n  border-left: 3px solid var(--color-danger);\n  background: var(--tint-danger);\n  border-radius: 0 var(--border-radius-sm) var(--border-radius-sm) 0;\n}\n.ss-error-panel__message {\n  white-space: pre-wrap;\n  color: var(--text-primary);\n}\n.ss-error-panel__hint {\n  margin-top: var(--spacing-xs);\n  white-space: pre-wrap;\n  color: var(--text-secondary);\n}\n.ss-error-panel details {\n  margin-top: var(--spacing-sm);\n}\n.ss-error-panel summary {\n  cursor: pointer;\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n}\n.ss-error-panel pre {\n  margin-top: var(--spacing-xs);\n  padding: var(--spacing-sm);\n  background: var(--bg-elevated);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  font-family: var(--font-mono);\n  font-size: var(--font-size-xs);\n  white-space: pre-wrap;\n  word-break: break-word;\n  max-height: 30vh;\n  overflow-y: auto;\n}\n/* Each outcome notice (0 rows returned, sort rejected, setup results) is one muted line, with\n   nothing to dismiss: the next run or Validate in the tab replaces it. */\n.ss-notice {\n  margin: var(--spacing-xs) var(--spacing-md) 0;\n  padding: 2px 0 2px var(--spacing-sm);\n  border-left: 2px solid var(--border-color-strong);\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n}\n.ss-notice:last-child {\n  margin-bottom: var(--spacing-sm);\n}\n/* Results tab content: the grid and pager, hidden while Status is\n   active. */\n.ss-results-panel {\n  display: flex;\n  flex-direction: column;\n  flex: 1 1 auto;\n  min-height: 0;\n}\n.ss-grid-scroll {\n  flex: 1 1 auto;\n  min-width: 0;\n  overflow: auto;\n  position: relative;\n}\n.ss-grid {\n  border-collapse: collapse;\n  table-layout: fixed;\n  font-size: var(--font-size-sm);\n}\n.ss-grid thead th {\n  position: sticky;\n  top: 0;\n  z-index: 2;\n  /* The same tint as before, laid over the app background so the sticky header is opaque:\n     --bg-elevated alone is 8% grey, and scrolled rows showed through it. */\n  background: linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-app);\n  border-bottom: 1px solid var(--border-color-strong);\n  border-right: 1px solid var(--border-color);\n  padding: 0;\n  text-align: left;\n}\n.ss-grid th button.ss-grid__sort {\n  width: 100%;\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  padding: 4px var(--spacing-sm);\n  border: none;\n  background: transparent;\n  cursor: pointer;\n  font-weight: 600;\n  overflow: hidden;\n  white-space: nowrap;\n  text-overflow: ellipsis;\n}\n/* Active sort column gets the --color-action accent. */\n.ss-grid__sort.is-sorted {\n  color: var(--color-action);\n}\n.ss-grid__resize-handle {\n  position: absolute;\n  right: 0;\n  top: 0;\n  bottom: 0;\n  width: 6px;\n  cursor: col-resize;\n}\n.ss-grid td {\n  padding: 3px var(--spacing-sm);\n  border-bottom: 1px solid var(--border-color);\n  border-right: 1px solid var(--border-color);\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  max-width: 480px;\n  cursor: default;\n}\n.ss-grid tbody tr:hover td {\n  background: var(--bg-hover);\n}\n.ss-grid__cell--null {\n  color: var(--text-secondary);\n  font-style: italic;\n}\n.ss-grid__cell--empty {\n  color: var(--text-secondary);\n  font-style: italic;\n}\n.ss-grid__spacer-row td {\n  border: none;\n  padding: 0;\n}\n/* Cell popover: replaces the old\n   inspector pane. Positioned absolutely within .ss (see\n   UI.openCellPopover), closes on Escape or a click outside. */\n.ss-cell-popover {\n  position: absolute;\n  z-index: 120;\n  width: 280px;\n  max-width: 90vw;\n  background: var(--bg-surface);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-md);\n  box-shadow: var(--shadow-dropdown);\n  padding: var(--spacing-sm);\n}\n.ss-cell-popover__value {\n  white-space: pre-wrap;\n  word-break: break-word;\n  font-family: var(--font-mono);\n  background: var(--bg-elevated);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  padding: var(--spacing-sm);\n  margin-bottom: var(--spacing-sm);\n  max-height: 40vh;\n  overflow-y: auto;\n}\n/* Pager, one row under the grid: page\n   size select on the left, prev/range/next centred, \"Page [n] of N\" on the\n   right. No first/last or Go buttons. */\n.ss-pager {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: var(--spacing-sm);\n  padding: var(--spacing-sm) var(--spacing-md);\n  border-top: 1px solid var(--border-color);\n  flex: 0 0 auto;\n  font-size: var(--font-size-sm);\n}\n.ss-pager__left,\n.ss-pager__center,\n.ss-pager__right {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  flex: 1 1 0;\n}\n.ss-pager__center {\n  justify-content: center;\n}\n.ss-pager__right {\n  justify-content: flex-end;\n}\n.ss-pager__range {\n  white-space: nowrap;\n  color: var(--text-secondary);\n}\n.ss-pager__page-input {\n  width: 56px;\n  text-align: center;\n}\n.ss-pager__page-input:focus {\n  border-color: var(--color-action);\n}\n.ss-pager__page-of {\n  color: var(--text-secondary);\n  white-space: nowrap;\n}\n.ss-message-item {\n  padding: var(--spacing-sm);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  margin-bottom: var(--spacing-sm);\n}\n.ss-message-item--error {\n  border-color: var(--color-danger);\n  background: var(--tint-danger);\n}\n.ss-message-item--warning {\n  border-color: var(--warning-color);\n  background: var(--tint-warning);\n}\n.ss-message-item--info {\n  background: var(--bg-elevated);\n}\n.ss-empty-state {\n  padding: var(--spacing-xl);\n  text-align: center;\n  color: var(--text-secondary);\n}\n.ss-empty-state--running {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: var(--spacing-sm);\n}\n.ss-empty-state--running p {\n  margin: 0;\n}\n.ss-empty-state__title {\n  color: var(--text-primary);\n  font-weight: 500;\n}\n/* A finished run whose rows did not load: what happened, the error's own text, where the rows are, and the button that\n   reads them again. */\n.ss-empty-state--unread {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: var(--spacing-sm);\n}\n.ss-empty-state--unread p {\n  margin: 0;\n  max-width: 70ch;\n}\n.ss-unread-page__error {\n  color: var(--text-primary);\n  white-space: pre-wrap;\n}\n.ss-unread-page__detail {\n  font-size: var(--font-size-sm);\n}\n.ss-unread-page__button {\n  display: inline-flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n}\n\n/* -------------------------------------------------------------------- */\n/* 9. Dialogs, dropdown managers and modal                                */\n/* -------------------------------------------------------------------- */\n/* Above the anchored panels (.ss-dropdown-mount, 101): a dialog opened from one, such as History's Clear all or Open's question on\n   unsaved changes, drew under the panel where the two met (2026-10-09). */\n.ss-modal-overlay {\n  position: absolute;\n  inset: 0;\n  background: rgba(0, 0, 0, 0.45);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  z-index: 110;\n  padding: var(--spacing-lg);\n}\n.ss-modal {\n  background: var(--bg-surface);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-md);\n  box-shadow: var(--shadow-md);\n  width: 100%;\n  max-width: 480px;\n  max-height: 100%;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n}\n.ss-modal--wide {\n  max-width: 640px;\n}\n.ss-modal__header {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  padding: var(--spacing-md) var(--spacing-lg);\n  border-bottom: 1px solid var(--border-color);\n}\n.ss-modal__title {\n  font-size: var(--font-size-md);\n  font-weight: 700;\n  flex: 1 1 auto;\n}\n.ss-modal__close {\n  border: none;\n  background: none;\n  cursor: pointer;\n  font-size: 16px;\n  color: var(--text-secondary);\n  padding: 4px;\n  border-radius: var(--border-radius-sm);\n}\n.ss-modal__close:hover {\n  background: var(--bg-hover);\n  color: var(--color-primary);\n}\n.ss-modal__body {\n  padding: var(--spacing-sm) var(--spacing-lg);\n  overflow-y: auto;\n  flex: 1 1 auto;\n}\n.ss-modal__status {\n  margin: var(--spacing-sm) 0 0;\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n}\n.ss-modal__status:empty {\n  display: none;\n}\n.ss-modal__footer {\n  display: flex;\n  justify-content: flex-end;\n  gap: var(--spacing-sm);\n  padding: var(--spacing-md) var(--spacing-lg);\n  border-top: 1px solid var(--border-color);\n  flex: 0 0 auto;\n}\n\n/* Dropdown managers (History, Runs, Settings, Help): anchored under their\n   toolbar button, not centred. Plain anchored, with --shadow-dropdown. */\n.ss-dropdown-scrim {\n  position: absolute;\n  inset: 0;\n  z-index: 100;\n  background: transparent;\n}\n.ss-dropdown-mount {\n  position: absolute;\n  z-index: 101;\n}\n/* --toolbar-bg, not --bg-surface: History\n   keeps its own toolbar button and anchored panel, but uses the same menu\n   surface as the Help ss-toolbar__menu. */\n.ss-dropdown-panel {\n  background: var(--toolbar-bg);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-md);\n  box-shadow: var(--shadow-dropdown);\n  width: 300px;\n  max-height: 70vh;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n}\n.ss-dropdown-panel--wide {\n  width: 420px;\n}\n/* Open: the width its rows had as a centred dialog (.ss-modal--wide). UI.openDropdown caps it at the app's width less 16px. */\n.ss-dropdown-panel--xwide {\n  width: 640px;\n}\n/* About dialog: Diagramforce's df-about layout,\n * translated to ss-. .ss-about is the flex column all its children sit in;\n * .ss-about__separator is the thin full-width rule (there are exactly two:\n * before the links row and before the licence line), and .ss-about__meta /\n * __signed-in / __license are plain centred text rows, not bordered\n * individually, so the muted signed-in line can sit directly under the\n * links row with no rule between them. */\n.ss-about {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  text-align: center;\n  gap: var(--spacing-md);\n  padding: var(--spacing-sm) 0;\n}\n.ss .ss-about__name {\n  margin: 0;\n  font-size: 20px;\n  font-weight: 700;\n  color: var(--text-primary);\n}\n.ss .ss-about__tagline {\n  margin: 2px 0 0;\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n}\n.ss .ss-about__info {\n  margin: 0;\n  max-width: 440px;\n  font-size: 13px;\n  line-height: var(--line-height);\n  color: var(--text-secondary);\n}\n/* Label and value rows, left-aligned in a quiet panel. */\n.ss-about__details {\n  display: grid;\n  grid-template-columns: max-content 1fr;\n  gap: 6px var(--spacing-md);\n  width: 100%;\n  margin: 0;\n  padding: 10px 14px;\n  box-sizing: border-box;\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  background: var(--bg-elevated);\n  text-align: left;\n  font-size: var(--font-size-xs);\n}\n.ss-about__details dt {\n  color: var(--text-muted);\n}\n.ss-about__details dd {\n  margin: 0;\n  color: var(--text-secondary);\n  overflow-wrap: anywhere;\n}\n.ss-about__links {\n  display: flex;\n  flex-wrap: wrap;\n  justify-content: center;\n  gap: var(--spacing-sm);\n}\n.ss-about__pill {\n  padding: 4px 12px;\n  border: 1px solid var(--border-color);\n  border-radius: 14px;\n  color: var(--color-primary);\n  font-size: var(--font-size-xs);\n  text-decoration: none;\n}\n.ss-about__pill:hover {\n  background: var(--bg-hover);\n}\n.ss-about__link {\n  color: var(--color-primary);\n  text-decoration: none;\n}\n.ss-about__link:hover {\n  text-decoration: underline;\n}\n.ss .ss-about__credits {\n  margin: 0;\n  font-size: var(--font-size-xs);\n  color: var(--text-muted);\n  text-align: center;\n}\n.ss .ss-about__credits p {\n  margin: 0 0 2px;\n}\n.ss-about__license {\n  width: 100%;\n  padding-top: var(--spacing-md);\n  border-top: 1px solid var(--border-color);\n  font-size: var(--font-size-xs);\n  color: var(--text-muted);\n}\n.ss .ss-about__license p {\n  margin: 0;\n}\n.ss .ss-about__license p + p {\n  margin-top: 2px;\n}\n.ss-list {\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  max-height: 320px;\n  overflow-y: auto;\n}\n.ss-list-row {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-md);\n  padding: var(--spacing-sm) var(--spacing-md);\n  border-bottom: 1px solid var(--border-color);\n  cursor: pointer;\n}\n.ss-list-row:last-child {\n  border-bottom: none;\n}\n.ss-list-row:hover {\n  background: var(--bg-hover);\n}\n/* The Save As target the user picked. */\n.ss-list-row.is-selected {\n  background: var(--toolbar-button-active);\n}\n.ss-list-row__main {\n  flex: 1 1 auto;\n  min-width: 0;\n  overflow: hidden;\n}\n.ss-list-row__title {\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.ss-list-row__meta {\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.ss-list-row__sql {\n  font-family: var(--font-mono);\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.ss-check-target {\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  padding: var(--spacing-md);\n  margin-top: var(--spacing-sm);\n}\n.ss-check-target table {\n  width: 100%;\n  border-collapse: collapse;\n  font-size: var(--font-size-sm);\n}\n.ss-check-target th, .ss-check-target td {\n  text-align: left;\n  padding: 3px var(--spacing-sm);\n  border-bottom: 1px solid var(--border-color);\n}\n\n/* -------------------------------------------------------------------- */\n/* 10. Toasts                                                            */\n/* -------------------------------------------------------------------- */\n/* Centred just below the toolbar, where the user is looking after pressing a\n   toolbar button, not in a corner. The column lets clicks through between toasts. */\n.ss-toasts {\n  position: absolute;\n  top: calc(var(--toolbar-height) + var(--spacing-md));\n  left: 50%;\n  transform: translateX(-50%);\n  display: flex;\n  flex-direction: column;\n  align-items: stretch;\n  gap: var(--spacing-sm);\n  z-index: 200;\n  width: min(480px, calc(100% - 32px));\n  pointer-events: none;\n}\n.ss-toast {\n  pointer-events: auto;\n  display: flex;\n  align-items: flex-start;\n  gap: var(--spacing-sm);\n  padding: var(--spacing-sm) var(--spacing-md);\n  border-radius: var(--border-radius-sm);\n  border: 1px solid var(--border-color);\n  background: var(--bg-surface-raised);\n  box-shadow: var(--shadow-md);\n}\n.ss-toast--success {\n  border-color: var(--brand-green);\n}\n.ss-toast--error {\n  border-color: var(--color-danger);\n}\n.ss-toast--warning {\n  border-color: var(--warning-color);\n}\n.ss-toast__body {\n  flex: 1 1 auto;\n  font-size: var(--font-size-sm);\n}\n.ss-toast__close {\n  border: none;\n  background: none;\n  cursor: pointer;\n  color: var(--text-secondary);\n}\n\n/* -------------------------------------------------------------------- */\n/* 11. Misc: badges, scrollbars, focus, responsive                       */\n/* -------------------------------------------------------------------- */\n.ss-badge {\n  display: inline-flex;\n  align-items: center;\n  gap: 3px;\n  padding: 1px 6px;\n  border-radius: 10px;\n  font-size: 11px;\n  font-weight: 600;\n  background: var(--bg-elevated);\n  color: var(--text-secondary);\n}\n.ss-badge--error {\n  background: var(--tint-danger);\n  color: var(--danger-text);\n}\n.ss-badge--warning {\n  background: var(--tint-warning);\n  color: var(--warning-text);\n}\n.ss-badge--info {\n  background: var(--tint-info);\n  color: var(--info-text);\n}\n\n.ss * ::-webkit-scrollbar {\n  width: 10px;\n  height: 10px;\n}\n.ss ::-webkit-scrollbar-thumb {\n  background: var(--border-color-strong);\n  border-radius: 6px;\n}\n.ss ::-webkit-scrollbar-track {\n  background: transparent;\n}\n\n@media (max-width: 1023px) {\n  .ss-sidebar {\n    position: absolute;\n    top: 0;\n    bottom: 0;\n    right: 0;\n    z-index: 50;\n    box-shadow: var(--shadow-md);\n  }\n  .ss-sidebar.is-collapsed {\n    display: none;\n  }\n  .ss-sidebar-overlay-bg {\n    display: block;\n    position: absolute;\n    inset: 0;\n    background: rgba(0, 0, 0, 0.3);\n    z-index: 40;\n  }\n}\n\n/* Narrow windows: toolbar buttons drop their labels (icon only) except the primary Run button,\n   so the single-row toolbar never wraps. Titles carry the label for tooltips. */\n@media (max-width: 1100px) {\n  .ss .ss-toolbar__button--secondary > span { display: none; }\n  .ss .ss-toolbar__button--secondary { padding: 4px 6px; }\n}\n@media (max-width: 900px) {\n  .ss .ss-toolbar__button:not(.ss-toolbar__button--primary) > span { display: none; }\n  .ss .ss-toolbar__button:not(.ss-toolbar__button--primary) { padding: 4px 6px; }\n}\n\n/* Menu links look like menu buttons (Diagramforce): text colour, not link colour. */\n.ss a.ss-toolbar__menu-item {\n  color: var(--text-secondary);\n  text-decoration: none;\n}\n.ss a.ss-toolbar__menu-item:hover {\n  color: var(--text-primary);\n}\n\n/* -------------------------------------------------------------------- */\n/* 12. Save to DE                                                        */\n/* -------------------------------------------------------------------- */\n/* The overlay (SaveToDe in sqlstudio.js) needs the width of a table of fields. */\n.ss-modal--xwide {\n  max-width: 1080px;\n}\n/* A toast's link has a line of its own, as wide as its words, so the off-site arrow stays beside them, in the toast's own text colour\n   rather than the link red (the author's RC7 test, 2026-10-09: the red link wrapped and left its arrow on a line alone). */\n.ss .ss-toast__link {\n  display: table;\n  margin-top: 2px;\n  color: var(--text-primary);\n  text-decoration: underline;\n  white-space: nowrap;\n}\n.ss .ss-toast__link:hover {\n  color: var(--color-primary);\n}\n/* The line beside Close while the rows move: the Data Extension is made, and the window can close. */\n.ss-save__moving {\n  flex: 1 1 auto;\n  margin: 0;\n  align-self: center;\n  font-size: var(--font-size-sm);\n  color: var(--text-primary);\n}\n.ss-save__moving:empty {\n  display: none;\n}\n/* The warnings under the fields table (saveFieldWarnings): a field with no length, a length too short for the values on screen. */\n.ss-save__warnings {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n  margin-top: var(--spacing-xs);\n}\n.ss-save__warnings:empty {\n  display: none;\n}\n/* The line under a failed move's message: the Data Extension's fields are set, so the form's are locked. */\n.ss-save__locked {\n  margin-top: 4px;\n}\n.ss-save__moving-line {\n  display: block;\n}\n.ss-save__top {\n  display: grid;\n  grid-template-columns: repeat(3, minmax(0, 1fr));\n  gap: var(--spacing-md);\n}\n/* The folder picker: the input, and under it the list of folders that opens over the fields table. Its rows are the Save As\n   list's (.ss-list-row), the active one (the arrow keys) marked by a bar and the chosen one by a tint. */\n.ss-combo {\n  position: relative;\n}\n.ss-combo__popup {\n  position: absolute;\n  top: 100%;\n  left: 0;\n  right: 0;\n  z-index: 10;\n  margin-top: 2px;\n  max-height: 320px;\n  overflow-y: auto;\n  overscroll-behavior: contain;\n  border: 1px solid var(--border-color-strong);\n  border-radius: var(--border-radius-sm);\n  background: var(--bg-surface-raised);\n  box-shadow: var(--shadow-dropdown);\n}\n.ss-combo__option {\n  padding: 5px var(--spacing-md);\n  line-height: 1.4;\n}\n.ss-combo__option.is-active {\n  background: var(--bg-hover);\n  box-shadow: inset 3px 0 0 var(--color-primary);\n}\n.ss-combo__list:not(:empty) + .ss-combo__note {\n  border-top: 1px solid var(--border-color);\n}\n/* Beside the other two fields the list is wider than its input, to the left, so a long path shows whole. */\n@media (min-width: 801px) {\n  .ss-combo__popup {\n    left: auto;\n    width: 520px;\n  }\n}\n.ss-save__notice:empty {\n  display: none;\n}\n.ss-save__note {\n  margin: 0 0 var(--spacing-sm);\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n}\n.ss-save__table-wrap {\n  max-height: 36vh;\n  overflow: auto;\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  margin-bottom: var(--spacing-md);\n}\n.ss-save__table {\n  width: 100%;\n  border-collapse: collapse;\n  font-size: var(--font-size-sm);\n}\n.ss-save__table th {\n  position: sticky;\n  top: 0;\n  z-index: 1;\n  padding: 4px;\n  text-align: left;\n  font-weight: 600;\n  color: var(--text-secondary);\n  background: var(--bg-elevated);\n  border-bottom: 1px solid var(--border-color);\n}\n.ss-save__table td {\n  padding: 3px 4px;\n  vertical-align: top;\n}\n.ss-save__table tr.has-error td {\n  background: var(--tint-danger);\n}\n/* The column's name on the line of its inputs: one line as tall as an input (26px) keeps the text at their middle, and the cell stays\n   at the top, so a line of error under an input leaves it where it is (the author's RC13 test, 2026-10-09). */\n.ss-save__source {\n  max-width: 150px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  line-height: 26px;\n  color: var(--text-secondary);\n}\n.ss-save__table .ss-input,\n.ss-save__table .ss-select {\n  height: 26px;\n}\n.ss-save__number {\n  width: 72px;\n  text-align: right;\n}\n/* Key and Null: the box at the middle of its column, under its centred heading, and at the middle of the line of the inputs. */\n.ss .ss-save__table .ss-save__check {\n  text-align: center;\n}\n.ss-save__check-box {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  height: 26px;\n}\n.ss-save__check-box > input {\n  margin: 0;\n}\n.ss-save__error {\n  margin-top: 2px;\n  font-size: 11px;\n  color: var(--danger-text);\n}\n.ss-save__error:empty {\n  display: none;\n}\n.ss .ss-input.is-invalid {\n  border-color: var(--color-danger);\n}\n.ss-save__group {\n  margin-bottom: var(--spacing-sm);\n}\n.ss-save__line {\n  display: flex;\n  flex-wrap: wrap;\n  align-items: center;\n  gap: var(--spacing-sm);\n}\n.ss-save__line .ss-select,\n.ss-save__line .ss-input {\n  width: auto;\n}\n.ss-save__inline {\n  display: inline-flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n}\n.ss-save__cost,\n.ss-save__fix {\n  margin: var(--spacing-xs) 0 0;\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n}\n.ss-save__cost:empty,\n.ss-save__fix:empty {\n  display: none;\n}\n/* The line on what the save does, under the overlay's title, with the gap a field group has before the Name. */\n.ss-modal__body > [data-save=\"hint\"] {\n  margin-bottom: var(--spacing-md);\n}\n/* The cost sits in the footer, left of Cancel and Save, as Export CSV's label sits by its button (the author's RC12 test, 2026-10-09).\n   While a save runs it is empty, and the line on the move takes its place. */\n.ss-modal__footer > .ss-save__cost {\n  flex: 1 1 auto;\n  margin: 0;\n  align-self: center;\n}\n.ss-save__fix {\n  color: var(--danger-text);\n}\n.ss-save__link {\n  display: inline-block;\n  margin-top: var(--spacing-xs);\n  color: var(--color-primary);\n}\n.ss-save__primary .ss-spinner {\n  margin-right: var(--spacing-xs);\n}\n@media (max-width: 800px) {\n  .ss-save__top {\n    grid-template-columns: minmax(0, 1fr);\n  }\n}\n";
+window.SQLStudioEmbeddedCss = "/* ==========================================================================\n   SQL Studio styles\n\n   Brand: SQL Studio follows the same design tokens and Lightning-adjacent\n   chrome as its sibling app Diagramforce. The dark tokens\n   are the base, and .ss[data-theme=\"light\"] overrides them. The App picks\n   the theme from the user's choice or the operating system's mode. Everything is scoped under .ss so the app can be\n   dropped into a Cloud Page without leaking styles or claiming <html>.\n\n   Sections:\n   1. Design tokens (brand, semantic, surfaces, sizing, shadows)\n   2. Reset and base\n   3. Layout shell (toolbar-on-top anatomy: header, sidebar, main - no status bar)\n   4. Buttons and form controls\n   5. Sidebar tree and search\n   6. Toolbar, help/theme menu, and problems strip\n   7. Editor pane and split resizer\n   8. Results grid, header, notice, error panel and pager\n   9. Dialogs, dropdown managers and modal\n   10. Toasts\n   11. Misc (badges, scrollbars, focus, responsive)\n   ========================================================================== */\n\n/* -------------------------------------------------------------------- */\n/* 1. Design tokens                                                      */\n/* -------------------------------------------------------------------- */\n.ss {\n  /* Brand (theme-stable) */\n  --brand-blue: #1D73C9;\n  --brand-red: #DA4E55;\n  --brand-amber: #F6B355;\n  --brand-amber-strong: #D4911F;\n  --brand-green: #27AE60;\n\n  /* Semantic: the primary hue flips between themes (deliberate, matches\n     Diagramforce); danger is always the brand red. --color-action is a separate accent hue for the\n     Run button, primary dialog buttons, and results/pager accents - it\n     also flips between themes, but independently of --color-primary. */\n  --color-primary: var(--brand-red);\n  --color-primary-hover: color-mix(in srgb, var(--color-primary) 82%, black);\n  --color-danger: var(--brand-red);\n  --color-accent: var(--brand-amber);\n  --color-action: var(--brand-amber);\n  --color-action-hover: color-mix(in srgb, var(--color-action) 82%, black);\n  --color-action-fg: #1C1E21;\n  --tint-danger: color-mix(in srgb, var(--color-danger) 14%, transparent);\n  --tint-warning: color-mix(in srgb, var(--warning-color, var(--brand-amber)) 16%, transparent);\n  --tint-info: color-mix(in srgb, var(--brand-blue) 14%, transparent);\n  /* The focused completion row and the header strip of its details panel, in both themes: brand blue with white\n     text, which reads at 4.8:1 on it, and the row reads at 4.4:1 against the light list and 3.2:1 against the dark\n     one. The Monaco theme writes the same pair (Editor._registerThemes). The rest of the panel is a card in a light\n     tint of the same blue, under which the note's secondary text keeps 4.5:1 in the light theme. */\n  --focus-band: var(--brand-blue);\n  --focus-band-fg: #FFFFFF;\n  --focus-card: color-mix(in srgb, var(--brand-blue) 8%, transparent);\n  --tint-success: color-mix(in srgb, var(--brand-green) 14%, transparent);\n\n  /* Dark theme surfaces and text (default) */\n  --bg-app: #212121;\n  --bg-surface: #18191A;\n  --bg-surface-raised: #242526;\n  --bg-elevated: rgba(127, 127, 127, 0.08);\n  --bg-hover: rgba(255, 255, 255, 0.10);\n  --text-primary: #F5F6F7;\n  --text-secondary: #B0B3B8;\n  --text-muted: #9CA3AF;\n  /* The rows of a query the editor no longer holds, and the mark that says so (.ss-stale-mark): muted, at 4.67:1 on a hovered row and\n     5.77:1 on the results header. */\n  --text-stale: var(--text-muted);\n  /* The soft hatch behind those rows: lighter stripes, which keep --text-stale at 5.5:1 or more where they lie. */\n  --stale-hatch: rgba(255, 255, 255, 0.045);\n  --text-inverse: #1C1E21;\n  --border-color: #3A3B3C;\n  --border-color-strong: #4E4F50;\n  --toolbar-bg: #242526;\n  --toolbar-button-hover: rgba(255, 255, 255, 0.10);\n  --toolbar-button-active: rgba(218, 78, 85, 0.15);\n  /* The quick tip (.ss-tip): a step lighter than the sidebar, with a border and a tight shadow that set it off from the rows\n     under it (the author's RC11 test, 2026-10-09: the surface and border colours left it hard to tell from the list). */\n  --tooltip-bg: #333437;\n  --tooltip-fg: var(--text-primary);\n  --tooltip-border: #6A6D72;\n  --shadow-tooltip: 0 4px 14px rgba(0, 0, 0, 0.55);\n  --modal-btn-neutral-bg: #E4E6EB;\n  --modal-btn-neutral-hover: #D2D6DC;\n  --modal-btn-neutral-fg: #1C1E21;\n  /* The severity colours: --warning-color, --color-danger and --brand-blue\n     mark (squiggles, rulers, borders, dots) at 3:1 or more, and the -text\n     variants colour words at 4.5:1 or more on the tints, the active tab and\n     the hovered tab they sit on. The dark theme's error red and info blue are\n     a shade lighter as text. */\n  --warning-color: var(--brand-amber);\n  --warning-text: var(--warning-color);\n  --danger-text: #E89397;\n  --info-text: #73AFEB;\n  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);\n  --shadow-md: 0 5px 40px rgba(0, 0, 0, 0.35);\n  --shadow-lg: 0 12px 28px 0 rgba(0, 0, 0, 0.4), 0 2px 4px 0 rgba(0, 0, 0, 0.2);\n  --shadow-dropdown: 0 14px 24px -10px rgba(0, 0, 0, 0.55);\n\n  /* Editor tokens: keywords/functions use the\n     flipping primary/accent hues, data views stay brand blue in both\n     themes, strings are always green, comments always --text-muted.\n     Each reads at 4.5:1 or more on --editor-bg, which the details\n     panel's code blocks share too: where a brand colour falls short,\n     the token takes the same hue a step lighter here, and a step darker\n     in the light theme below. Dark: the keyword red is #DB545B (the\n     brand red is 4.36:1), the Data View blue #2884E0 (the brand blue\n     is 3.65:1). */\n  --editor-bg: var(--bg-surface);\n  --editor-fg: var(--text-primary);\n  --editor-keyword: #DB545B;\n  --editor-function: var(--brand-amber);\n  --editor-string: var(--brand-green);\n  --editor-identifier: var(--text-primary);\n  --editor-dataview: #2884E0;\n  --editor-comment: var(--text-muted);\n  --editor-operator: #778899;\n\n  /* Sizing and type */\n  --toolbar-height: 50px;\n  --panel-header-height: 45px;\n  --border-radius-sm: 6px;\n  --border-radius-md: 8px;\n  --spacing-xs: 4px;\n  --spacing-sm: 8px;\n  --spacing-md: 12px;\n  --spacing-lg: 16px;\n  --spacing-xl: 24px;\n  --font-family: system-ui, -apple-system, \"Segoe UI\", Roboto, Ubuntu, Cantarell, \"Noto Sans\", sans-serif;\n  --font-mono: ui-monospace, SFMono-Regular, \"SF Mono\", Menlo, Consolas, \"Liberation Mono\", monospace;\n  --font-size-xs: 11px;\n  --font-size-sm: 12px;\n  --font-size-md: 14px;\n  --font-size-lg: 16px;\n  --line-height: 1.65;\n  --logo-data-uri: url(\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAABGdBTUEAALGPC/xhBQAAAERlWElmTU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAQKADAAQAAAABAAAAQAAAAABGUUKwAAABy2lUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iWE1QIENvcmUgNi4wLjAiPgogICA8cmRmOlJERiB4bWxuczpyZGY9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkvMDIvMjItcmRmLXN5bnRheC1ucyMiPgogICAgICA8cmRmOkRlc2NyaXB0aW9uIHJkZjphYm91dD0iIgogICAgICAgICAgICB4bWxuczpleGlmPSJodHRwOi8vbnMuYWRvYmUuY29tL2V4aWYvMS4wLyI+CiAgICAgICAgIDxleGlmOkNvbG9yU3BhY2U+MTwvZXhpZjpDb2xvclNwYWNlPgogICAgICAgICA8ZXhpZjpQaXhlbFhEaW1lbnNpb24+MTk2PC9leGlmOlBpeGVsWERpbWVuc2lvbj4KICAgICAgICAgPGV4aWY6UGl4ZWxZRGltZW5zaW9uPjE5NjwvZXhpZjpQaXhlbFlEaW1lbnNpb24+CiAgICAgIDwvcmRmOkRlc2NyaXB0aW9uPgogICA8L3JkZjpSREY+CjwveDp4bXBtZXRhPgosnlo7AAAMIklEQVR4AeVba2wdxRX+9u7eh31jO7ZjB2xwchMCAURCHhWPQsEhIWlTKlIeKvTxB1X9gUAV/0qlItoK2kogVX0L8SeIP6gtqC0VJLQxSdoqPOI4AkNMXnZiOwlx8OPavs/dfmf2Pnbvrl+xHYN9lPHenZmdme+bc86cmc1qmIRYlhVhtVqmaqZFTGEmnenzJFkOJskUZ/qMqU/TtASv44o2VilBC8htTDsAaz2vjUxRQDN4T/BjPspqcyEWO9VIgpXhj2Gmbt4f5PVVpjdIhpAzOSH4rUz/Y5ovIli2+qH3TCMr/ogVn2YK2g8Is19kKUBME8VT1IRnnWgKpZKZA/+MXeGLDtwJU34XoD7pJKGQS/BbWOt1Js78fAMvBIgouKIJ20nC7kIOwZcR9F5W2Dh/wQtcESHBeo/Xr5CE0YDKA+5eGOAFrVotONGCGcgTcJ/cLDBRmANUfwly1i0w8AJ3nWAXDWCEZzUsPAIU5lohoIaJEd6CE8FcQwIyjO0lvF1oIpgzi0iAEaIJfN42NpdgNgSzERIT+BxubC4Bfjso0j2qr2JA/tH8okFN+JqJKDEXgFqmP1KtEKD6lI9VdnHjKiFAw7njXfjJy+9hRA+7SMhmTTTVV+HpR25DyBCLubgOhVozPoSfvrAHHSMBGE48bNLQA/jZI7ejsa4i14eGVDqDH7+4H73n4zCMAMIhA3VVZbiqsRprV9ZhdVMNysK5vdsUx1VCAFA51IfIBwfREr2Gpx5yxmCLwG09eh7N65tw95di+eyLuva1tODwgQ/RHm1EyKEFFjsJEmAiVexXOjCZ336iD8fP9CuCBKPJylJfyFi+tAKbNy7HjtuuQsMSIU6EhZMQ0WmXWIEAtmW6UKunybauBiSDCjHpuoadu9qRysgAnVPnamKcGw3ZkTj69ryBUCSIEGdb2i5NfhZgj0FX2hcK6ogQeFnYgNQ93juA373aiod//jr+9Pc2jCZlvzO58XkIyJKAK41BfDlzGqlCpGxjEtVvO/op9rR2jQNy/KKBAy3IDnQjQAAzIQJTzEbI6I8n8es/v48fPLcbR0/LqdjEJHgIED+nRXVs00+gikdslk8jLxW0YCoQaPujcQy+uwuhqiC0WVh49YCmiDjYcRbff+4tHOw4MyEJXgJkYGU6lkXiuF3v9mpBMEAtOJfTgokZdlIUP7wX5lAPgtEgAhzsJM1UNSH2ztjdTs5GfX5rRhBGqg/mu88je+ET1hh7nF4CODCjTINWHsD26ElU8SzRLG2Ahjc1LeDsJ4YxfHgXjKgBnacPJdblA8OdFSLx4vDE/oW5RCqDZDqrHKGzZsoMoDE6il/d9AFWR05h6MAfqXkXWMWfBI8higkYEVamL4hpw2jO9OC14RjCcuCaE3GIbcdsX7BVrQgTe9zRjr3ASC+C5Qw8uaSqkCLf4LhXC2GCf/7RZqT5nGjN0GgKR7ouYO/h0zjwUS8SyYwixgafwLMb2nB1xSCSZhjWYA9G2l7GopseJQdeEjwEyMzoigCpHMA91Z1oSTRi2DR45wRq4aU329G8rkmtEGNjYEiVHMbox7sRiEh31C6TyaN747TAgV9ZX+mqsHZlPR5sXo3WT87iN39txX/azyC2OIVfbDiEVZUDSGZtJ6MZYaROHUCq6VaEGjawDScGH0WUgemcJElWSENsURybKukLqFpOkRXh8PFzePvQKWZ7mXXWTRzfB3O4VxEQYLsa28UUfYA9cBm8O61btRR/eGILHv3qSjy95j2sqiiCz49BfEfiyD8ZPMgrA7e4UbFM48D0MNd8bhMkgene+lOoNlIeXyBD2fnmh7m4wN2wfcfZTw0jcfQttexpEvbRfAJBasD4nPk1NkaemIiOx791C9asuQEJ+oVS0fQgMn0dSJ/vYJG7Yy8BLM9rgNIC2t+Kyji2LOnx1YJDx86h5VCXp+H8IJIn9yEb74Emzov/ZBOqiHCPI1/9Iq8yFQYia74LvYJnO6aXBCubQar7HU/7HgKEIE1myJGynLV7G7pQHeSKYHlHLr7AGx3K7MeROMbZp7mIacnar9Z/2xV4BjO9DEYs4UpErt7KlcFLgBYwkPn0CKxsytWNPwFUVZmlfDIZacUqh7Glvpda4CZAfMEhrggtyhe42kaycz+yg920d0HOf3kSNNuO5e9MS6hxIwJlfIfr2GOoPti5OcLYQC2JxV59CVBbNGWvHHXuKpzefwPPkCrCaiNSbML+9ZL4goL9FW1fK91xc2D6ohrolZdTVcfYDpc2Pul7i462GkZVE/GXaAGdjpVJKBKczXkIEOeUV1XnNaOZWNVUja/fskIFIM5GJC4o9QXJTtr+EGdf6byjtplGcPmdDLTqmFkySEe16fzUK5dSe2kSDi1WfidAwtPy4rgo3jiAZaKqJc5SrT5ZLicPbVqNf+zvQJzBiApnC23Z0WHz+mUImqPK84vduYS2GYjWIxJrJvYDrqKZvIl36ejbn+Zq455fM52CEeMENBZ7KxkhC3K26k8AD0XqothOLZDlT3ZgeSloQVsvttS0K9uXIMQp4okjK5qhRaroqGZa/Ys9xU8Mor89xeW8mCe/TB6sLB2lP3KIm6J8AUlQBJRec+UP33UtaiojPr4ggJ2vv4MLH+2i3yuSox5Ttl+P8Io7c63MxoUDpl9J9narGKbUBCQSDVZXuTr2J8BVxXvTtLSSvmCljy/Q0HZyEHuPWQyPhb2iWLT9sMx+eDEzZ8P/230lensx0tlF+y+ZABJjRKMI14nvKcpFESCPKy2ooBbIeZVT6PRe6VyORIZrfz5fZp9OLxy7M58za9dP/92CzNAQNbjQu+rLzGYRabicGiD/zakoF0mABdGCe3y0IEhP+8Fni7HvbB2PvGwvb8/+Ji5Rszn7GkY7O3HujTfp/PIHpEWgYhpVN67lojQZH+B4bryfD22+FrW+vgB45WSTrQX0/HqUs0/1nz3RkBkYwPHf/t6efW7lXcLVSy8vR/UtN7uy5aakpqd8nAxqAbeoX7uZcUHJKW5BC87VI8QzpXBMZl+cT4m5jNP65IpEzTUkunvQ8cwvEf/4iO/sm6k0Fm9Yj/LlyzxjKPEUk+vWWevbm6/D3/57TB1IBhx2l6Zv2PnxZbj1iiTqZmT23TYtY5BZP//2PvS++hpS589zx8m9dqlQ9fXyCC6/75sskTbckzBNAmxf8NiOG3GIB5ByjO6UbLYR/SvuQP00Z98iiIH3W3mkPqKaT/f3Y+TECQx92I7EmbPKrn3Bs7aZSqHxvh2IXrWSd27w0tg0CZAmLDy8+XqV5M5fvB371/PLZQzPAKbzhRcxevq07cRo0zKbstSNBVxaMhNJLN64AQ0P3O/XsMqbAQKknekAHHNsrgKNnl3AlnpxVyXHjZlMYtE1VyP2+GMIhCUk9B/jDBHg6Hmuf1I7BHzl2jVY+cQPEaqV///hD16GOq8IMNPcADEEv+wb9+CK732Hx+9y/j42+HlBgDhIi8DFNCqvvw4NDz6AqnU3CjbK+OClhlcDGLZaWf7HarUnliq2WJkUDxnkpePMiLzUGOV5ftYRSotvy/L0WU5xS0W8uah20Qdo9Al8wVpbi4rrVqP2jjsY6a1huUDyPl/aXv7eQ0CgfAki12xneUmMxCNlozqWf27a1+0MoG6ILVFvnAuNcdwBRnGLuccoCg82eCRXv3ULMv0DPFjVua6XIVRTg0hjI8quvAJGRf6VuDw1efBSWyPbm3j9l9zYD3sDDrss/3dqHeSf8l6n2s949ac6pkJbd4kGcMciDeQzp9qYF9rkcqbaz1TrTzQKhTkrei4GPzuHcxONYU7LFeakEMBTQvWZyZwO59J3bn9aIwTIu2P3UemlH81c9CiYLwgBfTSBnrkYwdz2qTD3cQerPi1rndvBzEnvrYJdNEDkL/ZlQf1VmPME7KIjlM9IFgADglGwgphz4R5VYZTgn+Q9Y935TILCJhjlyzFidsS7zNjN+6ckc36SUJhY+XZQsCrJm4C6YYF8VOjQhMJDdu0v5F/BkJ95uL4ZHBMO9wcL99PZPCskQc6Rch9Pgx9PW42852cm6usS9+ln/qG5v8q+JvfxtMZ385jw4+lJ6TjJkP0pP65yfj7Pd18+xwlzw4FgNmQ/w33N1D6f/z9nGYh4iZaoUAAAAABJRU5ErkJggg==\");\n  --transition-fast: 150ms ease;\n  --transition-normal: 400ms cubic-bezier(0.08, 0.52, 0.52, 1);\n\n  color-scheme: dark;\n  background: var(--bg-app);\n  color: var(--text-primary);\n}\n\n.ss[data-theme=\"light\"] {\n  --color-primary: var(--brand-blue);\n  --color-primary-hover: color-mix(in srgb, var(--color-primary) 85%, black);\n  --color-action: var(--brand-blue);\n  --color-action-hover: color-mix(in srgb, var(--color-action) 85%, black);\n  --color-action-fg: #FFFFFF;\n\n  --bg-app: #F5F6F7;\n  --bg-surface: #FFFFFF;\n  --bg-surface-raised: #FFFFFF;\n  --bg-elevated: rgba(127, 127, 127, 0.08);\n  --bg-hover: rgba(0, 0, 0, 0.06);\n  --text-primary: #1C1E21;\n  --text-secondary: #606770;\n  --text-muted: #65707B;\n  /* Secondary, not muted, in the light theme: --text-muted on the app background read at 4.09:1 on a hovered row and 4.29:1 on the\n     results header, where --text-secondary keeps 4.63:1 and 4.86:1. The two greys are a shade apart. */\n  --text-stale: var(--text-secondary);\n  /* Darker stripes in the light theme, which keep --text-stale at 4.7:1 or more where they lie. */\n  --stale-hatch: rgba(0, 0, 0, 0.05);\n  --text-inverse: #FFFFFF;\n  --border-color: #DADDE1;\n  --border-color-strong: #BEC3C9;\n  --toolbar-bg: #FFFFFF;\n  --toolbar-button-hover: rgba(0, 0, 0, 0.06);\n  --toolbar-button-active: rgba(53, 120, 229, 0.12);\n  --tooltip-bg: #FFFFFF;\n  --tooltip-fg: var(--text-primary);\n  --tooltip-border: #A9AFB6;\n  --shadow-tooltip: 0 4px 14px rgba(0, 0, 0, 0.16);\n  --modal-btn-neutral-bg: #E4E6EB;\n  --modal-btn-neutral-hover: #D2D6DC;\n  --modal-btn-neutral-fg: #1C1E21;\n  /* The light theme's severity colours: the warning amber a shade darker\n     than the strong one, which marked at 2.67:1 on white, and every -text\n     variant a shade darker again, for 4.5:1 as text. */\n  --warning-color: #B47B1A;\n  --warning-text: #825913;\n  --danger-text: #B9272E;\n  --info-text: #1962AC;\n  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.1);\n  --shadow-md: 0 5px 40px rgba(0, 0, 0, 0.12);\n  --shadow-lg: 0 12px 28px 0 rgba(0, 0, 0, 0.2), 0 2px 4px 0 rgba(0, 0, 0, 0.1);\n  --shadow-dropdown: 0 14px 24px -10px rgba(0, 0, 0, 0.18);\n\n  /* The light theme's editor tokens at 4.5:1 or more on white: the keyword\n     and Data View blue as they are, the amber a step darker than the\n     strong one (2.67:1), the green a step darker than the brand green\n     (2.87:1), the operator grey a step darker than Monaco's (3.64:1), and\n     the second bracket pair's green a step darker than Monaco's (3.93:1). */\n  --editor-keyword: var(--color-primary);\n  --editor-function: #9E6C17;\n  --editor-string: #1E864A;\n  --editor-dataview: var(--brand-blue);\n  --editor-operator: #667788;\n  --editor-bracket-2: #2D872D;\n\n  color-scheme: light;\n}\n\n/* -------------------------------------------------------------------- */\n/* 2. Reset and base                                                     */\n/* -------------------------------------------------------------------- */\n.ss, .ss * {\n  box-sizing: border-box;\n}\n.ss {\n  position: relative;\n  display: flex;\n  flex-direction: column;\n  /* The viewport, not 100%: the Cloud Page gives html, body and #sqlstudio no height, so a\n     percentage resolved to auto there and the app grew with its content (a 100-row page made\n     it about 3,000px tall, scrolling the whole page instead of the grid). */\n  height: 100vh;\n  min-height: 640px;\n  font-family: var(--font-family);\n  font-size: var(--font-size-sm);\n  line-height: var(--line-height);\n}\n/* :where() keeps this reset at zero specificity, so every component's own\n   color rule (.ss-btn, .ss-toolbar__button, .ss-tab, ...) always wins\n   without needing !important or selector-weight tricks. */\n:where(.ss button, .ss input, .ss select, .ss textarea) {\n  font-family: inherit;\n  font-size: inherit;\n  color: inherit;\n}\n/* A page without a doctype renders in quirks mode, where tables do not inherit\n   the text colour or font: the results grid came out black on the dark theme\n   on the first org deployment. */\n:where(.ss table) {\n  color: inherit;\n  font-size: inherit;\n  font-weight: inherit;\n  font-style: inherit;\n  line-height: inherit;\n}\n.ss a {\n  color: var(--color-primary);\n}\n.ss svg {\n  fill: currentColor;\n}\n.ss :focus-visible {\n  outline: 2px solid var(--color-primary);\n  outline-offset: 1px;\n}\n.ss ul {\n  margin: 0;\n  padding: 0;\n  list-style: none;\n}\n.ss h1, .ss h2, .ss h3, .ss p {\n  margin: 0;\n}\n\n/* -------------------------------------------------------------------- */\n/* 3. Layout shell                                                       */\n/* -------------------------------------------------------------------- */\n.ss-toolbar__brand {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  text-decoration: none;\n  white-space: nowrap;\n  flex: 0 0 auto;\n  padding: 0 var(--spacing-xs);\n}\n.ss-toolbar__brand-logo {\n  width: 32px;\n  height: 32px;\n  flex: 0 0 auto;\n  border-radius: var(--border-radius-sm);\n  background-image: var(--logo-data-uri);\n  background-size: contain;\n  background-repeat: no-repeat;\n  background-position: center;\n}\n.ss-toolbar__brand-name {\n  font-size: 16px;\n  font-weight: 700;\n  letter-spacing: -0.3px;\n  color: var(--color-primary);\n}\n.ss-about-logo {\n  width: 64px;\n  height: 64px;\n  border-radius: var(--border-radius-md);\n  background-image: var(--logo-data-uri);\n  background-size: contain;\n  background-repeat: no-repeat;\n  background-position: center;\n}\n.ss-header__actions {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n}\n\n.ss-body {\n  display: flex;\n  flex: 1 1 auto;\n  min-height: 0;\n  position: relative;\n}\n\n.ss-sidebar {\n  display: flex;\n  flex-direction: column;\n  width: 280px;\n  min-width: 240px;\n  max-width: 480px;\n  flex: 0 0 auto;\n  position: relative;\n  border-left: 1px solid var(--border-color); /* the sidebar sits on the right, like Diagramforce's stencil */\n  background: var(--bg-elevated);\n  overflow: hidden;\n}\n.ss-sidebar.is-collapsed {\n  width: 0 !important;\n  min-width: 0;\n  border-left: none;\n}\n.ss-sidebar__resizer {\n  position: absolute;\n  top: 0;\n  bottom: 0;\n  left: 0;\n  width: 6px;\n  cursor: col-resize;\n  z-index: 5;\n}\n.ss-sidebar__search {\n  position: relative;\n  display: flex;\n  align-items: center;\n  height: var(--panel-header-height);\n  padding: 0 var(--spacing-sm);\n  border-bottom: 1px solid var(--border-color);\n}\n.ss-sidebar__search .ss-input {\n  padding-right: 26px;\n}\n.ss-sidebar__search-clear {\n  position: absolute;\n  right: 14px;\n  top: 50%;\n  transform: translateY(-50%);\n  border: none;\n  background: none;\n  padding: 2px;\n  color: var(--text-secondary);\n  cursor: pointer;\n  border-radius: var(--border-radius-sm);\n}\n.ss-sidebar__search-clear:hover {\n  color: var(--color-primary);\n  background: var(--bg-hover);\n}\n.ss-sidebar__tree {\n  flex: 1 1 auto;\n  overflow-y: auto;\n  overflow-x: hidden;\n  padding: var(--spacing-xs) 0;\n}\n.ss-tree__section-title {\n  padding: var(--spacing-sm) var(--spacing-md) 2px var(--spacing-sm);\n  font-size: var(--font-size-sm);\n  font-weight: 700;\n  color: var(--text-primary);\n  text-transform: uppercase;\n  letter-spacing: 0.03em;\n}\n/* What is under a section title starts one indent step in from it, as a folder's children do from the\n   folder, so the title reads as the outermost level: the title's caret is at the sidebar's left padding, a\n   top-level row's caret one step in and a subfolder's another. */\n.ss-tree__section-body {\n  padding-left: var(--spacing-lg);\n}\n/* The lines in a section body (the hint, a group title, a message, the footer) start in line with the carets\n   of its rows, not a step further in. */\n.ss-tree__section-body > .ss-tree__hint,\n.ss-tree__section-body > .ss-tree__group-title,\n.ss-tree__section-body > .ss-tree__empty,\n.ss-tree__section-body > .ss-tree__loading,\n.ss-tree__section-body > .ss-tree__list-status {\n  padding-left: var(--spacing-sm);\n}\n/* A section title as a button: pressing it collapses or expands the section, as a Data View group's\n   caret does. It keeps the title's type, and adds the caret and a hover. */\n.ss-tree__section-toggle {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  width: 100%;\n  border: none;\n  background: none;\n  line-height: var(--line-height);\n  text-align: left;\n  cursor: pointer;\n}\n.ss-tree__section-toggle:hover {\n  background: var(--bg-hover);\n}\n.ss-tree__section-caret {\n  flex: 0 0 auto;\n  width: 14px;\n  text-align: center;\n  color: var(--text-secondary);\n}\n/* The Snippets title holds its toggle and its save button side by side, as a table row holds its toggle and its actions, so\n   no control sits inside another. The toggle fills the row and the save button keeps the right end. */\n.ss-tree__section-head {\n  display: flex;\n  align-items: center;\n  padding-right: var(--spacing-xs);\n}\n.ss-tree__section-head > .ss-tree__section-toggle {\n  flex: 1 1 auto;\n  width: auto;\n  min-width: 0;\n}\n/* The app's own tooltip (UI._wireTips), for elements with a data-tip: it comes sooner than a title's. */\n.ss-tip {\n  position: absolute;\n  z-index: 300;\n  max-width: min(420px, calc(100% - 16px));\n  /* Its line breaks and the SQL's indentation are kept, as a snippet's and a tab's tip show SQL. */\n  white-space: pre-wrap;\n  tab-size: 4;\n  overflow-wrap: anywhere;\n  padding: 4px 8px;\n  border: 1px solid var(--tooltip-border);\n  border-radius: var(--border-radius-sm);\n  background: var(--tooltip-bg);\n  box-shadow: var(--shadow-tooltip);\n  font-size: var(--font-size-xs);\n  color: var(--tooltip-fg);\n  pointer-events: none;\n}\n.ss-tip[hidden] {\n  display: none;\n}\n/* The reload icon of a section's title turns while its list loads (UI._renderReloadButton). */\n.ss-tree__section-action.is-busy svg {\n  animation: ss-spin 0.8s linear infinite;\n}\n/* A line of a section's list state, under its hint: the pages of a first load, a list that stops short, a reload that failed. */\n.ss-tree__list-status {\n  padding: 2px var(--spacing-md) var(--spacing-xs);\n  color: var(--text-muted);\n  font-size: 11px;\n}\n.ss-tree__section-head > .ss-tree__section-action {\n  margin-top: var(--spacing-xs);\n}\n/* The section titles dock (1.2.0, the author's RC3 test, 2026-10-08: the Snippets section was out of sight below a long Data\n   Extension list until the others were collapsed). Each sticks to the top of the sidebar's scroll while its section scrolls\n   by, below the titles before it, and to the bottom while its section is further down, above the titles after it, so every\n   title is always in sight. Each title is one height (--ss-dock-h, the height the title had already), and\n   UI._dockSectionTitles gives each the number of titles above and below it, so they stack without a gap or an overlap,\n   whatever the sidebar's state when the tree is drawn. The background covers the rows that scroll under them: the sidebar's\n   own --bg-elevated is a see-through grey over the app's --bg-app, so the title lays the same two on each other. */\n.ss-tree__dock {\n  --ss-dock-h: 30px;\n  position: sticky;\n  z-index: 2;\n  /* Less the scroll's own padding, which sticky offsets start inside: rows showed through that strip above the top title. */\n  top: calc(var(--ss-dock-h) * var(--ss-dock-above, 0) - var(--spacing-xs));\n  bottom: calc(var(--ss-dock-h) * var(--ss-dock-below, 0) - var(--spacing-xs));\n  box-sizing: border-box;\n  height: var(--ss-dock-h);\n  background: linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-app);\n}\n/* The Data Views title is its own toggle, with no head around it: its hover lays --bg-hover over the same two, as the hover's\n   see-through grey alone let the rows under it show through (the author's RC10 test, 2026-10-09). */\n.ss-tree__dock.ss-tree__section-toggle:hover {\n  background: linear-gradient(var(--bg-hover), var(--bg-hover)), linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-app);\n}\n/* The line under a snippet's name in its dialog: what is saved, and who sees it. */\n.ss-snippet-note {\n  margin: var(--spacing-sm) 0;\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n}\n/* The SQL a new snippet saves, in the dialog that asks for its name: monospace, its lines kept, as tall as a dozen of them\n   before it scrolls. */\n.ss-snippet-preview {\n  max-height: 14em;\n  margin: 0;\n  padding: var(--spacing-sm);\n  overflow: auto;\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  background: var(--bg-app);\n  color: var(--text-primary);\n  font-family: var(--font-mono);\n  font-size: 12px;\n  white-space: pre;\n  user-select: text;\n  -webkit-user-select: text;\n}\n/* The line above the Data Extension tree that gives the totals and says to search. */\n.ss-tree__hint {\n  padding: 2px var(--spacing-md) var(--spacing-xs);\n  color: var(--text-muted);\n  font-size: 11px;\n}\n/* A folder of the Data Extension tree reads heavier than the Data Extensions beside it, which have no count. */\n.ss-tree__folder--de > .ss-tree__name {\n  font-weight: 600;\n}\n/* The made-up group of the Data Extensions in no loaded folder reads in italics, so it does not pass\n   for a real folder of that name. */\n.ss-tree__folder--made-up > .ss-tree__name {\n  font-style: italic;\n}\n/* The number of Data Extensions below a folder, at the right end of its row. */\n.ss-tree__count {\n  flex: 0 0 auto;\n  color: var(--text-muted);\n  font-size: 11px;\n}\n/* The \"Show N more\" button under a folder's first Data Extensions, in line with their names. It is\n   a .ss-tree__link too, which comes later in this file, hence the two classes. */\n.ss-tree__link.ss-tree__more {\n  display: block;\n  padding: 3px var(--spacing-sm) 3px 26px;\n  text-align: left;\n}\n/* Inline text link inside a sidebar/Save As hint row (Retry on a failed\n   Data Extension list load, Reload in the list-loaded footer). */\n.ss-tree__link {\n  display: inline;\n  border: none;\n  background: none;\n  padding: 0;\n  color: var(--color-primary);\n  cursor: pointer;\n  font: inherit;\n}\n.ss-tree__link:hover {\n  text-decoration: underline;\n}\n/* Shared DE name prefix, replacing the old SHARED badge. */\n.ss-tree__ent-prefix {\n  color: var(--text-muted);\n}\n/* A parent Business Unit Data Extension's folder path, on its own line under its row, in line with the name. */\n.ss-tree__path {\n  padding: 0 var(--spacing-sm) 3px 26px;\n  color: var(--text-muted);\n  font-size: 11px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n/* The \"Parent BU\" heading above the parent's shared and synchronized Data Extensions in a search. */\n.ss-tree__group-title {\n  padding: var(--spacing-sm) var(--spacing-md) 2px;\n  color: var(--text-secondary);\n  font-size: 11px;\n  font-weight: 700;\n  text-transform: uppercase;\n  letter-spacing: 0.03em;\n}\n.ss-sidebar-overlay-bg {\n  display: none;\n}\n\n.ss-main {\n  display: flex;\n  flex-direction: column;\n  flex: 1 1 auto;\n  min-width: 0;\n  min-height: 0;\n}\n\n/* -------------------------------------------------------------------- */\n/* 4. Buttons and form controls                                          */\n/* -------------------------------------------------------------------- */\n/* Neutral dialog/modal button: used for\n   Cancel and other non-primary actions in modals and dropdown panels. */\n.ss-btn {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  gap: var(--spacing-xs);\n  height: 28px;\n  padding: 0 var(--spacing-md);\n  border: 1px solid transparent;\n  border-radius: var(--border-radius-sm);\n  background: var(--modal-btn-neutral-bg);\n  color: var(--modal-btn-neutral-fg);\n  cursor: pointer;\n  white-space: nowrap;\n  line-height: 1;\n  transition: background-color var(--transition-fast);\n}\n.ss-btn:hover {\n  background: var(--modal-btn-neutral-hover);\n}\n.ss-btn:disabled {\n  opacity: 0.35;\n  cursor: not-allowed;\n}\n.ss-btn--primary {\n  background: var(--color-action);\n  border-color: var(--color-action);\n  color: var(--color-action-fg);\n}\n.ss-btn--primary:hover {\n  background: var(--color-action-hover);\n  border-color: var(--color-action-hover);\n}\n.ss-btn--icon {\n  width: 28px;\n  padding: 0;\n}\n.ss-btn--sm {\n  height: 24px;\n  padding: 0 var(--spacing-sm);\n  font-size: var(--font-size-sm);\n}\n.ss-btn--link {\n  border-color: transparent;\n  background: transparent;\n  color: var(--color-primary);\n  text-decoration: underline;\n}\n.ss-btn--link:hover {\n  background: transparent;\n  color: var(--color-primary-hover);\n}\n\n.ss-field {\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n  margin-bottom: var(--spacing-md);\n}\n.ss-label {\n  font-size: var(--font-size-sm);\n  font-weight: 600;\n  color: var(--text-secondary);\n}\n.ss-hint {\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n}\n/* The History dialog's line on where its entries are kept, between the search box and the list. */\n.ss .ss-history__where {\n  margin: 6px 0 8px;\n}\n.ss-input, .ss-select, .ss-textarea {\n  height: 30px;\n  padding: 0 var(--spacing-sm);\n  border: 1px solid var(--border-color-strong);\n  border-radius: var(--border-radius-sm);\n  background: var(--bg-surface-raised);\n  color: var(--text-primary);\n  width: 100%;\n}\n.ss-textarea {\n  height: auto;\n  padding: var(--spacing-sm);\n  resize: vertical;\n  font-family: var(--font-mono);\n}\n.ss-input:focus, .ss-select:focus, .ss-textarea:focus {\n  border-color: var(--color-primary);\n}\n.ss-radio-group {\n  display: flex;\n  flex-direction: column;\n  gap: var(--spacing-sm);\n}\n/* Three equal cards in one row (Save As update type). */\n.ss-radio-group--row {\n  flex-direction: row;\n}\n.ss-radio-group--row .ss-radio-option {\n  flex: 1 1 0;\n}\n.ss-radio-option {\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  padding: var(--spacing-sm);\n  cursor: pointer;\n  transition: border-color var(--transition-fast), outline-color var(--transition-fast);\n}\n.ss-radio-option.is-selected {\n  border-color: var(--color-action);\n  outline: 2px solid var(--color-action);\n  outline-offset: -1px;\n}\n.ss-radio-option strong {\n  display: block;\n}\n.ss-radio-option span {\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n}\n\n/* -------------------------------------------------------------------- */\n/* 5. Sidebar tree and search                                            */\n/* -------------------------------------------------------------------- */\n.ss-tree__row {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  padding: 3px var(--spacing-sm);\n  cursor: pointer;\n  border-radius: var(--border-radius-sm);\n  white-space: nowrap;\n  overflow: hidden;\n}\n.ss-tree__row:hover {\n  background: var(--bg-hover);\n}\n/* A table row holds its toggle and its actions side by side, so no control sits inside another. The\n   toggle, which opens and closes the fields, fills the row and has the row's padding, so its arrow and\n   name sit where a folder row has them and a click anywhere on the name's side of the row hits it. The\n   row does not clip, so the toggle's focus outline shows in full, as a focused row's did: the toggle cuts\n   the name short itself.\n   The actions, Insert name and Insert table query (SELECT with all fields), sit at the right end of the row. They take\n   no width of their own: hidden, they leave the whole row to the name, and shown, while the row is\n   hovered or the keyboard's focus is on its toggle or on one of them, they lie over the end of the row on\n   its own background (the sidebar's, made opaque, with the hover tint on a hovered row). So a long name\n   is cut only while they show, and nothing in the row moves. Their left edge fades, so what they cover\n   fades out instead of breaking off (the mask's colour only gives its opacity). Hidden, they stay in the\n   tab order and take no click. */\n.ss-tree__row--table {\n  position: relative;\n  padding: 0;\n  overflow: visible;\n}\n.ss-tree__toggle {\n  display: flex;\n  flex: 1 1 auto;\n  align-items: center;\n  gap: 4px;\n  min-width: 0;\n  padding: 3px var(--spacing-sm);\n  border-radius: var(--border-radius-sm);\n  overflow: hidden;\n}\n.ss-tree__actions {\n  position: absolute;\n  top: 0;\n  right: 0;\n  bottom: 0;\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  padding: 0 var(--spacing-xs) 0 var(--spacing-md);\n  /* The row's own corners, as the row does not clip them. */\n  border-top-right-radius: inherit;\n  border-bottom-right-radius: inherit;\n  background: linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-app);\n  -webkit-mask-image: linear-gradient(to right, transparent, var(--bg-app) var(--spacing-md));\n  mask-image: linear-gradient(to right, transparent, var(--bg-app) var(--spacing-md));\n  opacity: 0;\n  pointer-events: none;\n}\n.ss-tree__row:hover > .ss-tree__actions,\n.ss-field-item:hover > .ss-tree__actions {\n  background: linear-gradient(var(--bg-hover), var(--bg-hover)), linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-app);\n}\n.ss-tree__row:hover > .ss-tree__actions,\n.ss-tree__toggle:focus-visible ~ .ss-tree__actions,\n.ss-field-item:hover > .ss-tree__actions,\n.ss-field-row:focus-visible ~ .ss-tree__actions,\n.ss-tree__actions:focus-within {\n  opacity: 1;\n  pointer-events: auto;\n}\n/* One action: the toolbar icon-button style, scaled to 24px for the sidebar tree. */\n.ss-tree__action {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  flex: 0 0 auto;\n  width: 24px;\n  height: 24px;\n  padding: 0;\n  border: none;\n  border-radius: var(--border-radius-sm);\n  background: transparent;\n  color: var(--text-secondary);\n  cursor: pointer;\n  transition: background-color var(--transition-fast), color var(--transition-fast);\n}\n.ss-tree__action:hover {\n  background: var(--toolbar-button-hover);\n  color: var(--color-primary);\n}\n/* An action that is off, such as Join to the query while the query has no table: dimmed, with its title saying why. */\n.ss-tree__action:disabled {\n  opacity: 0.4;\n  cursor: default;\n}\n.ss-tree__action:disabled:hover {\n  background: transparent;\n  color: var(--text-secondary);\n}\n.ss-tree__caret {\n  flex: 0 0 auto;\n  width: 14px;\n  text-align: center;\n  color: var(--text-secondary);\n  background: none;\n  border: none;\n  padding: 0;\n  cursor: pointer;\n}\n.ss-tree__name {\n  flex: 1 1 auto;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n/* Object-kind marker: DE, SHARED, VIEW, QUERY. */\n.ss-type-badge {\n  flex: 0 0 auto;\n  font-size: 10px;\n  font-weight: 700;\n  text-transform: uppercase;\n  letter-spacing: 0.02em;\n  color: var(--color-primary);\n  border: 1px solid currentColor;\n  border-radius: 2px;\n  padding: 0 3px;\n}\n/* A badge in a folder tree row: smaller type and less space around it, so the name keeps the room. */\n.ss-type-badge--compact {\n  font-size: 9px;\n  letter-spacing: 0;\n  padding: 0 2px;\n}\n.ss-tree__children {\n  padding-left: var(--spacing-lg);\n}\n.ss-tree__fields {\n  padding-left: var(--spacing-xl);\n}\n/* A field holds its row and its Insert name button side by side, as a table row holds its toggle and its\n   actions: the button lies over the end of the row while the field is hovered or the keyboard's focus is\n   on the row or on the button, and takes no width while hidden. The hover tint is the holder's, so it\n   stays while the pointer is on the button. */\n.ss-field-item {\n  position: relative;\n  border-radius: var(--border-radius-sm);\n}\n.ss-field-item:hover {\n  background: var(--bg-hover);\n}\n.ss-field-row {\n  display: flex;\n  align-items: baseline;\n  gap: 6px;\n  padding: 2px var(--spacing-sm);\n  cursor: pointer;\n  border-radius: var(--border-radius-sm);\n  overflow: hidden;\n}\n/* A field row is shorter than a table row: its button fits it. */\n.ss-field-item .ss-tree__action {\n  width: 20px;\n  height: 20px;\n}\n.ss-field-row__name {\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.ss-field-row__type {\n  flex: 0 0 auto;\n  color: var(--text-secondary);\n  font-size: 11px;\n  font-family: var(--font-mono);\n}\n/* The primary key's mark: the SLDS key icon, as tall as the field's text, in the warning text colour, which reads at\n   4.5:1 on the sidebar in both themes. */\n.ss-field-row__key {\n  display: inline-flex;\n  flex: 0 0 auto;\n  align-self: center;\n  color: var(--warning-text);\n}\n.ss-field-row__key .ss-icon {\n  width: 12px;\n  height: 12px;\n}\n.ss-tree__empty, .ss-tree__loading {\n  padding: var(--spacing-md);\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n}\n/* A hint line in a dialog's list (\"Loading...\", \"Could not load: ...\"), padded as the list's empty and loading rows are. */\n.ss-list > .ss-hint {\n  padding: var(--spacing-md);\n}\n\n/* -------------------------------------------------------------------- */\n/* 6. Toolbar and problems strip                                         */\n/* -------------------------------------------------------------------- */\n/* Toolbar, sidebar tree and tab labels are controls, not text: a drag or a select-all never paints\n   them. The query, the grid, the Status messages and the run summary stay selectable. */\n.ss-toolbar,\n.ss-sidebar__tree,\n.ss-tab {\n  -webkit-user-select: none;\n  user-select: none;\n}\n\n.ss-toolbar {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n  height: var(--toolbar-height);\n  padding: 0 var(--spacing-sm);\n  background: var(--toolbar-bg);\n  border-bottom: 1px solid var(--border-color);\n  flex: 0 0 auto;\n  flex-wrap: nowrap;\n  min-width: 0;\n  overflow: visible;\n}\n.ss-icon {\n  width: 16px;\n  height: 16px;\n  flex: 0 0 auto;\n  fill: currentColor;\n}\n/* Toolbar buttons: transparent by default, icon (16px) + label. Run is the one filled/primary button. */\n.ss-toolbar__button {\n  display: inline-flex;\n  align-items: center;\n  gap: 5px;\n  min-height: 32px;\n  padding: var(--spacing-xs) 10px;\n  border: none;\n  border-radius: var(--border-radius-sm);\n  background: transparent;\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n  font-weight: 500;\n  white-space: nowrap;\n  cursor: pointer;\n  transition: background-color var(--transition-fast), color var(--transition-fast);\n}\n.ss-toolbar__button:hover {\n  background: var(--toolbar-button-hover);\n  color: var(--color-primary);\n}\n.ss-toolbar__button.is-active,\n.ss-toolbar__button[aria-expanded=\"true\"] {\n  background: var(--toolbar-button-active);\n  color: var(--color-primary);\n}\n.ss-toolbar__button:disabled {\n  opacity: 0.35;\n  cursor: not-allowed;\n}\n.ss-toolbar__button:disabled:hover {\n  background: transparent;\n  color: var(--text-secondary);\n}\n.ss-toolbar__button--primary {\n  background: var(--color-action);\n  color: var(--color-action-fg);\n}\n.ss-toolbar__button--primary:hover {\n  background: var(--color-action-hover);\n  color: var(--color-action-fg);\n}\n/* Focus rings on primary controls use --color-action too: amber in dark mode, blue in light mode, same as their fill. */\n.ss-toolbar__button--primary:focus-visible,\n.ss-btn--primary:focus-visible {\n  outline-color: var(--color-action);\n}\n.ss-toolbar__button--icon-only {\n  padding: var(--spacing-xs);\n  min-width: 32px;\n  justify-content: center;\n}\n/* Run while a run is in flight: a spinner in place of the play icon, at full\n   strength rather than the faded disabled look, so it reads as busy. */\n.ss-toolbar__button--primary.is-running:disabled,\n.ss-toolbar__button--primary.is-running:disabled:hover {\n  opacity: 1;\n  cursor: progress;\n  background: var(--color-action);\n  color: var(--color-action-fg);\n}\n/* Validate while Marketing Cloud Engagement checks the query: busy, not faded. */\n.ss-toolbar__button.is-running:disabled {\n  opacity: 1;\n  cursor: progress;\n}\n.ss-toolbar__button.is-running > svg {\n  display: none;\n}\n.ss-toolbar__button.is-running::before {\n  content: '';\n  width: 14px;\n  height: 14px;\n  box-sizing: border-box;\n  border: 2px solid currentColor;\n  border-right-color: transparent;\n  border-radius: 50%;\n  animation: ss-spin 0.8s linear infinite;\n  flex: 0 0 auto;\n}\n\n/* Monaco's hovers and suggestion details can sit outside .ss, so these rules are not scoped\n   to it. Tables there inherit the hover's colour and size, even in quirks mode, and read as a\n   compact list rather than bold oversized headers. */\n.monaco-hover table,\n.suggest-details table {\n  border-collapse: collapse;\n  margin: 4px 0;\n  color: inherit;\n  font-size: inherit;\n  line-height: inherit;\n}\n.monaco-hover th,\n.monaco-hover td,\n.suggest-details th,\n.suggest-details td {\n  padding: 1px 16px 1px 0;\n  text-align: left;\n  vertical-align: top;\n}\n.monaco-hover th,\n.suggest-details th {\n  font-weight: 600;\n  opacity: 0.7;\n  border-bottom: 1px solid rgba(128, 128, 128, 0.35);\n}\n\n/* Off-site links end with the arrow mateuszdabrowski.pl uses. Inline-block keeps the link's\n   underline off it. Monaco's hovers and suggestion details can sit outside .ss. */\n.monaco-hover a::after,\n.suggest-details a::after,\n.ss a[target=\"_blank\"]:not(.ss-btn):not(.ss-toolbar__brand)::after {\n  content: '\\2197';\n  display: inline-block;\n  margin-left: 0.3em;\n  font-size: 0.85em;\n  opacity: 0.6;\n  text-decoration: none;\n}\n\n/* The suggestion details panel and its list (Monaco's suggest widget, set up by Editor._watchSuggestDetails in\n   sqlstudio.js). The widget and the panel sit inside .ss, so the tokens reach them. The script says where the panel\n   is against the list with data-ss-details on both: right, left or below. */\n/* The border-box rule of the reset above reaches Monaco's own boxes. It sizes the panel by its content, so the panel\n   gets Monaco's content-box back, and its two border lines no longer cut off the last 2px of its text. */\n.ss .suggest-details {\n  box-sizing: content-box;\n}\n/* The tie between the focused row and the panel: the row's band (the theme's editorSuggestWidget.selectedBackground,\n   the same blue as --focus-band) goes on over the panel's header strip, and the panel has no border on the side that\n   faces the list. Monaco lays the panel 1px over the list's border on that side, so with no border of its own the\n   panel covers it, and the row and the strip meet with no line between them. At the list's left, Monaco stops the\n   panel 1px short of that border, so the panel moves 1px over it. */\n.ss .suggest-details-container[data-ss-details=\"right\"] .suggest-details {\n  border-left-width: 0;\n}\n.ss .suggest-details-container[data-ss-details=\"left\"] .suggest-details {\n  position: relative;\n  left: 1px;\n  border-right-width: 0;\n}\n.ss .suggest-details-container[data-ss-details=\"below\"] .suggest-details {\n  border-top-width: 0;\n}\n/* The card: Monaco keeps the panel at the list's top, wherever the focused row is, so the rest of the panel takes a\n   light tint of the band's blue, and the whole panel reads as the focused row's own. */\n.ss .suggest-details > .monaco-scrollable-element {\n  background: var(--focus-card);\n}\n/* The close button sits on the header strip in every panel, so it takes the strip's text colour. The selectors are as\n   long as Monaco's own, which load later and would win a tie. */\n.ss .suggest-details > .monaco-scrollable-element > .body > .header > .codicon-close,\n.ss .suggest-details > .monaco-scrollable-element > .body > .header > .codicon-close::before {\n  color: var(--focus-band-fg);\n}\n/* The header strip of any other item: Monaco's own header line, with the item's detail at full opacity, or, for an\n   item with none, the first line of its text, which runs under the close button to the panel's edge. */\n.ss .suggest-details:not(.no-type):not(.ss-join-details) > .monaco-scrollable-element > .body > .header {\n  color: var(--focus-band-fg);\n  background: var(--focus-band);\n}\n.ss .suggest-details:not(.no-type):not(.ss-join-details) > .monaco-scrollable-element > .body > .header > .type {\n  opacity: 1;\n}\n.ss .suggest-details.no-type:not(.ss-join-details) > .monaco-scrollable-element > .body > .docs.markdown-docs {\n  margin-right: 0;\n}\n.ss .suggest-details.no-type:not(.ss-join-details) > .monaco-scrollable-element > .body > .docs.markdown-docs > .rendered-markdown > p:first-child {\n  margin: -4px -5px 0;\n  padding: 4px 29px 4px 5px;\n  color: var(--focus-band-fg);\n  background: var(--focus-band);\n}\n/* A code block in any panel has the editor's own background, so its tokens read as they do in the editor. */\n.ss .suggest-details .rendered-markdown > div {\n  margin: 4px 0;\n  padding: 4px 8px;\n  border-radius: var(--border-radius-sm);\n  background: var(--editor-bg);\n}\n/* A recommended join (class set by the script): its label in bold on the first line, the key columns under it,\n   the SQL it writes in a block, and the note last, smaller and in the secondary text colour, which keeps 4.5:1 on\n   the card. The label takes the place of the panel's own header line, which would only repeat the key columns, so\n   the header keeps its close button alone. The label and the key columns are the header strip, out to the panel's\n   edges, the label clear of the close button. */\n.ss .suggest-details.ss-join-details .header > .type {\n  display: none;\n}\n.ss .suggest-details.ss-join-details > .monaco-scrollable-element > .body > .docs.markdown-docs > .rendered-markdown > p:first-child {\n  margin: -4px -5px 0;\n  padding: 4px 25px 2px 5px;\n  color: var(--focus-band-fg);\n  background: var(--focus-band);\n}\n.ss .suggest-details.ss-join-details > .monaco-scrollable-element > .body > .docs.markdown-docs > .rendered-markdown > p:nth-child(2) {\n  margin: 0 -5px 6px;\n  padding: 0 5px 6px;\n  color: var(--focus-band-fg);\n  font-size: var(--font-size-sm);\n  background: var(--focus-band);\n}\n.ss .suggest-details.ss-join-details .rendered-markdown > div {\n  margin: 6px 0;\n  padding: 6px 8px;\n}\n.ss .suggest-details.ss-join-details .rendered-markdown > div ~ p {\n  margin: 6px 0 0;\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n  line-height: 1.5;\n}\n\n/* Run summary parts that open a breakdown (UI.showHint): after a short hover, on focus, or pinned\n   by a click. */\n.ss-run-summary__hint {\n  text-decoration: underline dotted;\n  text-underline-offset: 3px;\n  cursor: help;\n}\n.ss-run-summary__hint:focus-visible {\n  outline: 2px solid var(--color-action);\n  outline-offset: 2px;\n}\n/* Temp DE when it links to Contact Builder: a click goes there instead of pinning the hint. It keeps the summary's own colour and\n   dotted underline, as the other parts with a hover do, so it does not read as a second red link beside Delete results. */\n.ss a.ss-run-summary__link {\n  cursor: pointer;\n  color: inherit;\n}\n/* The run summary's card (UI.showHint), with the quick tip's look. Only the card: as first written for every .ss-hint, the rule hid the\n   hint lines of the dialogs too, such as History's line on where it is kept and \"Could not load: ...\" (the author's RC12 test, 2026-10-09). */\n.ss-hint[role=\"tooltip\"] {\n  display: none;\n  position: absolute;\n  z-index: 150;\n  max-width: 380px;\n  padding: 10px 12px;\n  border: 1px solid var(--tooltip-border);\n  border-radius: var(--border-radius-sm);\n  background: var(--tooltip-bg);\n  box-shadow: var(--shadow-tooltip);\n  font-size: var(--font-size-xs);\n  color: var(--text-secondary);\n}\n.ss .ss-hint__title {\n  margin: 0 0 4px;\n  font-weight: 600;\n  color: var(--text-primary);\n}\n.ss .ss-hint__title:not(:first-child) {\n  margin-top: 10px;\n}\n/* The run's total split between calls through the API and through WSProxy, above the two tables. */\n.ss .ss-hint__split {\n  margin: 0 0 6px;\n  color: var(--text-primary);\n}\n.ss .ss-hint__line {\n  margin: 2px 0;\n}\n.ss-hint__table {\n  border-collapse: collapse;\n  width: 100%;\n}\n.ss-hint__table td {\n  padding: 2px 0;\n  vertical-align: top;\n}\n.ss-hint__table td + td {\n  padding-left: 16px;\n  text-align: right;\n  white-space: nowrap;\n  color: var(--text-primary);\n}\n/* The Status tab's first line during a run. */\n.ss-status-run-note {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  padding: var(--spacing-sm) var(--spacing-md);\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n  border-bottom: 1px solid var(--border-color);\n}\n\n/* Update notice: a small outlined pill next to the theme toggle. */\n.ss-update-badge {\n  margin-right: var(--spacing-sm);\n  padding: 2px 10px;\n  border: 1px solid var(--color-action);\n  border-radius: 12px;\n  background: transparent;\n  color: var(--color-action);\n  font-size: 12px;\n  font-weight: 600;\n  white-space: nowrap;\n  cursor: pointer;\n}\n.ss-update-badge:hover {\n  background: var(--color-action);\n  color: var(--color-action-fg);\n}\n.ss .ss-update-list {\n  margin: var(--spacing-sm) 0;\n  padding-left: 18px;\n  list-style: disc;\n}\n/* A link that looks like a button takes the button's text colour: `.ss a` gave it the link red, on the neutral grey and on the\n   amber of a primary button alike, in the update dialog's \"All changes\" and \"Update guide\" (the author, 2026-10-05). A link-style\n   button keeps the link colour it asks for. */\n.ss a.ss-btn {\n  text-decoration: none;\n  color: var(--modal-btn-neutral-fg);\n}\n.ss a.ss-btn.ss-btn--primary {\n  color: var(--color-action-fg);\n}\n.ss a.ss-btn.ss-btn--link {\n  color: var(--color-primary);\n}\n.ss .ss-update-list li {\n  margin: 4px 0;\n}\n\n/* Spinner. One turn takes 0.8 s: SPINNER_TURN_MS in sqlstudio.js must match. */\n@keyframes ss-spin {\n  to { transform: rotate(360deg); }\n}\n.ss-spinner {\n  display: inline-block;\n  width: 12px;\n  height: 12px;\n  box-sizing: border-box;\n  border: 2px solid currentColor;\n  border-right-color: transparent;\n  border-radius: 50%;\n  animation: ss-spin 0.8s linear infinite;\n  flex: 0 0 auto;\n}\n@media (prefers-reduced-motion: reduce) {\n  .ss-spinner,\n  .ss-toolbar__button.is-running::before {\n    animation: none;\n  }\n}\n\n/* Theme toggle icon: Diagramforce's\n   moon/sun swap, translated from df- to ss- and scoped to .ss. */\n.ss svg.ss-toolbar__icon--theme,\n.ss svg.ss-toolbar__icon--theme * {\n  /* Diagramforce draws the moon and sun as wire icons; the generic `.ss svg { fill }` rule must not apply. */\n  fill: none;\n  stroke: currentColor;\n  stroke-width: 2;\n  stroke-linecap: round;\n  stroke-linejoin: round;\n}\n.ss-toolbar__icon--theme {\n  width: 18px;\n  height: 18px;\n  fill: none;\n  stroke: currentColor;\n  stroke-width: 2;\n  stroke-linecap: round;\n  stroke-linejoin: round;\n}\n.ss[data-theme=\"dark\"] .ss-icon-sun { display: none; }\n.ss[data-theme=\"dark\"] .ss-icon-moon { display: inline; }\n.ss[data-theme=\"light\"] .ss-icon-sun { display: inline; }\n.ss[data-theme=\"light\"] .ss-icon-moon { display: none; }\n/* The system icon's right half is solid, which the wire-icon rule above would clear. */\n.ss svg.ss-toolbar__icon--theme .ss-icon-system__half { fill: currentColor; }\n.ss .ss-icon-system { display: none; }\n.ss[data-theme-choice=\"system\"] .ss-icon-sun,\n.ss[data-theme-choice=\"system\"] .ss-icon-moon { display: none; }\n.ss[data-theme-choice=\"system\"] .ss-icon-system { display: inline; }\n\n/* Help menu: Diagramforce's\n   ss-toolbar__menu, absolute under its button rather than the centred\n   dropdown-manager system (History keeps that; see section 9). */\n.ss-toolbar__dropdown {\n  position: relative;\n}\n.ss-toolbar__menu {\n  display: none;\n  position: absolute;\n  top: 100%;\n  right: 0;\n  margin-top: 4px;\n  min-width: 180px;\n  background: var(--toolbar-bg);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-md);\n  box-shadow: var(--shadow-md);\n  padding: 4px 0;\n  max-height: calc(100dvh - 64px);\n  overflow-y: auto;\n  z-index: 200;\n}\n.ss-toolbar__dropdown--open > .ss-toolbar__menu {\n  display: block;\n}\n.ss-toolbar__menu-item {\n  display: block;\n  width: 100%;\n  padding: 6px 14px;\n  border: none;\n  background: transparent;\n  color: var(--text-secondary);\n  font-weight: 500;\n  font-size: var(--font-size-sm);\n  font-family: var(--font-family);\n  text-align: left;\n  text-decoration: none;\n  cursor: pointer;\n  white-space: nowrap;\n}\n.ss-toolbar__menu-item:hover {\n  background: var(--toolbar-button-hover);\n  color: var(--text-primary);\n}\n.ss-toolbar__menu-item--icon {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n}\n.ss-toolbar__menu-icon {\n  flex-shrink: 0;\n  opacity: 0.7;\n}\n.ss-toolbar__menu-separator {\n  border-top: 1px solid var(--border-color);\n  margin: 4px 0;\n}\n\n.ss-toolbar__divider {\n  width: 1px;\n  height: 20px;\n  background: var(--border-color);\n  margin: 0 var(--spacing-xs);\n}\n.ss-toolbar__spacer {\n  flex: 1 1 auto;\n}\n/* Save and Disconnect, shown only while the tab on screen has a Query Activity open. */\n.ss-toolbar__group {\n  display: inline-flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n}\n.ss-toolbar__group[hidden] {\n  display: none;\n}\n/* Lint findings list, now inside the Status tab of the bottom panel (see\n   .ss-status-panel below); the whole panel scrolls as one unit, so the\n   list itself carries no height cap of its own. */\n/* The Status tab's Show filter: the size of the small buttons next to it. */\n.ss-select--sm {\n  width: auto;\n  height: 24px;\n  padding-top: 0;\n  padding-bottom: 0;\n  font-size: var(--font-size-sm);\n}\n/* The Status tab's findings filter is as wide as the option it shows, not its longest one: \"Show: all\" takes 88 px where \"Show: errors\n   and warnings\" took 189, which kept Delete results whole beside the stale mark in a 744 px header (a 1,024 px window with the\n   sidebar open, the second review of 1.2.1, 2026-10-10). A browser without field-sizing keeps the longest option's width. */\n.ss-results-header .ss-select--sm {\n  field-sizing: content;\n}\n.ss-problem-hidden-note {\n  padding: 3px var(--spacing-md);\n  border-top: 1px solid var(--border-color);\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n}\n.ss-problem {\n  display: flex;\n  gap: var(--spacing-sm);\n  padding: 3px var(--spacing-md);\n  cursor: pointer;\n  border-top: 1px solid var(--border-color);\n  font-size: var(--font-size-sm);\n  align-items: baseline;\n  flex-wrap: wrap;\n}\n.ss-problem:hover {\n  background: var(--bg-hover);\n}\n.ss-problem__loc {\n  color: var(--text-secondary);\n  font-family: var(--font-mono);\n  flex: 0 0 auto;\n}\n.ss-problem__id {\n  color: var(--text-secondary);\n  flex: 0 0 auto;\n}\n.ss-problem__message {\n  flex: 1 1 auto;\n  min-width: 160px;\n}\n/* One-click fix button on a lint row:\n   the neutral small button style, pushed to the row's right edge. A\n   \"changes results\" fix keeps the same neutral look plus a small accent\n   dot; the actual \"changes results\" wording lives only in the title\n   tooltip, never as visible row text. */\n.ss-problem__fix {\n  flex: 0 0 auto;\n  margin-left: auto;\n}\n.ss-problem__fix--changes-results::before {\n  content: '';\n  display: inline-block;\n  width: 6px;\n  height: 6px;\n  margin-right: var(--spacing-xs);\n  border-radius: 50%;\n  background: var(--brand-amber);\n}\n.ss[data-theme=\"light\"] .ss-problem__fix--changes-results::before {\n  background: var(--warning-color);\n}\n/* Beside Fix all, in the panel header: how many fixes it leaves, with the dot their buttons carry. */\n.ss-fix-review-note {\n  display: inline-flex;\n  align-items: center;\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n  white-space: nowrap;\n}\n.ss-fix-review-note::before {\n  content: '';\n  display: inline-block;\n  width: 6px;\n  height: 6px;\n  margin-right: var(--spacing-xs);\n  border-radius: 50%;\n  background: var(--brand-amber);\n}\n.ss[data-theme=\"light\"] .ss-fix-review-note::before {\n  background: var(--warning-color);\n}\n\n/* -------------------------------------------------------------------- */\n/* 7. Editor pane and split resizer                                       */\n/* -------------------------------------------------------------------- */\n.ss-split {\n  display: flex;\n  flex-direction: column;\n  flex: 1 1 auto;\n  min-height: 0;\n}\n/* The resizable column: the query tab strip (fixed height) above the editor pane, which fills\n   whatever is left. The split resizer/applyInitialSplit set this\n   element's height, not .ss-editor-pane's, so the strip's own height never eats into the ratio\n   the user dragged. */\n.ss-editor-column {\n  display: flex;\n  flex-direction: column;\n  flex: 0 0 auto;\n  height: 300px;\n  min-height: 120px;\n}\n.ss-editor-pane {\n  position: relative;\n  flex: 1 1 auto;\n  min-height: 0;\n}\n.ss-editor-container {\n  /* Plain wrapper only: it deliberately does not carry the \"monaco-editor\"\n     class, which would tie with this rule's specificity against Monaco's\n     own editor.main.css (loaded later) and lose the position:absolute. */\n  position: absolute;\n  inset: 0;\n}\n.ss-split-resizer {\n  height: 6px;\n  cursor: row-resize;\n  background: var(--bg-elevated);\n  border-top: 1px solid var(--border-color);\n  border-bottom: 1px solid var(--border-color);\n  flex: 0 0 auto;\n}\n.ss-split-resizer:hover {\n  background: var(--toolbar-button-active);\n}\n\n/* Query tab strip: 4 fixed tabs, always visible with their state, styled\n   after Diagramforce's css/tabs.css. The strip shares the editor's background. The tabs sit in a tinted\n   tray, as Diagramforce's ungrouped tray: an inactive tab shows the tray through it, and the active tab\n   is taller, takes the editor's background and outline, and runs into the editor with no line between. */\n.ss-querytabs {\n  display: flex;\n  align-items: center;\n  height: 36px;\n  padding: 0 4px;\n  background: var(--editor-bg);\n  flex: 0 0 auto;\n}\n.ss-querytabs__tray {\n  display: flex;\n  align-items: stretch;\n  gap: 2px;\n  flex: 1 1 auto;\n  min-width: 0;\n  height: 28px;\n  box-sizing: border-box;\n  padding-right: 3px;\n  border-radius: var(--border-radius-sm);\n  background: color-mix(in srgb, var(--text-muted) 9%, transparent);\n}\n.ss-querytab {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  flex: 1 1 0;\n  min-width: 0;\n  height: 28px;\n  box-sizing: border-box;\n  padding: 4px 10px;\n  border: 1px solid transparent;\n  border-bottom: none;\n  border-radius: var(--border-radius-sm) var(--border-radius-sm) 0 0;\n  background: transparent;\n  color: var(--text-muted);\n  font-size: var(--font-size-sm);\n  font-weight: 500;\n  white-space: nowrap;\n  cursor: pointer;\n  position: relative;\n  overflow: hidden;\n  /* A narrow tab drops the run time first, then the row count, and keeps its icon and name (below). */\n  container-type: inline-size;\n  transition: background var(--transition-fast), color var(--transition-fast);\n}\n.ss-querytab:hover {\n  background: color-mix(in srgb, var(--text-muted) 14%, transparent);\n  color: var(--text-secondary);\n}\n.ss-querytab.is-active {\n  align-self: flex-start;\n  height: 32px;\n  background: var(--editor-bg);\n  color: var(--text-primary);\n  border-color: var(--border-color);\n  font-weight: 600;\n  box-shadow: inset 0 2.5px 0 color-mix(in srgb, var(--text-muted) 30%, transparent);\n  z-index: 1;\n}\n.ss-querytab.is-active:hover {\n  background: color-mix(in srgb, var(--text-primary) 7%, var(--editor-bg));\n}\n/* The state icon at the left edge: a query glyph while idle, a spinner while the run is in flight,\n   a check once done, an error mark after a failure. */\n.ss-querytab__icon {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  width: 12px;\n  height: 12px;\n  flex: 0 0 auto;\n}\n.ss-querytab__icon .ss-icon {\n  width: 12px;\n  height: 12px;\n}\n.ss-querytab__icon--idle {\n  opacity: 0.6;\n}\n.ss-querytab__icon--done {\n  color: var(--brand-green);\n}\n.ss-querytab__icon--failed {\n  color: var(--color-danger);\n}\n.ss-querytab__label {\n  flex: 0 1 auto;\n  min-width: 3em;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  text-align: left;\n}\n/* An idle, never-run tab is muted: its glyph and label fade further. */\n.ss-querytab.is-empty:not(.is-active) .ss-querytab__label {\n  opacity: 0.75;\n}\n.ss-querytab__time {\n  flex: 0 0 auto;\n  font-weight: 500;\n  color: var(--text-muted);\n  font-variant-numeric: tabular-nums;\n}\n/* Unsaved changes to the tab's Query Activity: grey, apart from the orange dot of an unseen finish. */\n.ss-querytab__unsaved {\n  width: 6px;\n  height: 6px;\n  border-radius: 50%;\n  background: var(--text-muted);\n  flex: 0 0 auto;\n}\n.ss-querytab__meta {\n  margin-left: auto;\n  padding-left: 8px;\n  flex: 0 1 auto;\n  min-width: 0;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  font-weight: 500;\n  color: var(--text-muted);\n  font-variant-numeric: tabular-nums;\n}\n.ss-querytab__meta--failed {\n  color: var(--danger-text);\n}\n@container (max-width: 300px) {\n  .ss-querytab__time {\n    display: none;\n  }\n}\n@container (max-width: 190px) {\n  .ss-querytab__meta {\n    display: none;\n  }\n}\n/* A tab that finished or failed while another one was on screen, until it is opened. */\n.ss-querytab__dot {\n  width: 6px;\n  height: 6px;\n  border-radius: 50%;\n  background: var(--color-action);\n  flex: 0 0 auto;\n}\n.ss-editor-fallback {\n  width: 100%;\n  height: 100%;\n  border: none;\n  resize: none;\n  padding: var(--spacing-md);\n  font-family: var(--font-mono);\n  background: var(--editor-bg);\n  color: var(--editor-fg);\n}\n.ss-banner {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  padding: 6px var(--spacing-md);\n  background: var(--tint-warning);\n  color: var(--warning-text);\n  border-bottom: 1px solid var(--border-color);\n  font-size: var(--font-size-sm);\n  flex: 0 0 auto;\n}\n.ss-banner--error {\n  background: var(--tint-danger);\n  color: var(--danger-text);\n}\n.ss-banner__close {\n  margin-left: auto;\n  border: none;\n  background: none;\n  cursor: pointer;\n  color: inherit;\n}\n\n/* -------------------------------------------------------------------- */\n/* 8. Results grid, tabs, inspector                                       */\n/* -------------------------------------------------------------------- */\n.ss-results-pane {\n  display: flex;\n  flex-direction: column;\n  flex: 1 1 auto;\n  min-height: 120px;\n}\n/* Bottom panel header: the Status/Results tabs on the left, the run\n   summary next to them (shown on either tab), then the page filter and\n   Export CSV, shown only while Results is active (UI.setActiveTab). */\n.ss-results-header {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  height: var(--panel-header-height);\n  padding: 0 var(--spacing-md);\n  border-bottom: 1px solid var(--border-color);\n  background: var(--bg-elevated);\n  flex: 0 0 auto;\n  /* Lets the cost beside Export CSV shorten when the header has little room (.ss-export-cost, below). */\n  container-type: inline-size;\n}\n.ss-tabs {\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  flex: 0 0 auto;\n}\n.ss-tab {\n  display: inline-flex;\n  align-items: center;\n  gap: 6px;\n  height: 26px;\n  padding: 0 var(--spacing-sm);\n  border: none;\n  border-radius: var(--border-radius-sm);\n  background: transparent;\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n  font-weight: 600;\n  cursor: pointer;\n}\n.ss-tab:hover {\n  background: var(--toolbar-button-hover);\n}\n.ss-tab[aria-selected=\"true\"] {\n  background: var(--toolbar-button-active);\n  color: var(--color-primary);\n}\n.ss-tab__counts {\n  display: inline-flex;\n  align-items: center;\n  gap: 6px;\n}\n.ss-tab__count {\n  display: inline-flex;\n  align-items: center;\n  gap: 3px;\n  font-size: 11px;\n  font-weight: 600;\n}\n.ss-tab__count::before {\n  content: '';\n  display: inline-block;\n  width: 6px;\n  height: 6px;\n  border-radius: 50%;\n  background: currentColor;\n}\n.ss-tab__count--error {\n  color: var(--danger-text);\n}\n.ss-tab__count--warning {\n  color: var(--warning-text);\n}\n.ss-tab__count--info {\n  color: var(--info-text);\n}\n.ss-run-summary {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n/* The link takes no padding of its own: the summary's gap already spaces it, and since the WSProxy calls got their own\n   number (\"4 API calls · 2 WSProxy\") the summary is 7 px too long for a 1,280 px window with the sidebar open, which\n   the padding of a link button cut off. */\n.ss-run-summary__delete {\n  flex: 0 0 auto;\n  padding-left: 0;\n  padding-right: 0;\n}\n/* \"Edited since this run\" (UI.syncStaleMark): the query in the editor is no longer the one whose rows are on screen. It is the header's own\n   item, before the run summary, and never shrinks: inside the summary it was cut off with it, as in a 1,024 px window with the sidebar\n   open, where the page filter and Export CSV leave the summary 139 px. The summary opens with the dot that parts the two, so a header too\n   narrow for the summary (640 px, below) keeps the mark with no dot after it. The gap matches the summary's own. */\n.ss-stale-mark {\n  flex: 0 0 auto;\n  color: var(--text-stale);\n  font-size: var(--font-size-sm);\n  white-space: nowrap;\n  cursor: default;\n}\n.ss-stale-mark[hidden] {\n  display: none;\n}\n.ss-stale-mark:focus-visible {\n  outline: 2px solid var(--color-action);\n  outline-offset: 2px;\n}\n.ss-stale-mark:not([hidden]) + .ss-run-summary {\n  margin-left: calc(var(--spacing-xs) - var(--spacing-sm));\n}\n.ss-stale-mark:not([hidden]) + .ss-run-summary::before {\n  content: '\\00B7';\n}\n/* The page filter keeps its 180 px: in a tight header the run summary, which ends in an ellipsis, gives up room first,\n   as the cost beside Export CSV (below) takes some. */\n.ss-results-filter {\n  flex: 0 0 auto;\n}\n/* Beside Export CSV: what a click costs, said before the click (UI._syncExportCost). It never shrinks or wraps, so the\n   button stays on screen and the run summary gives up its room first. A header with little room shows the short form,\n   and with less still, nothing. The full text then stays for assistive technology (clipped out of sight, not removed)\n   and in the button's title. The widths are the header's own (its container), as the sidebar takes room from it. */\n.ss-export-cost {\n  position: relative;\n  flex: 0 0 auto;\n  color: var(--text-muted);\n  font-size: var(--font-size-sm);\n  white-space: nowrap;\n}\n.ss-export-cost__short {\n  display: none;\n}\n/* In a header of 1,100 px or less, as at 1,280 px with the sidebar open, the run summary's row count, which the Results tab\n   shows too, and Temp DE, a convenience, give way, so the two call counts and Delete results stay whole. */\n@container (max-width: 1100px) {\n  .ss-run-summary__rows,\n  .ss-run-summary__temp {\n    display: none;\n  }\n}\n/* While the stale mark shows, the same two give way from 1,240 px, as the mark takes the room that kept Delete results whole at the\n   header of a 1,440 px window (1,160 px with the sidebar open). In a header of 1,040 px or less the mark drops \"since this run\" and\n   keeps \"· Edited\", with the tip and the label unchanged, which keeps Delete results whole at the header of a 1,280 px window. */\n@container (max-width: 1240px) {\n  .ss-run-summary.is-stale .ss-run-summary__rows,\n  .ss-run-summary.is-stale .ss-run-summary__temp {\n    display: none;\n  }\n}\n@container (max-width: 1040px) {\n  .ss-stale-mark__more {\n    display: none;\n  }\n}\n@container (max-width: 640px) {\n  .ss-export-cost__full {\n    position: absolute;\n    width: 1px;\n    height: 1px;\n    overflow: hidden;\n    clip: rect(0 0 0 0);\n  }\n  .ss-export-cost__short {\n    display: inline;\n  }\n}\n@container (max-width: 540px) {\n  .ss-export-cost {\n    position: absolute;\n    width: 1px;\n    height: 1px;\n    overflow: hidden;\n    clip: rect(0 0 0 0);\n  }\n}\n/* Export CSV shows an export's progress itself (UI._syncExportButton): a spinner in place of the download icon, and\n   \"Exporting 1,200 of 2,715…\" in place of the label. The label is two layers in one grid cell, the text and a hidden copy of\n   its widest form (.ss-export-btn__sizer), so the button is as wide as the widest text and the header does not move on each\n   update. Tabular numbers make \"1,200\" as wide as \"2,715\". The button is disabled meanwhile, and keeps full strength as\n   Run does while it runs, so it reads as busy rather than as unavailable. */\n.ss-export-btn__label {\n  display: inline-grid;\n  font-variant-numeric: tabular-nums;\n}\n.ss-export-btn__label > * {\n  grid-area: 1 / 1;\n}\n.ss-export-btn__sizer {\n  visibility: hidden;\n}\n.ss-export-btn.is-exporting > svg {\n  display: none;\n}\n.ss-export-btn.is-exporting:disabled,\n.ss-export-btn.is-exporting:disabled:hover {\n  opacity: 1;\n  cursor: progress;\n  background: var(--modal-btn-neutral-bg);\n}\n/* Save to DE, beside Export CSV (UI._syncSaveButton). The header has room for its label only when it is wider than 1,280 px, which\n   is a window of about 1,560 px with the sidebar open. Below that it is the icon alone, 24 px wide, which keeps the run summary's\n   Delete results, the cost and Export CSV whole at 1,280 px with the sidebar open (the label stays for assistive technology, clipped\n   out of sight, and in the title). A header of 640 px or less has no room for the run summary, which was already cut to nothing,\n   so it goes, with the spacer that pushed the controls right, and the button and Export CSV fit as before. */\n.ss-save-btn {\n  position: relative;\n  flex: 0 0 auto;\n}\n@container (max-width: 1280px) {\n  .ss-save-btn {\n    width: 24px;\n    padding: 0;\n  }\n  .ss-save-btn__label {\n    position: absolute;\n    width: 1px;\n    height: 1px;\n    overflow: hidden;\n    clip: rect(0 0 0 0);\n  }\n}\n@container (max-width: 640px) {\n  .ss-results-header .ss-run-summary,\n  .ss-results-header .ss-toolbar__spacer {\n    display: none;\n  }\n}\n/* Where an export's progress is announced to a screen reader (aria-live), out of sight. */\n.ss-export-status {\n  position: absolute;\n  width: 1px;\n  height: 1px;\n  overflow: hidden;\n  clip: rect(0 0 0 0);\n  white-space: nowrap;\n}\n/* Status tab content: the lint findings list (.ss-problem, above), then\n   the error panel and the notice lines below it. The whole panel scrolls\n   as one unit; .ss-empty-state (shared with the grid) covers the \"no\n   problems\" case. */\n.ss-status-panel {\n  flex: 1 1 auto;\n  min-height: 0;\n  overflow-y: auto;\n}\n/* An MCE or validation error (red left border, the message, a Details\n   disclosure with the raw response); lives in Status, never in place of\n   the grid. */\n.ss-error-panel {\n  margin: var(--spacing-md);\n  padding: var(--spacing-md);\n  border-left: 3px solid var(--color-danger);\n  background: var(--tint-danger);\n  border-radius: 0 var(--border-radius-sm) var(--border-radius-sm) 0;\n}\n.ss-error-panel__message {\n  white-space: pre-wrap;\n  color: var(--text-primary);\n}\n.ss-error-panel__hint {\n  margin-top: var(--spacing-xs);\n  white-space: pre-wrap;\n  color: var(--text-secondary);\n}\n.ss-error-panel details {\n  margin-top: var(--spacing-sm);\n}\n.ss-error-panel summary {\n  cursor: pointer;\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n}\n.ss-error-panel pre {\n  margin-top: var(--spacing-xs);\n  padding: var(--spacing-sm);\n  background: var(--bg-elevated);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  font-family: var(--font-mono);\n  font-size: var(--font-size-xs);\n  white-space: pre-wrap;\n  word-break: break-word;\n  max-height: 30vh;\n  overflow-y: auto;\n}\n/* Each outcome notice (0 rows returned, sort rejected, setup results) is one muted line, with\n   nothing to dismiss: the next run or Validate in the tab replaces it. */\n.ss-notice {\n  margin: var(--spacing-xs) var(--spacing-md) 0;\n  padding: 2px 0 2px var(--spacing-sm);\n  border-left: 2px solid var(--border-color-strong);\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n}\n.ss-notice:last-child {\n  margin-bottom: var(--spacing-sm);\n}\n/* Results tab content: the grid and pager, hidden while Status is\n   active. */\n.ss-results-panel {\n  display: flex;\n  flex-direction: column;\n  flex: 1 1 auto;\n  min-height: 0;\n}\n.ss-grid-scroll {\n  flex: 1 1 auto;\n  min-width: 0;\n  overflow: auto;\n  position: relative;\n}\n.ss-grid {\n  border-collapse: collapse;\n  table-layout: fixed;\n  font-size: var(--font-size-sm);\n}\n.ss-grid thead th {\n  position: sticky;\n  top: 0;\n  z-index: 2;\n  /* The same tint as before, laid over the app background so the sticky header is opaque:\n     --bg-elevated alone is 8% grey, and scrolled rows showed through it. */\n  background: linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-app);\n  border-bottom: 1px solid var(--border-color-strong);\n  border-right: 1px solid var(--border-color);\n  padding: 0;\n  text-align: left;\n}\n.ss-grid th button.ss-grid__sort {\n  width: 100%;\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  padding: 4px var(--spacing-sm);\n  border: none;\n  background: transparent;\n  cursor: pointer;\n  font-weight: 600;\n  overflow: hidden;\n  white-space: nowrap;\n  text-overflow: ellipsis;\n}\n/* Active sort column gets the --color-action accent. */\n.ss-grid__sort.is-sorted {\n  color: var(--color-action);\n}\n.ss-grid__resize-handle {\n  position: absolute;\n  right: 0;\n  top: 0;\n  bottom: 0;\n  width: 6px;\n  cursor: col-resize;\n}\n.ss-grid td {\n  padding: 3px var(--spacing-sm);\n  border-bottom: 1px solid var(--border-color);\n  border-right: 1px solid var(--border-color);\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  max-width: 480px;\n  cursor: default;\n}\n.ss-grid tbody tr:hover td {\n  background: var(--bg-hover);\n}\n/* Rows of a query the editor no longer holds (UI.syncStaleMark): the body text and the column headers go muted, on a soft hatch. The\n   colour, not opacity, as --text-stale keeps 4.5:1 on both themes, on a hovered row too. The NULL and (empty) cells, which are secondary\n   text, take it too. As first built only the body text went muted, the colour (empty) cells already have, and a result of empty cells\n   looked unchanged (the author's RC1 test of 1.2.1, 2026-10-10). The hatch is the table body's own background, one pattern across its\n   cells. A hovered row covers it with an opaque hover colour, as the light theme's hover tint over a stripe read at 4.3:1. */\n.ss-grid-scroll.is-stale .ss-grid td,\n.ss-grid-scroll.is-stale .ss-grid th button.ss-grid__sort {\n  color: var(--text-stale);\n}\n.ss-grid-scroll.is-stale .ss-grid tbody {\n  background-image: repeating-linear-gradient(-45deg, var(--stale-hatch) 0, var(--stale-hatch) 6px, transparent 6px, transparent 12px);\n}\n.ss-grid-scroll.is-stale .ss-grid tbody tr:hover td {\n  background: linear-gradient(var(--bg-hover), var(--bg-hover)), var(--bg-app);\n}\n.ss-grid__cell--null {\n  color: var(--text-secondary);\n  font-style: italic;\n}\n.ss-grid__cell--empty {\n  color: var(--text-secondary);\n  font-style: italic;\n}\n.ss-grid__spacer-row td {\n  border: none;\n  padding: 0;\n}\n/* Cell popover: replaces the old\n   inspector pane. Positioned absolutely within .ss (see\n   UI.openCellPopover), closes on Escape or a click outside. */\n.ss-cell-popover {\n  position: absolute;\n  z-index: 120;\n  width: 280px;\n  max-width: 90vw;\n  background: var(--bg-surface);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-md);\n  box-shadow: var(--shadow-dropdown);\n  padding: var(--spacing-sm);\n}\n.ss-cell-popover__value {\n  white-space: pre-wrap;\n  word-break: break-word;\n  font-family: var(--font-mono);\n  background: var(--bg-elevated);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  padding: var(--spacing-sm);\n  margin-bottom: var(--spacing-sm);\n  max-height: 40vh;\n  overflow-y: auto;\n}\n/* Pager, one row under the grid: page\n   size select on the left, prev/range/next centred, \"Page [n] of N\" on the\n   right. No first/last or Go buttons. */\n.ss-pager {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: var(--spacing-sm);\n  padding: var(--spacing-sm) var(--spacing-md);\n  border-top: 1px solid var(--border-color);\n  flex: 0 0 auto;\n  font-size: var(--font-size-sm);\n}\n.ss-pager__left,\n.ss-pager__center,\n.ss-pager__right {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  flex: 1 1 0;\n}\n.ss-pager__center {\n  justify-content: center;\n}\n.ss-pager__right {\n  justify-content: flex-end;\n}\n.ss-pager__range {\n  white-space: nowrap;\n  color: var(--text-secondary);\n}\n.ss-pager__page-input {\n  width: 56px;\n  text-align: center;\n}\n.ss-pager__page-input:focus {\n  border-color: var(--color-action);\n}\n.ss-pager__page-of {\n  color: var(--text-secondary);\n  white-space: nowrap;\n}\n.ss-message-item {\n  padding: var(--spacing-sm);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  margin-bottom: var(--spacing-sm);\n}\n.ss-message-item--error {\n  border-color: var(--color-danger);\n  background: var(--tint-danger);\n}\n.ss-message-item--warning {\n  border-color: var(--warning-color);\n  background: var(--tint-warning);\n}\n.ss-message-item--info {\n  background: var(--bg-elevated);\n}\n.ss-empty-state {\n  padding: var(--spacing-xl);\n  text-align: center;\n  color: var(--text-secondary);\n}\n.ss-empty-state--running {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: var(--spacing-sm);\n}\n.ss-empty-state--running p {\n  margin: 0;\n}\n.ss-empty-state__title {\n  color: var(--text-primary);\n  font-weight: 500;\n}\n/* A finished run whose rows did not load: what happened, the error's own text, where the rows are, and the button that\n   reads them again. */\n.ss-empty-state--unread {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: var(--spacing-sm);\n}\n.ss-empty-state--unread p {\n  margin: 0;\n  max-width: 70ch;\n}\n.ss-unread-page__error {\n  color: var(--text-primary);\n  white-space: pre-wrap;\n}\n.ss-unread-page__detail {\n  font-size: var(--font-size-sm);\n}\n.ss-unread-page__button {\n  display: inline-flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n}\n\n/* -------------------------------------------------------------------- */\n/* 9. Dialogs, dropdown managers and modal                                */\n/* -------------------------------------------------------------------- */\n/* Above the anchored panels (.ss-dropdown-mount, 101): a dialog opened from one, such as History's Clear all or Open's question on\n   unsaved changes, drew under the panel where the two met (2026-10-09). */\n.ss-modal-overlay {\n  position: absolute;\n  inset: 0;\n  background: rgba(0, 0, 0, 0.45);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  z-index: 110;\n  padding: var(--spacing-lg);\n}\n.ss-modal {\n  background: var(--bg-surface);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-md);\n  box-shadow: var(--shadow-md);\n  width: 100%;\n  max-width: 480px;\n  max-height: 100%;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n}\n.ss-modal--wide {\n  max-width: 640px;\n}\n.ss-modal__header {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  padding: var(--spacing-md) var(--spacing-lg);\n  border-bottom: 1px solid var(--border-color);\n}\n.ss-modal__title {\n  font-size: var(--font-size-md);\n  font-weight: 700;\n  flex: 1 1 auto;\n}\n.ss-modal__close {\n  border: none;\n  background: none;\n  cursor: pointer;\n  font-size: 16px;\n  color: var(--text-secondary);\n  padding: 4px;\n  border-radius: var(--border-radius-sm);\n}\n.ss-modal__close:hover {\n  background: var(--bg-hover);\n  color: var(--color-primary);\n}\n.ss-modal__body {\n  padding: var(--spacing-sm) var(--spacing-lg);\n  overflow-y: auto;\n  flex: 1 1 auto;\n}\n.ss-modal__status {\n  margin: var(--spacing-sm) 0 0;\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n}\n.ss-modal__status:empty {\n  display: none;\n}\n.ss-modal__footer {\n  display: flex;\n  justify-content: flex-end;\n  gap: var(--spacing-sm);\n  padding: var(--spacing-md) var(--spacing-lg);\n  border-top: 1px solid var(--border-color);\n  flex: 0 0 auto;\n}\n\n/* Dropdown managers (History, Runs, Settings, Help): anchored under their\n   toolbar button, not centred. Plain anchored, with --shadow-dropdown. */\n.ss-dropdown-scrim {\n  position: absolute;\n  inset: 0;\n  z-index: 100;\n  background: transparent;\n}\n.ss-dropdown-mount {\n  position: absolute;\n  z-index: 101;\n}\n/* --toolbar-bg, not --bg-surface: History\n   keeps its own toolbar button and anchored panel, but uses the same menu\n   surface as the Help ss-toolbar__menu. */\n.ss-dropdown-panel {\n  background: var(--toolbar-bg);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-md);\n  box-shadow: var(--shadow-dropdown);\n  width: 300px;\n  max-height: 70vh;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n}\n.ss-dropdown-panel--wide {\n  width: 420px;\n}\n/* Open: the width its rows had as a centred dialog (.ss-modal--wide). UI.openDropdown caps it at the app's width less 16px. */\n.ss-dropdown-panel--xwide {\n  width: 640px;\n}\n/* About dialog: Diagramforce's df-about layout,\n * translated to ss-. .ss-about is the flex column all its children sit in;\n * .ss-about__separator is the thin full-width rule (there are exactly two:\n * before the links row and before the licence line), and .ss-about__meta /\n * __signed-in / __license are plain centred text rows, not bordered\n * individually, so the muted signed-in line can sit directly under the\n * links row with no rule between them. */\n.ss-about {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  text-align: center;\n  gap: var(--spacing-md);\n  padding: var(--spacing-sm) 0;\n}\n.ss .ss-about__name {\n  margin: 0;\n  font-size: 20px;\n  font-weight: 700;\n  color: var(--text-primary);\n}\n.ss .ss-about__tagline {\n  margin: 2px 0 0;\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n}\n.ss .ss-about__info {\n  margin: 0;\n  max-width: 440px;\n  font-size: 13px;\n  line-height: var(--line-height);\n  color: var(--text-secondary);\n}\n/* Label and value rows, left-aligned in a quiet panel. */\n.ss-about__details {\n  display: grid;\n  grid-template-columns: max-content 1fr;\n  gap: 6px var(--spacing-md);\n  width: 100%;\n  margin: 0;\n  padding: 10px 14px;\n  box-sizing: border-box;\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  background: var(--bg-elevated);\n  text-align: left;\n  font-size: var(--font-size-xs);\n}\n.ss-about__details dt {\n  color: var(--text-muted);\n}\n.ss-about__details dd {\n  margin: 0;\n  color: var(--text-secondary);\n  overflow-wrap: anywhere;\n}\n.ss-about__links {\n  display: flex;\n  flex-wrap: wrap;\n  justify-content: center;\n  gap: var(--spacing-sm);\n}\n.ss-about__pill {\n  padding: 4px 12px;\n  border: 1px solid var(--border-color);\n  border-radius: 14px;\n  color: var(--color-primary);\n  font-size: var(--font-size-xs);\n  text-decoration: none;\n}\n.ss-about__pill:hover {\n  background: var(--bg-hover);\n}\n.ss-about__link {\n  color: var(--color-primary);\n  text-decoration: none;\n}\n.ss-about__link:hover {\n  text-decoration: underline;\n}\n.ss .ss-about__credits {\n  margin: 0;\n  font-size: var(--font-size-xs);\n  color: var(--text-muted);\n  text-align: center;\n}\n.ss .ss-about__credits p {\n  margin: 0 0 2px;\n}\n.ss-about__license {\n  width: 100%;\n  padding-top: var(--spacing-md);\n  border-top: 1px solid var(--border-color);\n  font-size: var(--font-size-xs);\n  color: var(--text-muted);\n}\n.ss .ss-about__license p {\n  margin: 0;\n}\n.ss .ss-about__license p + p {\n  margin-top: 2px;\n}\n.ss-list {\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  max-height: 320px;\n  overflow-y: auto;\n}\n.ss-list-row {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-md);\n  padding: var(--spacing-sm) var(--spacing-md);\n  border-bottom: 1px solid var(--border-color);\n  cursor: pointer;\n}\n.ss-list-row:last-child {\n  border-bottom: none;\n}\n.ss-list-row:hover {\n  background: var(--bg-hover);\n}\n/* The Save As target the user picked. */\n.ss-list-row.is-selected {\n  background: var(--toolbar-button-active);\n}\n.ss-list-row__main {\n  flex: 1 1 auto;\n  min-width: 0;\n  overflow: hidden;\n}\n.ss-list-row__title {\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.ss-list-row__meta {\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.ss-list-row__sql {\n  font-family: var(--font-mono);\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.ss-check-target {\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  padding: var(--spacing-md);\n  margin-top: var(--spacing-sm);\n}\n.ss-check-target table {\n  width: 100%;\n  border-collapse: collapse;\n  font-size: var(--font-size-sm);\n}\n.ss-check-target th, .ss-check-target td {\n  text-align: left;\n  padding: 3px var(--spacing-sm);\n  border-bottom: 1px solid var(--border-color);\n}\n\n/* -------------------------------------------------------------------- */\n/* 10. Toasts                                                            */\n/* -------------------------------------------------------------------- */\n/* Centred just below the toolbar, where the user is looking after pressing a\n   toolbar button, not in a corner. The column lets clicks through between toasts. */\n.ss-toasts {\n  position: absolute;\n  top: calc(var(--toolbar-height) + var(--spacing-md));\n  left: 50%;\n  transform: translateX(-50%);\n  display: flex;\n  flex-direction: column;\n  align-items: stretch;\n  gap: var(--spacing-sm);\n  z-index: 200;\n  width: min(480px, calc(100% - 32px));\n  pointer-events: none;\n}\n.ss-toast {\n  pointer-events: auto;\n  display: flex;\n  align-items: flex-start;\n  gap: var(--spacing-sm);\n  padding: var(--spacing-sm) var(--spacing-md);\n  border-radius: var(--border-radius-sm);\n  border: 1px solid var(--border-color);\n  background: var(--bg-surface-raised);\n  box-shadow: var(--shadow-md);\n}\n.ss-toast--success {\n  border-color: var(--brand-green);\n}\n.ss-toast--error {\n  border-color: var(--color-danger);\n}\n.ss-toast--warning {\n  border-color: var(--warning-color);\n}\n.ss-toast__body {\n  flex: 1 1 auto;\n  font-size: var(--font-size-sm);\n}\n.ss-toast__close {\n  border: none;\n  background: none;\n  cursor: pointer;\n  color: var(--text-secondary);\n}\n\n/* -------------------------------------------------------------------- */\n/* 11. Misc: badges, scrollbars, focus, responsive                       */\n/* -------------------------------------------------------------------- */\n.ss-badge {\n  display: inline-flex;\n  align-items: center;\n  gap: 3px;\n  padding: 1px 6px;\n  border-radius: 10px;\n  font-size: 11px;\n  font-weight: 600;\n  background: var(--bg-elevated);\n  color: var(--text-secondary);\n}\n.ss-badge--error {\n  background: var(--tint-danger);\n  color: var(--danger-text);\n}\n.ss-badge--warning {\n  background: var(--tint-warning);\n  color: var(--warning-text);\n}\n.ss-badge--info {\n  background: var(--tint-info);\n  color: var(--info-text);\n}\n\n.ss * ::-webkit-scrollbar {\n  width: 10px;\n  height: 10px;\n}\n.ss ::-webkit-scrollbar-thumb {\n  background: var(--border-color-strong);\n  border-radius: 6px;\n}\n.ss ::-webkit-scrollbar-track {\n  background: transparent;\n}\n\n@media (max-width: 1023px) {\n  .ss-sidebar {\n    position: absolute;\n    top: 0;\n    bottom: 0;\n    right: 0;\n    z-index: 50;\n    box-shadow: var(--shadow-md);\n  }\n  .ss-sidebar.is-collapsed {\n    display: none;\n  }\n  .ss-sidebar-overlay-bg {\n    display: block;\n    position: absolute;\n    inset: 0;\n    background: rgba(0, 0, 0, 0.3);\n    z-index: 40;\n  }\n}\n\n/* Narrow windows: toolbar buttons drop their labels (icon only) except the primary Run button,\n   so the single-row toolbar never wraps. Titles carry the label for tooltips. */\n@media (max-width: 1100px) {\n  .ss .ss-toolbar__button--secondary > span { display: none; }\n  .ss .ss-toolbar__button--secondary { padding: 4px 6px; }\n}\n@media (max-width: 900px) {\n  .ss .ss-toolbar__button:not(.ss-toolbar__button--primary) > span { display: none; }\n  .ss .ss-toolbar__button:not(.ss-toolbar__button--primary) { padding: 4px 6px; }\n}\n\n/* Menu links look like menu buttons (Diagramforce): text colour, not link colour. */\n.ss a.ss-toolbar__menu-item {\n  color: var(--text-secondary);\n  text-decoration: none;\n}\n.ss a.ss-toolbar__menu-item:hover {\n  color: var(--text-primary);\n}\n\n/* -------------------------------------------------------------------- */\n/* 12. Save to DE                                                        */\n/* -------------------------------------------------------------------- */\n/* The overlay (SaveToDe in sqlstudio.js) needs the width of a table of fields. */\n.ss-modal--xwide {\n  max-width: 1080px;\n}\n/* A toast's link has a line of its own, as wide as its words, so the off-site arrow stays beside them, in the toast's own text colour\n   rather than the link red (the author's RC7 test, 2026-10-09: the red link wrapped and left its arrow on a line alone). */\n.ss .ss-toast__link {\n  display: table;\n  margin-top: 2px;\n  color: var(--text-primary);\n  text-decoration: underline;\n  white-space: nowrap;\n}\n.ss .ss-toast__link:hover {\n  color: var(--color-primary);\n}\n/* The line beside Close while the rows move: the Data Extension is made, and the window can close. */\n.ss-save__moving {\n  flex: 1 1 auto;\n  margin: 0;\n  align-self: center;\n  font-size: var(--font-size-sm);\n  color: var(--text-primary);\n}\n.ss-save__moving:empty {\n  display: none;\n}\n/* The warnings under the fields table (saveFieldWarnings): a field with no length, a length too short for the values on screen. */\n.ss-save__warnings {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n  margin-top: var(--spacing-xs);\n}\n.ss-save__warnings:empty {\n  display: none;\n}\n/* The line under a failed move's message: the Data Extension's fields are set, so the form's are locked. */\n.ss-save__locked {\n  margin-top: 4px;\n}\n.ss-save__moving-line {\n  display: block;\n}\n.ss-save__top {\n  display: grid;\n  grid-template-columns: repeat(3, minmax(0, 1fr));\n  gap: var(--spacing-md);\n}\n/* The folder picker: the input, and under it the list of folders that opens over the fields table. Its rows are the Save As\n   list's (.ss-list-row), the active one (the arrow keys) marked by a bar and the chosen one by a tint. */\n.ss-combo {\n  position: relative;\n}\n.ss-combo__popup {\n  position: absolute;\n  top: 100%;\n  left: 0;\n  right: 0;\n  z-index: 10;\n  margin-top: 2px;\n  max-height: 320px;\n  overflow-y: auto;\n  overscroll-behavior: contain;\n  border: 1px solid var(--border-color-strong);\n  border-radius: var(--border-radius-sm);\n  background: var(--bg-surface-raised);\n  box-shadow: var(--shadow-dropdown);\n}\n.ss-combo__option {\n  padding: 5px var(--spacing-md);\n  line-height: 1.4;\n}\n.ss-combo__option.is-active {\n  background: var(--bg-hover);\n  box-shadow: inset 3px 0 0 var(--color-primary);\n}\n.ss-combo__list:not(:empty) + .ss-combo__note {\n  border-top: 1px solid var(--border-color);\n}\n/* Beside the other two fields the list is wider than its input, to the left, so a long path shows whole. */\n@media (min-width: 801px) {\n  .ss-combo__popup {\n    left: auto;\n    width: 520px;\n  }\n}\n.ss-save__notice:empty {\n  display: none;\n}\n.ss-save__note {\n  margin: 0 0 var(--spacing-sm);\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n}\n.ss-save__table-wrap {\n  max-height: 36vh;\n  overflow: auto;\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  margin-bottom: var(--spacing-md);\n}\n.ss-save__table {\n  width: 100%;\n  border-collapse: collapse;\n  font-size: var(--font-size-sm);\n}\n.ss-save__table th {\n  position: sticky;\n  top: 0;\n  z-index: 1;\n  padding: 4px;\n  text-align: left;\n  font-weight: 600;\n  color: var(--text-secondary);\n  background: var(--bg-elevated);\n  border-bottom: 1px solid var(--border-color);\n}\n.ss-save__table td {\n  padding: 3px 4px;\n  vertical-align: top;\n}\n.ss-save__table tr.has-error td {\n  background: var(--tint-danger);\n}\n/* The column's name on the line of its inputs: one line as tall as an input (26px) keeps the text at their middle, and the cell stays\n   at the top, so a line of error under an input leaves it where it is (the author's RC13 test, 2026-10-09). */\n.ss-save__source {\n  max-width: 150px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  line-height: 26px;\n  color: var(--text-secondary);\n}\n.ss-save__table .ss-input,\n.ss-save__table .ss-select {\n  height: 26px;\n}\n.ss-save__number {\n  width: 72px;\n  text-align: right;\n}\n/* Key and Null: the box at the middle of its column, under its centred heading, and at the middle of the line of the inputs. */\n.ss .ss-save__table .ss-save__check {\n  text-align: center;\n}\n.ss-save__check-box {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  height: 26px;\n}\n.ss-save__check-box > input {\n  margin: 0;\n}\n.ss-save__error {\n  margin-top: 2px;\n  font-size: 11px;\n  color: var(--danger-text);\n}\n.ss-save__error:empty {\n  display: none;\n}\n.ss .ss-input.is-invalid {\n  border-color: var(--color-danger);\n}\n.ss-save__group {\n  margin-bottom: var(--spacing-sm);\n}\n.ss-save__line {\n  display: flex;\n  flex-wrap: wrap;\n  align-items: center;\n  gap: var(--spacing-sm);\n}\n.ss-save__line .ss-select,\n.ss-save__line .ss-input {\n  width: auto;\n}\n.ss-save__inline {\n  display: inline-flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n}\n.ss-save__cost,\n.ss-save__fix {\n  margin: var(--spacing-xs) 0 0;\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n}\n.ss-save__cost:empty,\n.ss-save__fix:empty {\n  display: none;\n}\n/* The line on what the save does, under the overlay's title, with the gap a field group has before the Name. */\n.ss-modal__body > [data-save=\"hint\"] {\n  margin-bottom: var(--spacing-md);\n}\n/* The cost sits in the footer, left of Cancel and Save, as Export CSV's label sits by its button (the author's RC12 test, 2026-10-09).\n   While a save runs it is empty, and the line on the move takes its place. */\n.ss-modal__footer > .ss-save__cost {\n  flex: 1 1 auto;\n  margin: 0;\n  align-self: center;\n}\n.ss-save__fix {\n  color: var(--danger-text);\n}\n.ss-save__link {\n  display: inline-block;\n  margin-top: var(--spacing-xs);\n  color: var(--color-primary);\n}\n.ss-save__primary .ss-spinner {\n  margin-right: var(--spacing-xs);\n}\n@media (max-width: 800px) {\n  .ss-save__top {\n    grid-template-columns: minmax(0, 1fr);\n  }\n}\n";
 
 
 /* ========================================================= sqlstudio.js == */
@@ -13604,7 +14389,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
     run's rows end it as soon as they appear. After it the run asks isrunning, as a run without a task ID does. */
     var TASK_ROW_WAIT_MS = 5 * 60 * 1000;
     /* The app's own version: a build test keeps it equal to the Backend's appVersion. */
-    var APP_VERSION = '1.2.0';
+    var APP_VERSION = '1.2.1';
     /* The public repository's release manifest, written at each release. Checked once a day. */
     var UPDATE_CHECK_URL = 'https://raw.githubusercontent.com/MateuszDabrowski/sqlstudio/main/latest.json';
     var UPDATE_CHECK_EVERY_MS = 24 * 60 * 60 * 1000;
@@ -13747,6 +14532,11 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
              * instead of showing whatever tab was last looked at. */
             statusError: null,       /* { message, details, hasRunAnywayLink } | null */
             statusNotices: [],       /* string[] */
+            /* The editor's text when the Validate whose acceptance (VALIDATE_ACCEPTED_NOTICE) came was clicked, and the text Format left (FORMAT_DONE_NOTICE).
+             * Each line goes when the text no longer matches its record (UI.syncValidateNotice, UI.syncFormatNotice), so a Format right
+             * after a Validate keeps the acceptance, and the textarea editor's late change event keeps what Format has just said. */
+            validateAcceptedText: null,
+            formatDoneText: null,
             /* Which of the bottom panel's tabs this query tab shows, 'status' or 'results', so each
              * query tab keeps its own (org test, 2026-09-28). null until chosen: Status. */
             bottomPanel: null,
@@ -17466,6 +18256,10 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
              * every tab, not only this one, to the per-MID ss.tabs entry (see QueryTabs.persist). */
             scheduleSaveTabs();
             UI.renderOpenedQueryBadge();
+            /* "Format: done." is about the layout, so any change to the text takes it away (UI.syncFormatNotice). Validate's acceptance is
+             * about the query, and the rows' stale mark about the query too: both are judged once the typing pauses (_syncSoon). */
+            UI.syncFormatNotice();
+            this._syncSoon();
             if (!text.trim()) UI.setActiveTab('status'); /* editor cleared: back to Status */
             for (var i = 0; i < this._onChangeCbs.length; i++) {
                 try {
@@ -17475,6 +18269,13 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 };
             };
         },
+
+        /**
+         * @method _syncSoon
+         * @description Runs UI.syncEditedState once edits have paused for LINT_DEBOUNCE_MS, as the lint pass runs: the rows' stale mark
+         * and Validate's acceptance are judged against the query, which a typed word or an undo in between would only flicker.
+         */
+        _syncSoon: debounce(function () { UI.syncEditedState(); }, LINT_DEBOUNCE_MS),
 
         /**
          * @method onDidChangeContent
@@ -17939,6 +18740,11 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 hasSelection = !!(sel && !sel.isEmpty() && this.model.getValueInRange(sel).trim());
             };
             var input = hasSelection ? this.model.getValueInRange(sel) : this.getValue();
+            /* As Validate says "Nothing to validate.": an empty editor has nothing Format could say is done. */
+            if (!input.trim()) {
+                Toast.show('Nothing to format.', 'warning');
+                return;
+            };
             var result;
             try {
                 result = Tools.formatSql(input);
@@ -17946,17 +18752,23 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 Toast.show('Could not format this SQL: ' + e.message, 'warning');
                 return;
             };
-            if (!result.changed) {
-                Toast.show('Already formatted.', 'info');
+            /* Format left the query as it is and says why, as an unclosed text or a query that does not start with SELECT: as first
+             * built it said "Already formatted." here too (the review after 1.2.0, 2026-10-09). */
+            if (!result.changed && result.reason) {
+                Toast.show(result.reason, 'warning');
                 return;
             };
-            if (hasSelection && this.mode === 'monaco' && this.instance) {
-                this.instance.executeEdits('ss-format', [{ range: sel, text: result.sql }]);
-                this._onContentChanged();
-                this._runLint();
-            } else {
-                this.setValue(result.sql, false);
+            if (result.changed) {
+                if (hasSelection && this.mode === 'monaco' && this.instance) {
+                    this.instance.executeEdits('ss-format', [{ range: sel, text: result.sql }]);
+                    this._onContentChanged();
+                    this._runLint();
+                } else {
+                    this.setValue(result.sql, false);
+                };
             };
+            /* After its own edit, which the next edit's _onContentChanged would otherwise take for the user's. */
+            UI.showFormatDone();
         },
 
         /**
@@ -18099,6 +18911,9 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         monacoNS.languages.register({ id: 'sfmc-sql' });
         var kwNames = (SQLData.keywords || []).map(function (k) { return k.name.toUpperCase(); }).filter(function (n) { return n.indexOf(' ') === -1; });
         var fnNames = (SQLData.functions || []).map(function (f) { return f.name.toUpperCase(); });
+        /* The data types take the keyword colour, where Monaco's list gave it to VARCHAR, INT and DATE but not NVARCHAR, DATETIME or
+         * BIGINT: the ones the completion offers, and the others CAST and CONVERT take (Tools.HIGHLIGHT_TYPES). */
+        var typeNames = (SQLData.dataTypes || []).map(function (t) { return String(t.name || t).toUpperCase(); }).concat(Tools.HIGHLIGHT_TYPES || []);
 
         /**
          * @function finish
@@ -18113,7 +18928,9 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             for (var k in lang) if (Object.prototype.hasOwnProperty.call(lang, k)) extended[k] = lang[k];
             extended.ignoreCase = true;
             extended.tokenPostfix = '.sql';
-            extended.keywords = uniqueUpper((lang.keywords || []).concat(kwNames));
+            /* The words SQL Studio's own tokenizer reads as keywords, in place of Monaco's SQL list, which colours words Marketing Cloud
+             * Engagement reads as plain names, such as Position and Domain (Tools.HIGHLIGHT_KEYWORDS). */
+            extended.keywords = uniqueUpper((Tools.HIGHLIGHT_KEYWORDS || lang.keywords || []).concat(typeNames, kwNames));
             extended.builtinFunctions = uniqueUpper((lang.builtinFunctions || []).concat(fnNames));
             extended.tokenizer = {};
             for (var tk in lang.tokenizer) if (Object.prototype.hasOwnProperty.call(lang.tokenizer, tk)) extended.tokenizer[tk] = lang.tokenizer[tk];
@@ -19839,6 +20656,55 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
     };
 
     /**
+     * @function setRunScope
+     * @description Records, as a run starts, what Results' stale mark compares it with (Tools.runScope): nothing more when the SQL is the
+     * editor's whole text or whole statements of it, and for a selection that is no whole statement, such as a subquery, that it is one
+     * (currentRunIsFragment) with the keys right before and after it (currentRunContext). Without them, a fragment matched anywhere,
+     * so a WHERE added inside the selected subquery left its rows current.
+     * @param {Object} runner - the QueryRunner whose run starts
+     * @param {string} sql - the SQL the run starts with, the editor's selection when there is one
+     * @param {number} offset - where that SQL starts in the editor's text
+     */
+    function setRunScope(runner, sql, offset) {
+        var scope = Tools.runScope(sql, Editor.getValue(), offset);
+        runner.currentRunIsFragment = scope !== false;
+        runner.currentRunContext = (scope && typeof scope === 'object') ? scope : null;
+        runner.hasStaleShownStatus = false;
+    };
+
+    /**
+     * @function savedRunContext
+     * @description A saved run's neighbours (QueryTabs.snapshot's runContext), when the entry holds two texts, and otherwise null: a
+     * run saved before they were, whose fragment then matches anywhere, as it did.
+     * @param {?Object} context - the entry's runContext
+     * @returns {?{before: string, after: string}}
+     */
+    function savedRunContext(context) {
+        if (!context || typeof context.before !== 'string' || typeof context.after !== 'string') return null;
+        return {
+            before: context.before,
+            after: context.after
+        };
+    };
+
+    /**
+     * @function isRunStale
+     * @description Whether a tab shows the rows of a query it no longer holds: its run is done and the SQL in its editor does not
+     * match the SQL that produced the rows (Tools.sameQuery). A tab with no finished run, a run still going, or no record of the
+     * run's SQL (one saved by an older version) is never stale.
+     * @param {Object} tab - a QueryTab
+     * @returns {boolean}
+     */
+    function isRunStale(tab) {
+        var runner = tab.runner;
+        /* Without an editor there is no text to compare the run with. */
+        if (!Editor.mode || tab.state.runnerState !== 'done' || !tab.state.activeRun || !runner.currentRunStartedAt) return false;
+        if (!runner.currentRunSql || !runner.currentRunSql.trim()) return false;
+        var scope = runner.currentRunIsFragment ? (runner.currentRunContext || true) : false;
+        return !Tools.sameQuery(runner.currentRunSql, Editor.textFor(tab), scope);
+    };
+
+    /**
      * @function isPageReadRefusal
      * @description Whether a failed read of a finished run's page says nothing about the run's rows: Marketing Cloud
      * Engagement refused it with HTTP 429 after the tries Api._afterRateLimit makes (RATE_LIMITED), or it ended with a
@@ -20631,6 +21497,13 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         this.currentRunOffset = 0;
         this.messages = [];
         this.currentRunSql = '';
+        /* True when the run was of a selection that is no whole statement of the editor's text, such as a subquery, and then the keys
+         * right before and after it (setRunScope): Results' stale mark finds it between them (Tools.sameQuery). Saved with the run,
+         * so a reload judges it the same. */
+        this.currentRunIsFragment = false;
+        this.currentRunContext = null;
+        /* Whether an edit that greyed this run's rows has brought Status to the front: it does so once a run (UI.syncStaleMark). */
+        this.hasStaleShownStatus = false;
         /* Drive the run summary line (UI.renderRunSummary), independent of
          * this.tab.state.activeRun so a validation/alias failure before any Data
          * Extension exists still reports a duration, and so a stale finished
@@ -20819,6 +21692,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         this.hasRerunAsText = false;
         this.currentRunSql = sql;
         this.currentRunOffset = target.offset;
+        setRunScope(this, sql, target.offset);
         this.currentRunStartedAt = Date.now();
         this.currentRunFinishedAt = null;
         this.phaseAt = {};
@@ -22102,6 +22976,9 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         this.tab.state.activeRun = restoreEntry.activeRun;
         this.hasRunStarted = true;
         this.currentRunSql = restoreEntry.runSql || '';
+        this.currentRunIsFragment = restoreEntry.runIsFragment === true;
+        this.currentRunContext = savedRunContext(restoreEntry.runContext);
+        this.hasStaleShownStatus = false;
         this.currentRunStartedAt = restoreEntry.runStartedAt || restoreEntry.activeRun.pollStartedAt;
         this.currentRunFinishedAt = null;
         /* The calls the run made before the renewal, which its polls from here add to. A run saved by 1.1.x counts none. */
@@ -22145,6 +23022,9 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
          * has come, and a list from an earlier run of this tab, replaced by another window's results, is not the run's. */
         self._calls = null;
         self.currentRunSql = restoreEntry.runSql || '';
+        self.currentRunIsFragment = restoreEntry.runIsFragment === true;
+        self.currentRunContext = savedRunContext(restoreEntry.runContext);
+        self.hasStaleShownStatus = false;
         self.currentRunStartedAt = restoreEntry.runStartedAt || run.pollStartedAt;
         self.currentRunFinishedAt = restoreEntry.runFinishedAt || run.finishedAt;
         /* No step times for a restored run: setState('done') would stamp "done" with the restore's own
@@ -23768,6 +24648,10 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             UI.clearRunOutcome();
             if (savedError) UI.showStatusError(savedError.message, savedError.details, savedError.hasRunAnywayLink, savedError.hint);
             for (var i = 0; i < savedNotices.length; i++) UI.addStatusNotice(savedNotices[i]);
+            /* The tab's text may have changed while it was in the background (another window's save, adoptOtherWindowChanges), where no edit
+             * event ran: the lines about its query are judged on arrival. The stale mark was, in renderRunSummary above. */
+            UI.syncFormatNotice();
+            UI.syncValidateNotice();
             UI._refreshStatusEmptyState();
             /* Each query tab keeps its own Status or Results choice (org test, 2026-09-28). */
             UI.setActiveTab(incoming.state.bottomPanel || (incoming.state.results ? 'results' : 'status'));
@@ -23814,6 +24698,9 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             tab.state.statusNotices = [];
             tab.runner.messages = [];
             tab.runner.currentRunSql = '';
+            tab.runner.currentRunIsFragment = false;
+            tab.runner.currentRunContext = null;
+            tab.runner.hasStaleShownStatus = false;
             tab.runner.currentRunStartedAt = null;
             tab.runner.currentRunFinishedAt = null;
             Grid.setData(tab, null);
@@ -23951,6 +24838,8 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                         openedQuery: st.openedQuery,
                         activeRun: null,
                         runSql: loading.runSql,
+                        runIsFragment: loading.runIsFragment,
+                        runContext: loading.runContext,
                         runStartedAt: loading.runStartedAt,
                         runFinishedAt: loading.runFinishedAt,
                         runCalls: loading.runCalls,
@@ -23968,6 +24857,8 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                     openedQuery: st.openedQuery,
                     activeRun: (includeActiveRun && isPolling) ? st.activeRun : null,
                     runSql: tab.runner.currentRunSql,
+                    runIsFragment: tab.runner.currentRunIsFragment || undefined,
+                    runContext: tab.runner.currentRunContext || undefined,
                     runStartedAt: (st.runnerState === 'done' || (includeActiveRun && isPolling)) ? tab.runner.currentRunStartedAt : null,
                     runFinishedAt: st.runnerState === 'done' ? tab.runner.currentRunFinishedAt : null,
                     /* What the run's calls add up to, for its summary after a reload (see tallyRunCalls). A run whose calls are
@@ -26770,6 +27661,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         this.el.toolbar = toolbar;
         this.el.runBtn = runBtn;
         this.el.validateBtn = validateBtn;
+        this.el.formatBtn = formatBtn;
         this.el.historyBtn = historyBtn;
         this.el.openedQueryGroup = openedQueryGroup;
         this.el.saveBtn = saveBtn;
@@ -26792,10 +27684,17 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             Toast.show('Nothing to validate.', 'warning');
             return;
         };
+        /* A Run started before the answer has validated the same text and brings its own rows and Status: the answer then would put
+         * Status in front of them. */
+        var attempt = tab.runner.attempt;
+        /* What Validate checks is the text as it is now: an edit made while MCE answers is no part of it, so its acceptance line is about
+         * this text (syncValidateNotice), not the text the answer finds. */
+        var validatedText = Editor.getValue();
         /* Marketing Cloud Engagement's check of a long query can take many seconds: the button shows it. */
         self._setValidateBusy(true);
         Api.call('validateQuery', { sql: sql }).then(function (res) {
             self._setValidateBusy(false);
+            if (tab.runner.attempt !== attempt) return;
             if (tab !== QueryTabs.active()) return;
             Editor.clearServerMarkers();
             /* A Validate replaces the tab's notices, as a run does (user decision, 2026-09-28). */
@@ -26804,15 +27703,26 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             if (res.valid) {
                 Toast.show('Marketing Cloud Engagement accepted this SQL.', 'success');
                 UI.clearStatusError();
+                /* Status says so too and comes to the front, as for a failure: on Results, the last run's rows of an earlier query
+                 * read as Validate's answer (the author's RC test of 1.2.1, 2026-10-09). */
+                /* The line stays while the query is the one Validate checked (syncValidateNotice), and goes at once when it was edited
+                 * while MCE answered. */
+                state.validateAcceptedText = validatedText;
+                UI.addStatusNotice(VALIDATE_ACCEPTED_NOTICE);
+                UI.syncValidateNotice();
+                UI.setActiveTab('status');
                 if (target.offset === 0 && sql === Editor.getValue()) Editor.markServerAccepted(sql);
             } else {
                 tab.runner._markServerErrors(sql, res.errors || [], target.offset);
-                UI.showStatusError((res.errors || []).join('\n'), null, false, serverErrorHint(sql, res.errors || []));
+                /* Named as Validate's: the panel sits under the last run's summary, which a Validate leaves as it was, so the error read
+                 * as the run's (the author's JSON checks, 2026-10-09). A failed run says so in that summary itself. */
+                UI.showStatusError('Validate: ' + (res.errors || []).join('\n'), null, false, serverErrorHint(sql, res.errors || []));
                 UI.setActiveTab('status');
                 Toast.show((res.errors || [])[0] || 'Validation failed.', 'error');
             };
         }).catch(function (err) {
             self._setValidateBusy(false);
+            if (tab.runner.attempt !== attempt) return;
             Toast.show('Could not validate: ' + err.message, 'error');
         });
     };
@@ -27201,6 +28111,45 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         this._refreshStatusEmptyState();
     };
 
+    /**
+     * @method removeStatusNotice
+     * @description Takes one notice line out of the Status panel and the tab's state, where it is there.
+     * @param {string} text
+     */
+    UI.removeStatusNotice = function (text) {
+        var at = state.statusNotices.indexOf(text);
+        if (at === -1 || !this.el.statusNotices) return;
+        state.statusNotices.splice(at, 1);
+        Array.prototype.slice.call(this.el.statusNotices.children).forEach(function (line) {
+            if (line.textContent === text) line.parentNode.removeChild(line);
+        });
+        this._refreshStatusEmptyState();
+    };
+
+    /**
+     * @method showFormatDone
+     * @description Says that Format ran, whether or not it changed the query, as Validate says it is validating: the Format button reads
+     * "Formatted" for FORMAT_DONE_MS, and the Status panel keeps "Format: done." until the text changes, or the next run or Validate. It replaces the
+     * toast "Already formatted.", which the author did not find toast-worthy (the author's design for 1.2.1, 2026-10-09).
+     */
+    UI.showFormatDone = function () {
+        var self = this;
+        var btn = this.el.formatBtn;
+        var label = btn ? btn.querySelector('span') : null;
+        if (label) {
+            label.textContent = 'Formatted';
+            if (this._formatDoneTimer) global.clearTimeout(this._formatDoneTimer);
+            this._formatDoneTimer = global.setTimeout(function () {
+                self._formatDoneTimer = null;
+                label.textContent = 'Format';
+            }, FORMAT_DONE_MS);
+        };
+        this.removeStatusNotice(FORMAT_DONE_NOTICE);
+        /* What the line is about: it stays while the text is this one (syncFormatNotice). */
+        state.formatDoneText = Editor.getValue();
+        this.addStatusNotice(FORMAT_DONE_NOTICE);
+    };
+
     /* -- 13.6 bottom panel: tab row, run summary, Status/Results panels ------
      * One header row: the Status/Results tabs on the left, the run summary
      * next to them (visible on either tab), then the page filter and Export
@@ -27510,8 +28459,11 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         /* Where an export's progress is announced: a live region, kept out of sight. Only the start and each quarter are
          * written to it, so a screen reader does not read every number the button shows. */
         var exportStatus = h('span', { class: 'ss-export-status', 'aria-live': 'polite', 'aria-atomic': 'true' }, null);
+        /* "Edited since this run", between the tabs and the run summary: in the summary it was cut off with it, where the page filter
+         * and Export CSV leave the summary little room, as in a 1,024 px window with the sidebar open. */
+        var staleMark = this._buildStaleMark();
         var header = h('div', { class: 'ss-results-header' }, [
-            tabs, runSummary,
+            tabs, staleMark, runSummary,
             h('div', { class: 'ss-toolbar__spacer' }, null),
             levelSelect, fixAllBtn, fixReviewNote, clientFilter, exportCost, exportBtn, saveDeBtn, exportStatus
         ]);
@@ -27524,6 +28476,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         var pane = h('div', { class: 'ss-results-pane' }, [header, statusPanel, resultsPanel]);
 
         this.el.runSummary = runSummary;
+        this.el.staleMark = staleMark;
         this.el.fixAllBtn = fixAllBtn;
         this.el.fixReviewNote = fixReviewNote;
         this.el.levelSelect = levelSelect;
@@ -27852,6 +28805,9 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
     UI.renderRunSummary = function () {
         var el = this.el.runSummary;
         clearNode(el);
+        /* The rows of a query the editor no longer holds are greyed, and the mark beside the summary says so (syncStaleMark keeps both
+         * current as the query is edited, without drawing the summary again). */
+        this._setStaleClasses(isRunStale(QueryTabs.active()));
         var startedAt = Runner.currentRunStartedAt;
         if (!startedAt) {
             el.appendChild(document.createTextNode('Run a query to see results here.'));
@@ -27912,6 +28868,97 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             el.appendChild(document.createTextNode('Run a query to see results here.'));
         };
         this._renderTabResultsCount();
+    };
+
+    var STALE_MARK_TIP = 'These rows come from the query as it last ran. Run it again to see what the edited query returns.';
+
+    /**
+     * @method _buildStaleMark
+     * @description The results header's muted "Edited since this run", hidden until the rows on screen are no longer the editor's query,
+     * with the quick tip that says what it means (UI._wireTips). It is the header's own item, between the tabs and the run summary,
+     * and never shrinks: inside the summary it was cut off with the summary, which the page filter and Export CSV leave as little as
+     * 139 px in a 1,024 px window with the sidebar open, and which a header of 640 px or less hides (sqlstudio.css).
+     * @returns {HTMLElement}
+     */
+    UI._buildStaleMark = function () {
+        /* "since this run" is its own span, which a header with little room drops (sqlstudio.css), so the mark itself stays. */
+        return h('span', {
+            class: 'ss-stale-mark', tabindex: '0', role: 'note', 'data-tip': STALE_MARK_TIP, 'aria-label': STALE_MARK_TIP, hidden: true
+        }, [document.createTextNode('Edited'), h('span', { class: 'ss-stale-mark__more' }, ' since this run')]);
+    };
+
+    /**
+     * @method _setStaleClasses
+     * @description Shows or hides the stale mark, and puts its class on the grid, which mutes the body text, and on the run summary, which
+     * makes room for the mark in a narrow header (sqlstudio.css). The mark stays in place while it shows, so a quick tip open on it, or a
+     * hint open on the summary, stays open as the query is edited. Its tip goes with it: an element that is hidden gets no pointer event
+     * to take its tip away.
+     * @param {boolean} isStale
+     */
+    UI._setStaleClasses = function (isStale) {
+        if (this.el.gridScroll) this.el.gridScroll.classList.toggle('is-stale', isStale);
+        if (this.el.runSummary) this.el.runSummary.classList.toggle('is-stale', isStale);
+        var mark = this.el.staleMark;
+        if (!mark || mark.hidden === !isStale) return;
+        if (!isStale && this._hideTipOf) this._hideTipOf(mark);
+        mark.hidden = !isStale;
+        /* The mark moves the summary's triggers sideways: a hint open on one follows it. */
+        this._placeHint(this._hintTrigger);
+    };
+
+    /**
+     * @method syncStaleMark
+     * @description Brings the active tab's stale mark up to date after an edit: the grid's text goes muted on a soft hatch and the mark
+     * shows, or both go, with no redraw of the run summary, so a hint open on it stays open (renderRunSummary draws the whole summary, and
+     * runs on every change of the run itself). The first edit that greys a run's rows also brings Status to the front, where the lint
+     * speaks of the query as it is now: once a run, so a click back to Results stays (the author's decision on RC1 of 1.2.1, 2026-10-10).
+     * A tab that is stale when it loads or comes to the front keeps the panel it had.
+     * @param {boolean} [isFromEdit] - true from the typing pause (syncEditedState)
+     */
+    UI.syncStaleMark = function (isFromEdit) {
+        var tab = QueryTabs.active();
+        var isStale = isRunStale(tab);
+        this._setStaleClasses(isStale);
+        if (!isStale || !isFromEdit || tab.runner.hasStaleShownStatus) return;
+        tab.runner.hasStaleShownStatus = true;
+        this.setActiveTab('status');
+    };
+
+    /**
+     * @method syncValidateNotice
+     * @description Takes Validate's acceptance out of Status when the query is no longer the one Validate accepted. The text the editor held
+     * when Validate was clicked is compared as a query (Tools.sameQuery), so a Format, a comment or a change of case leaves the line, and an
+     * edit that changes the query takes it. Both ways round, as the whole text has to be the same query: sameQuery alone finds a run's
+     * statement among others, and a statement added after the one Validate accepted is SQL it did not check.
+     */
+    UI.syncValidateNotice = function () {
+        if (state.statusNotices.indexOf(VALIDATE_ACCEPTED_NOTICE) === -1) return;
+        var accepted = state.validateAcceptedText;
+        var text = Editor.getValue();
+        if (typeof accepted === 'string' && Tools.sameQuery(accepted, text) && Tools.sameQuery(text, accepted)) return;
+        this.removeStatusNotice(VALIDATE_ACCEPTED_NOTICE);
+    };
+
+    /**
+     * @method syncFormatNotice
+     * @description Takes "Format: done." out of Status when the editor's text is not the text Format left, as any change of it is a change
+     * of the layout Format is about. Compared with that text, not with the moment of the edit: the plain textarea editor tells of an
+     * edit after a pause, which can come after Format has run and said so.
+     */
+    UI.syncFormatNotice = function () {
+        if (state.statusNotices.indexOf(FORMAT_DONE_NOTICE) === -1) return;
+        if (state.formatDoneText === Editor.getValue()) return;
+        this.removeStatusNotice(FORMAT_DONE_NOTICE);
+    };
+
+    /**
+     * @method syncEditedState
+     * @description What follows the active tab's query being edited, once the typing pauses (Editor._syncSoon): the rows' stale mark, and
+     * Validate's acceptance in Status.
+     */
+    UI.syncEditedState = function () {
+        this.syncStaleMark(true);
+        this.syncValidateNotice();
     };
 
     /* Results tab label carries the row count once a run has results:
@@ -28420,6 +29467,14 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
      * title waits about a second and a half, which the author found slow for the sidebar's icons (RC8 test, 2026-10-09). */
     var TIP_DELAY_MS = 250;
 
+    /* How long the Format button reads "Formatted" after a Format, and the Status panel's line that stays until the text changes, or
+     * the next run or Validate (UI.showFormatDone, UI.syncFormatNotice). */
+    var FORMAT_DONE_MS = 2000;
+    var FORMAT_DONE_NOTICE = 'Format: done.';
+    /* The Status panel's line after a Validate that Marketing Cloud Engagement accepted, until an edit changes the query (UI.syncValidateNotice),
+     * or the next run or Validate. A Format keeps it, as it does not change the query. */
+    var VALIDATE_ACCEPTED_NOTICE = 'Validate: Marketing Cloud Engagement accepted this SQL.';
+
     /**
      * @method _wireTips
      * @description The app's own tooltip, for the elements that carry their text in data-tip in place of a title: it shows TIP_DELAY_MS
@@ -28559,6 +29614,15 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         self._refreshTip = function (el) {
             if (el === current && !tip.hidden) show(el);
         };
+        /**
+         * @method _hideTipOf
+         * @description Hides the tip when it is the one of an element that is about to leave the page, as the run summary's "Edited
+         *   since this run" does when the query matches again: no pointer event comes from an element taken away, so the tip would stay.
+         * @param {HTMLElement} el
+         */
+        self._hideTipOf = function (el) {
+            if (current && el.contains(current)) hide();
+        };
         document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') hide(); }, true);
     };
 
@@ -28678,6 +29742,22 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         clearNode(hint);
         hint.appendChild(content);
         hint.style.display = 'block';
+        this._placeHint(trigger);
+        trigger.setAttribute('aria-expanded', 'true');
+        this._hintTrigger = trigger;
+        this._hintPinned = !!isPinned;
+    };
+
+    /**
+     * @method _placeHint
+     * @description Puts the open hint under its trigger, right-aligned to stay in the frame, or above it near the bottom. It runs again when
+     * the stale mark shows or goes, which moves the run summary's triggers sideways under a pinned hint (the second review of 1.2.1,
+     * 2026-10-10).
+     * @param {HTMLElement} trigger
+     */
+    UI._placeHint = function (trigger) {
+        var hint = this._hint;
+        if (!hint || hint.style.display !== 'block' || !trigger) return;
         var rootBox = this.el.root.getBoundingClientRect();
         var box = trigger.getBoundingClientRect();
         var left = Math.max(8, Math.min(box.left - rootBox.left, rootBox.width - hint.offsetWidth - 8));
@@ -28685,9 +29765,6 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         hint.style.top = (box.bottom - rootBox.top + 6) + 'px';
         /* Too close to the bottom: open upwards. */
         if (box.bottom + 6 + hint.offsetHeight > rootBox.bottom) hint.style.top = (box.top - rootBox.top - hint.offsetHeight - 6) + 'px';
-        trigger.setAttribute('aria-expanded', 'true');
-        this._hintTrigger = trigger;
-        this._hintPinned = !!isPinned;
     };
 
     UI.hideHint = function (trigger, isPinnedToo) {
