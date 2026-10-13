@@ -135,7 +135,7 @@
     /* ----------------------------------------------------------------------- */
 
     var appName        = 'SQLStudio';
-    var appVersion      = '1.2.1';
+    var appVersion      = '1.3.0';
     // No refresh tokens: see docs/EXTENDING.md ("Refresh tokens (optional, not shipped)") for why
     // and what it would take to add one back. Sessions last about 20 minutes; the frontend's
     // expiry modal re-authenticates with one click.
@@ -3097,6 +3097,23 @@
         };
 
         /**
+         * @function readExistingTargets
+         * @description Whether Save to DE may move rows into a Data Extension that exists (1.3.0). The settings need no line for it:
+         *              without one it is on, so an update to 1.3.0 needs no new settings section. An admin adds
+         *              `var existingTargets = false;` to turn it off, as such a move writes into any Data Extension the user's token
+         *              can write at once, where a script in the user's session could already run queries and change Query
+         *              Activities (docs/DEPLOYMENT.md, step 7; the author's decision, 2026-10-10). A value that is not
+         *              true or false turns it off too, as the safer reading of a mistyped line.
+         * @returns {boolean}
+         */
+        function readExistingTargets() {
+            if (typeof existingTargets === 'undefined') {
+                return true;
+            };
+            return existingTargets === true;
+        };
+
+        /**
          * @function actionWhoami
          * @description Returns who is signed in, the Business Unit, the session's remaining seconds,
          *              whether server-side history and snippets are on, and which of SQL Studio's own Data Extensions
@@ -3168,6 +3185,7 @@
                 backendVersion: appVersion,
                 historyEnabled: (historyDE !== ''),
                 snippetsEnabled: (readSnippetsDE() !== ''),
+                existingTargetsEnabled: readExistingTargets(),
                 missingDataExtensions: missingDataExtensions
             };
             return data;
@@ -7485,19 +7503,25 @@
          *              them, in one SOAP Retrieve (1 API call). createDataExtension asks it for what the Create did
          *              not answer, and moveToDataExtension for the ObjectID and Name its target needs. Never read
          *              through WSProxy: that context reads every Data Extension of the Business Unit, whoever asks.
+         *              With isCategoryAsked it asks for the CategoryID too, which a move into an existing Data
+         *              Extension needs to find out whether the folder is a synchronized one. Without it the request
+         *              is the one the create path has always sent.
          * @param {string} token
          * @param {string} filterProperty - 'ObjectID', 'CustomerKey' or 'Name'
          * @param {string} filterValue
-         * @returns {?{objectId: ?string, key: ?string, name: ?string}} null when no Data Extension matches.
+         * @param {boolean} [isCategoryAsked] - true to read the CategoryID as well
+         * @returns {?{objectId: ?string, key: ?string, name: ?string, categoryId: ?string}} null when no Data Extension
+         *          matches. categoryId is null unless isCategoryAsked and the answer holds it.
          * @throws {Object} apiError MCE_ERROR when the Retrieve fails.
          */
-        function retrieveDataExtensionInfo(token, filterProperty, filterValue) {
+        function retrieveDataExtensionInfo(token, filterProperty, filterValue, isCategoryAsked) {
             var bodyXml = '<RetrieveRequestMsg xmlns="http://exacttarget.com/wsdl/partnerAPI">' +
                 '<RetrieveRequest>' +
                 '<ObjectType>DataExtension</ObjectType>' +
                 '<Properties>ObjectID</Properties>' +
                 '<Properties>CustomerKey</Properties>' +
                 '<Properties>Name</Properties>' +
+                (isCategoryAsked === true ? '<Properties>CategoryID</Properties>' : '') +
                 '<Filter xsi:type="SimpleFilterPart">' +
                 '<Property>' + filterProperty + '</Property>' +
                 '<SimpleOperator>equals</SimpleOperator>' +
@@ -7515,9 +7539,48 @@
             var info = {
                 objectId: xmlValue(soapRes.results[0], 'ObjectID'),
                 key: xmlValue(soapRes.results[0], 'CustomerKey'),
-                name: xmlValue(soapRes.results[0], 'Name')
+                name: xmlValue(soapRes.results[0], 'Name'),
+                categoryId: isCategoryAsked === true ? xmlValue(soapRes.results[0], 'CategoryID') : null
             };
             return info;
+        };
+
+        /**
+         * @function readDataFolderContentType
+         * @description Reads the content type of one folder with the user's token, in one SOAP Retrieve of the
+         *              DataFolder by its ID (1 API call). A move into an existing Data Extension asks it for the folder
+         *              of its target, since a Data Extension in a folder of content type synchronizeddataextension is
+         *              synchronized from Salesforce and read-only.
+         * @param {string} token
+         * @param {string} folderId - the folder's ID, as the target read answered it
+         * @returns {?string} the content type, or null when the answer holds no folder or no content type
+         * @throws {Object} apiError MCE_ERROR when the Retrieve fails.
+         */
+        function readDataFolderContentType(token, folderId) {
+            var bodyXml = '<RetrieveRequestMsg xmlns="http://exacttarget.com/wsdl/partnerAPI">' +
+                '<RetrieveRequest>' +
+                '<ObjectType>DataFolder</ObjectType>' +
+                '<Properties>ID</Properties>' +
+                '<Properties>ContentType</Properties>' +
+                '<Filter xsi:type="SimpleFilterPart">' +
+                '<Property>ID</Property>' +
+                '<SimpleOperator>equals</SimpleOperator>' +
+                '<Value>' + xmlEscape(folderId) + '</Value>' +
+                '</Filter>' +
+                '</RetrieveRequest>' +
+                '</RetrieveRequestMsg>';
+            var soapRes = soap('Retrieve', bodyXml, token);
+            if (!soapRes.ok) {
+                throw sfmcErrorFromSoap(soapRes);
+            };
+            if (soapRes.results.length === 0) {
+                return null;
+            };
+            var contentType = xmlValue(soapRes.results[0], 'ContentType');
+            if (contentType === null || contentType === '') {
+                return null;
+            };
+            return contentType;
         };
 
         /**
@@ -7732,29 +7795,52 @@
 
         /**
          * @function actionMoveToDataExtension
-         * @description Moves rows into a Data Extension the user set up (createDataExtension): it points the slot's own
-         *              Query Activity, the one the tab's runs use (found as runQuery finds it: the id the app sent
-         *              once its key is this user's key for the slot, else SOAP Retrieve by key, or WSProxy first with
-         *              the inBackendBu hint), at the new SQL and the target with Overwrite, and starts it with the
-         *              user's token (startQueryActivity). It never touches a Query Activity outside the pool, and
-         *              never makes a temporary Data Extension. The SQL is either `SELECT [a], [b] AS [c] FROM [deKey]`
-         *              from a run's own temporary Data Extension, without the row mark column, or the user's SQL as given.
-         *              The target is read once with the user's token (1 API call), for the ObjectID and Name the
-         *              activity's target needs, and a missing one is NOT_FOUND. The target must not be a temporary
-         *              Data Extension of SQL Studio, so a move can never overwrite a run's results, nor one of SQL
-         *              Studio's own Data Extensions, and it must carry the targetSig createDataExtension answered for
-         *              its key and this user (isSaveTargetSignatureOk), else BAD_REQUEST before any call. A target whose
-         *              name, as the read answers it, is one of SQL Studio's own is BAD_REQUEST too, before the activity is
-         *              touched. A slot whose activity is still running is RUN_IN_PROGRESS. The activity is created, as
-         *              runQuery creates it, when the slot has none. A start whose answer cannot be read (startQueryActivity
-         *              marks it isStartUnclear) is START_UNCONFIRMED, not MCE_ERROR: the move may have started, and the
-         *              Frontend says it could not confirm the move instead of saying the rows were not moved. The answer
-         *              carries what runQuery answers for the same follow-up: the Frontend follows the move with
-         *              getRunStatus and taskOnly.
+         * @description Moves rows into a Data Extension: it points the slot's own Query Activity, the one the tab's runs
+         *              use (found as runQuery finds it: the id the app sent once its key is this user's key for the
+         *              slot, else SOAP Retrieve by key, or WSProxy first with the inBackendBu hint), at the new SQL and
+         *              the target, and starts it with the user's token (startQueryActivity). It never touches a Query
+         *              Activity outside the pool, and never makes a temporary Data Extension. The SQL is either
+         *              `SELECT [a], [b] AS [c] FROM [deKey]` from a run's own temporary Data Extension, without the row
+         *              mark column and with the columns the payload names, or the user's SQL as given. The target is read
+         *              once with the user's token (1 API call), for the ObjectID and Name the activity's target needs, and
+         *              a missing one is NOT_FOUND.
+         *
+         *              There are two kinds of target, told apart by the payload alone. The first is 1.2.0's, unchanged.
+         *              - A Data Extension that createDataExtension made (the payload has a targetSig). The move is
+         *                Overwrite, and the targetSig must be the one createDataExtension answered for its key and this
+         *                user (isSaveTargetSignatureOk), else BAD_REQUEST before any call. It binds the key to the user who
+         *                made it, so a crafted payload cannot empty a Data Extension the token can write.
+         *              - An existing Data Extension (no targetSig, and an updateType of Append, Update or Overwrite: 1.3.0,
+         *                the author's decision of 2026-10-10). It has no signature by design, as the user picks it from a
+         *                list. The guards are these, each BAD_REQUEST. The key is no temporary Data Extension of any user and
+         *                none of SQL Studio's own, checked by key before any call, and again by the key and the name the target
+         *                read answers. The payload carries targetName, the name the user saw and chose, and the name the target
+         *                read answers is the same: a list that went stale (a Data Extension renamed, or deleted and made again
+         *                under the key) cannot move rows into another one than the user chose. When the payload carries
+         *                targetObjectId, the ObjectID the list gave, the read answers that one too, so a Data Extension made
+         *                again under the same key and name, or a child's own that shares both with a parent's shared one, is
+         *                refused. The name the read answers is none of SQL Studio's own either, checked before the
+         *                activity is touched. An Overwrite carries confirmOverwrite true, which only the Frontend's Overwrite
+         *                question sends. The target's folder is no synchronized one (content type
+         *                synchronizeddataextension, read-only), which costs one more API call, and a folder that cannot be
+         *                read refuses the move. The user's own token makes the change, so Marketing Cloud Engagement's
+         *                permissions decide whether the user may write the target: the action grants nothing the token lacks.
+         *                What no check can stop is a crafted request in the user's own session that names a Data Extension
+         *                they may write, as nothing tells it from the user's click. That is why Overwrite never happens by
+         *                default and needs the flag.
+         *
+         *              A slot whose activity is still running is RUN_IN_PROGRESS. The activity is created, as runQuery
+         *              creates it, when the slot has none. A start whose answer cannot be read (startQueryActivity marks it
+         *              isStartUnclear) is START_UNCONFIRMED, not MCE_ERROR: the move may have started, and the Frontend says
+         *              it could not confirm the move instead of saying the rows were not moved. The answer carries what
+         *              runQuery answers for the same follow-up: the Frontend follows the move with getRunStatus and
+         *              taskOnly.
          * @param {Object} payload - { slot, targetKey, targetSig, from: { deKey, columns } } or { slot, targetKey, targetSig,
-         *        sql }, and optionally queryId (the app's cached id for the slot), queryFolderId and inBackendBu, as runQuery
-         *        takes them. Exactly one of from and sql. A column of from is a name, written `[name]`, or an object
-         *        { name, as } for a field the user renamed, written `[name] AS [as]`.
+         *        sql } for a Data Extension createDataExtension made, and { slot, targetKey, targetName, targetObjectId?,
+         *        updateType, confirmOverwrite?, from or sql } for an existing one, with optionally queryId (the app's cached id for the
+         *        slot), queryFolderId and inBackendBu, as runQuery takes them. Exactly one of from and sql. A column of from
+         *        is a name, written `[name]`, or an object { name, as } for a field the user renamed or matched to another
+         *        field, written `[name] AS [as]`. A column of the run that the list leaves out is not read.
          * @param {Object} authRow
          * @returns {{queryId: string, slot: number, targetKey: string, taskId: ?string, taskSig: ?string,
          *           startMethod: string, startResponse: string}} taskSig binds taskId to this user, as runQuery's does.
@@ -7770,9 +7856,43 @@
                 throw apiError('BAD_REQUEST', 'SQL Studio\'s own Data Extensions cannot be the target of a move.', null);
             };
             var userHash = computeUserHash(authRow);
-            /* Only a Data Extension this user made with createDataExtension: its answer signed the key. */
-            if (!isSaveTargetSignatureOk(targetKey, payload.targetSig, userHash)) {
-                throw apiError('BAD_REQUEST', 'Field "targetSig" must be the one createDataExtension answered for this Data Extension.', null);
+            /* A payload with a targetSig is a created target's move, checked exactly as in 1.2.0. One without is an existing
+            target's move, and only when it says how to write (updateType): any other payload without a targetSig keeps 1.2.0's
+            refusal. */
+            var isExisting = !isGiven(payload.targetSig) && isGiven(payload.updateType);
+            if (isExisting && !readExistingTargets()) {
+                throw apiError('BAD_REQUEST', 'Saving into an existing Data Extension is turned off in SQL Studio\'s settings (existingTargets).', null);
+            };
+            var updateType = 'Overwrite';
+            var wantedName = null;
+            var wantedObjectId = null;
+            if (isExisting) {
+                updateType = payload.updateType;
+                if (updateType !== 'Overwrite' && updateType !== 'Update' && updateType !== 'Append') {
+                    throw apiError('BAD_REQUEST', 'Field "updateType" must be one of Overwrite, Update, Append.', null);
+                };
+                wantedName = requireLabel(payload.targetName, 'targetName', 128);
+                /* The ObjectID of the Data Extension the user chose, when the list knew it: a key names one Data Extension in a
+                Business Unit only, so a child's own Data Extension may share the key, and the name, of the parent's shared one the
+                user chose (review of 1.3.0, 2026-10-10). */
+                if (isGiven(payload.targetObjectId)) {
+                    wantedObjectId = requireGuid(payload.targetObjectId, 'targetObjectId');
+                };
+                /* Overwrite deletes every row the target holds. The Frontend asks the user first, with the row count, and only
+                then sends the flag, so a payload that was never confirmed cannot overwrite. */
+                var isOverwriteConfirmed = readOptionalBoolean(payload.confirmOverwrite, 'confirmOverwrite', false);
+                if (updateType === 'Overwrite' && isOverwriteConfirmed !== true) {
+                    throw apiError('BAD_REQUEST', 'Field "confirmOverwrite" must be true to overwrite an existing Data Extension: Overwrite deletes every row it holds.', null);
+                };
+            } else {
+                /* A created target is only ever filled with Overwrite, as 1.2.0 moved it. */
+                if (isGiven(payload.updateType) && payload.updateType !== 'Overwrite') {
+                    throw apiError('BAD_REQUEST', 'A Data Extension createDataExtension made is moved into with Overwrite only.', null);
+                };
+                /* Only a Data Extension this user made with createDataExtension: its answer signed the key. */
+                if (!isSaveTargetSignatureOk(targetKey, payload.targetSig, userHash)) {
+                    throw apiError('BAD_REQUEST', 'Field "targetSig" must be the one createDataExtension answered for this Data Extension.', null);
+                };
             };
 
             var hasFrom = isGiven(payload.from);
@@ -7818,7 +7938,7 @@
             var isBackendBu = (payload.inBackendBu === true);
 
             /* The target first: a Data Extension that is gone is the likelier failure, and it costs the least. */
-            var target = retrieveDataExtensionInfo(authRow.token, 'CustomerKey', targetKey);
+            var target = retrieveDataExtensionInfo(authRow.token, 'CustomerKey', targetKey, isExisting);
             if (target === null || !target.objectId) {
                 throw apiError('NOT_FOUND', 'The Data Extension "' + targetKey + '" was not found.', null);
             };
@@ -7826,6 +7946,42 @@
             Data Extension renamed to one of theirs in Contact Builder would be read in their place. */
             if (target.name && isAppDataExtension(target.name)) {
                 throw apiError('BAD_REQUEST', 'SQL Studio\'s own Data Extensions cannot be the target of a move.', null);
+            };
+            if (isExisting) {
+                /* The read's own answer, which is what the activity writes into, as the plan's third guard has it: its key and its
+                name are no run's temporary Data Extension, and its key is none of SQL Studio's own. The payload's key was checked
+                before any call, but the Retrieve's filter compares keys as Marketing Cloud Engagement does, not as these checks
+                do (review of 1.3.0, 2026-10-10). */
+                if (isTempDeKey(target.key) || isTempDeKey(target.name)) {
+                    throw apiError('BAD_REQUEST', 'A temporary Data Extension of SQL Studio cannot be the target of a move.', null);
+                };
+                if (target.key && isAppDataExtension(target.key)) {
+                    throw apiError('BAD_REQUEST', 'SQL Studio\'s own Data Extensions cannot be the target of a move.', null);
+                };
+                /* The user chose it by name, from a list that may be a day old. A Data Extension that is named otherwise now
+                is another one than the user saw, and the Overwrite question named the old one. Compared without regard to
+                case, as Marketing Cloud Engagement matches names. */
+                var readName = (target.name === null) ? '' : trimString(target.name);
+                if (readName.toLowerCase() !== wantedName.toLowerCase()) {
+                    throw apiError('BAD_REQUEST', 'The Data Extension with the key "' + targetKey + '" is named "' + readName + '" in Marketing Cloud Engagement now, not "' + wantedName + '". Nothing was changed. Reload the list of Data Extensions and choose it again.', null);
+                };
+                /* Same key and same name, and still another Data Extension: one made again under the key, or a child's own that
+                shares both with the parent's shared one the user chose. */
+                if (wantedObjectId !== null && String(target.objectId).toLowerCase() !== wantedObjectId.toLowerCase()) {
+                    throw apiError('BAD_REQUEST', 'The Data Extension with the key "' + targetKey + '" that Marketing Cloud Engagement finds now is not the one you chose: it was made again, or another Data Extension has the same key and name. Nothing was changed. Reload the list of Data Extensions and choose it again.', null);
+                };
+                /* A synchronized Data Extension is filled from Salesforce and read-only. Its folder tells: one more read,
+                and a folder that cannot be read refuses the move, as nothing then says the target is no synchronized one. */
+                var folderType = null;
+                if (target.categoryId !== null && target.categoryId !== '') {
+                    folderType = readDataFolderContentType(authRow.token, target.categoryId);
+                };
+                if (folderType === null) {
+                    throw apiError('MCE_ERROR', 'SQL Studio could not read the folder of the Data Extension "' + readName + '", so it cannot tell whether it is a synchronized one, which a move never writes into. Nothing was changed.', null);
+                };
+                if (PARENT_FOLDER_KINDS.hasOwnProperty(folderType) && PARENT_FOLDER_KINDS[folderType] === 'synchronized') {
+                    throw apiError('BAD_REQUEST', 'The Data Extension "' + readName + '" is synchronized from Salesforce, which is read-only, so a move cannot write into it.', null);
+                };
             };
 
             /* The slot's own activity, as runQuery resolves it: a cached id counts only once its key is this
@@ -7845,8 +8001,8 @@
                 targetName: target.name || targetKey,
                 targetKey: target.key || targetKey,
                 targetId: target.objectId,
-                targetUpdateTypeId: updateTypeIdFromName('Overwrite'),
-                targetUpdateTypeName: 'Overwrite'
+                targetUpdateTypeId: updateTypeIdFromName(updateType),
+                targetUpdateTypeName: updateType
             };
             if (queryFolderId !== null) {
                 activityBody.categoryId = queryFolderId;

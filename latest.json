@@ -1,13 +1,24 @@
 {
-  "version": "1.2.0",
-  "date": "2026-10-09",
+  "version": "1.3.0",
+  "date": "2026-10-13",
   "highlights": [
-    "This release is driven by feedback from Scott and Greg. Thank you both! Send yours to sqlstudio_feedback@mateuszdabrowski.pl.",
-    "You can now use Save to DE to keep a run's results in a new Data Extension, with the field types, retention and send relationship you choose.",
-    "Shared snippets: save a piece of SQL once, and everyone who uses SQL Studio in the Business Unit can insert it.",
-    "Autocomplete keeps what you type, so SELECT ID stays ID. And a new Join to the query icon, on each table in the sidebar, writes that table's whole join into your query.",
-    "Data Extensions load in the sidebar up to four times faster, even if you have thousands of them. If you still see a timeout there, it's a call for an instance clean-up ;)"
+    "Save to an existing Data Extension: Save to DE now adds to, updates or replaces the rows of one you already have. For a new one, it picks the right field types more often and starts in the folder you saved into last.",
+    "Massive lint improvements: it catches more of what Marketing Cloud Engagement refuses before you click Run, such as tables separated by commas, a window function in WHERE and newer SQL Server functions, mostly with a one-click fix. Valid SQL such as GROUPING SETS no longer gets a false error.",
+    "Several queries in one tab: keep the queries you run one after another together in a single tab, for a quicker comparison. Select one and Run sends just that query, while Format applies my style guide to all of them at once.",
+    "UI improvements across the board: every list works from the keyboard, Open keeps its list for the session, Validate and Format say what they did in Status, and results grey out when you edit the query after a run.",
+    "New Claude skill: SF MCE SQL gives Claude SQL Studio's lint, fixes and Format, the Data Views and my style guide. Get it from Help > Write SQL with Claude, or from mateuszdabrowski.pl/sql-studio."
+  ],
+  "highlightLeads": [
+    "Save to an existing Data Extension:",
+    "Massive lint improvements:",
+    "Several queries in one tab:",
+    "UI improvements across the board:",
+    "New Claude skill:"
   ],
   "updateGuide": "https://github.com/MateuszDabrowski/sqlstudio/blob/main/docs/DEPLOYMENT.md#8-updating",
-  "changelog": "https://github.com/MateuszDabrowski/sqlstudio/blob/main/CHANGELOG.md"
+  "changelog": "https://github.com/MateuszDabrowski/sqlstudio/blob/main/CHANGELOG.md",
+  "skill": {
+    "version": "1.3.0",
+    "download": "https://github.com/MateuszDabrowski/sqlstudio/raw/main/skill/sf-mce-sql.skill"
+  }
 }

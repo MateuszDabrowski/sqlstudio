@@ -6,6 +6,8 @@ The [SQL Studio page](https://mateuszdabrowski.pl/sql-studio) explains what each
 
 **Publish nothing until step 4.** Each piece is published once, with its code and its settings already in place. A piece published earlier, for example with empty settings, can keep answering with that first version for a few minutes after you publish the finished one, and a sign-in against it fails. So step 2 only creates the pieces, to get their URLs, and step 4 publishes them.
 
+**Install it in the parent Business Unit.** Create the pieces of steps 2 and 3 in the parent (Enterprise) Business Unit, also when your team works in one child BU and the parent is an empty shell. One deployment there serves every child BU you grant on the Installed Package's Access tab (step 6). Only there can SQL Studio list the parent's shared and synchronized Data Extensions, such as `Account_Salesforce` from Marketing Cloud Connect, with their fields for completion. Installed in a child BU, it sees only that BU's own Data Extensions, and queries on the parent's `ENT.` names still run without help from the sidebar or completion (a user's deployment, 2026-10-12).
+
 ## 1. Get the code
 
 Download the release as one ZIP file, [sqlstudio-main.zip](https://github.com/MateuszDabrowski/sqlstudio/archive/refs/heads/main.zip), and unpack it. The three files you need are in its `src` folder. You fill in their settings in steps 2 and 3, and paste them into MCE in step 4.
@@ -28,7 +30,7 @@ To check that you have the right files, look at their first lines:
 |---|---|
 | `sql-studio-backend.html` | `<script runat="server">` |
 | `sql-studio.html` | `<script runat="server">` |
-| `sql-studio-frontend.min.js` | `/* SQL Studio 1.1.0 - SQL Studio Frontend, ...`, with the release's version |
+| `sql-studio-frontend.min.js` | `/* SQL Studio`, then the release's version and `- SQL Studio Frontend` |
 
 ## 2. Create the pieces, without publishing
 
@@ -177,11 +179,11 @@ If a check fails, see the troubleshooting table below.
 
 One deployment in the parent Business Unit serves its child BUs too. A user opens SQL Studio from the child BU, and every query runs there with their own login and permissions. Grant the child BUs on the Installed Package's Access tab (step 3).
 
-**Shared Data Extensions.** With SQL Studio installed in the parent, a child BU user sees the parent's shared and synchronized Data Extensions in the sidebar's folder tree, in folders with the parent's own names, such as "Shared Items" and "Synchronized Data Extensions", with a SHARED or SYNCED badge on each. A search lists them in a group called "Parent BU", with each folder path under the name. Completion and inserts add the `ENT.` prefix for them, which MCE needs when a child BU queries its parent. With SQL Studio installed in a child BU instead, the sidebar lists only that BU's own Data Extensions.
+**Shared Data Extensions.** With SQL Studio installed in the parent, a child BU user sees the parent's shared and synchronized Data Extensions in the sidebar's folder tree, in folders with the parent's own names, such as "Shared Items" and "Synchronized Data Extensions", with a SHARED or SYNCED badge on each. A search lists them in a group called "Parent BU", with each folder path under the name. Completion and inserts add the `ENT.` prefix for them, which MCE needs when a child BU queries its parent. With SQL Studio installed in a child BU instead, the sidebar lists only that BU's own Data Extensions, and the parent's have no fields for completion. Queries on their `ENT.` names still run. Since 1.3.0, the sidebar says so in that case, at the top of its Data Extensions.
 
 The list shows every shared Data Extension of the parent. It cannot tell which ones are shared with the child BU. If a user picks one that is not shared with their BU, MCE's own error says so when the query runs.
 
-**API calls.** It costs more API calls in a child BU, by design. SQL Studio reads a run's row count and its first 2,000 rows without an API call only in the Business Unit that holds the Backend. In that Business Unit, the Backend also checks a run's status, looks up SQL Studio's own Query Activity, cleans up old temporary Data Extensions and reads the rows for Export CSV through WSProxy. SQL Studio counts these calls as API calls too, and a run's breakdown lists them apart. A child BU session still uses the user's own login for those steps and for reading results, so each of them is an API call. In a test with 1.0.0, a run cost about 15 API calls from a child BU instead of about 10 in the parent. To avoid that for a child BU that runs many queries, deploy SQL Studio again inside that BU, with its own Installed Package, and give its users that one.
+**API calls.** It costs more API calls in a child BU, by design. SQL Studio reads a run's row count and its first 2,000 rows without an API call only in the Business Unit that holds the Backend. In that Business Unit, the Backend also checks a run's status, looks up SQL Studio's own Query Activity, cleans up old temporary Data Extensions and reads the rows for Export CSV through WSProxy. SQL Studio counts these calls as API calls too, and a run's breakdown lists them apart. A child BU session still uses the user's own login for those steps and for reading results, so each of them is an API call. In a test with 1.0.0, a run cost about 15 API calls from a child BU instead of about 10 in the parent. To avoid that for a child BU that runs many queries, deploy SQL Studio again inside that BU, with its own Installed Package, and give its users that one. That deployment cannot list the parent's shared and synchronized Data Extensions, so choose it only for a BU that does not read them, and keep the one in the parent for the others.
 
 SQL Studio does not read a child BU's temporary Data Extensions from the parent. The Backend never switches into another Business Unit, so everything that creates, changes or starts something in a child BU runs with the user's own login.
 
@@ -296,6 +298,25 @@ var snippetsDE = 'TeamSnippets';
 
 Leave the `sql` length blank if you create the Data Extension yourself, so long snippets fit. If a Data Extension of that name exists with a field missing, SQL Studio says which field and does not create another: add the field as Text in Contact Builder, or delete the Data Extension, and SQL Studio creates it again with the next save.
 
+### Saving into existing Data Extensions (on by default)
+
+Since 1.3.0, Save to DE can also move a run's rows into a Data Extension that already exists, with Append, Update or Overwrite. The move uses the user's own login, so it writes only into Data Extensions the user can write in Contact Builder. SQL Studio never writes into its own Data Extensions, its temporary ones or synchronized ones.
+
+Weigh one risk before you leave it on. Another Cloud Page published on the same domain as SQL Studio may be able to sign in to SQL Studio as a user who opens that page while signed in to Marketing Cloud Engagement. A script on such a page could already run queries with that user's access. With this feature on, it could also change or delete, at once, the rows of any Data Extension that user can write. If people outside your team can publish Cloud Pages in this account, or your landing pages load scripts you do not control, consider turning the feature off.
+
+To turn it off, add one line to the Backend's settings:
+
+1. Open "SQL Studio Backend" in Web Studio, the Code Resource you pasted the Backend into.
+2. Find the line that starts `var debugging = false;`, the last line of the settings, above the `APP CODE` line. Click at its end and press Enter to start a new line. If you added a `snippetsDE` line there, click at the end of that line instead.
+3. Type or paste the line below, with a `;` at the end.
+4. Publish the Backend again, wait about five minutes, and do a hard refresh of SQL Studio. Save to DE then offers only a new Data Extension, as in 1.2.
+
+```js
+var existingTargets = false;
+```
+
+To turn it on again, delete the line and publish the Backend again.
+
 ### What SQL Studio stores and who can read it
 
 - **AuthLog**: the SHA256 of each session id, an access token valid for about 20 minutes and stored encrypted, and the signed-in user's id, name and e-mail. Any user with Data Extension access in the Business Unit can read it, but not use it: the hash does not open a session, and the token is unreadable without the client secret. Keep the 1-day retention anyway, which limits how long the row exists.
@@ -314,7 +335,7 @@ Update the Code Resources first and the Cloud Page last, for the same reason as 
 
 A release that needs new settings raises `configVersion`, and the CHANGELOG says so. Until you update the settings, the Backend and the Cloud Page each show a message that their `1. CONFIGURATION` section is from an older release. Copy the new settings section from the release file, fill in your values again, and publish.
 
-If you added a `snippetsDE` line to the Backend's settings in step 7, carry it over when you copy a new settings section. The release file never has that line, so the new section comes without it. Without it, snippets come back on under the default name: the Snippets section shows again where you had turned it off, and where you had named your own Data Extension, SQL Studio starts a new, empty `SQLStudioSnippets` instead. To carry it over:
+If you added a `snippetsDE` or an `existingTargets` line to the Backend's settings in step 7, carry it over when you copy a new settings section. The steps below name `snippetsDE`, and an `existingTargets` line is carried over the same way: without it, saving into existing Data Extensions comes back on. The release file never has that line, so the new section comes without it. Without it, snippets come back on under the default name: the Snippets section shows again where you had turned it off, and where you had named your own Data Extension, SQL Studio starts a new, empty `SQLStudioSnippets` instead. To carry it over:
 
 1. Before you paste anything, open "SQL Studio Backend" in Web Studio.
 2. Find the line that starts `var snippetsDE`. Step 7 put it right below `var debugging = false;`, the last setting, just above the `APP CODE` line.
