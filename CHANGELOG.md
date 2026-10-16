@@ -2,6 +2,12 @@
 
 All notable changes to SQL Studio are documented in this file.
 
+## 1.4.1 - 2026-10-16
+
+A data model of three tables or more now asks Diagramforce to offer its Auto Layout when it opens. Only the Frontend's code changes. The Backend and the Cloud Page change only their version number, so pasting the Frontend alone is enough.
+
+- **Document, a data model in Diagramforce's Auto Layout:** a data model of three tables or more carries Diagramforce's `suggestAutoLayout`. Diagramforce opens it as SQL Studio laid it out, four tables to a row, and offers Auto Layout once, with Auto Layout and Keep as is. It never moves a table on its own. For a table joined to several others, Auto Layout puts it in the middle with the joined tables on each side. A data model of one or two tables gets no prompt, as its single row cannot be improved, and neither does a lineage, which its zones already lay out. A Diagramforce version without the feature opens the diagram as before.
+
 ## 1.4.0 - 2026-10-16
 
 1.4.0 documents a query: Document opens it in Diagramforce as a data model of its tables and joins, or as lineage from its source fields to its target Data Extension. Its lint now rests on tests run on Marketing Cloud Engagement itself, and Save stops on lint errors, as Run does.

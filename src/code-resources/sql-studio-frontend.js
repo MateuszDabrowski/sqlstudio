@@ -1,11 +1,11 @@
-/* SQL Studio 1.4.0 - SQL Studio Frontend, the readable copy with its comments. Paste sql-studio-frontend.min.js instead: it is the same code, and Marketing Cloud Engagement served it in 2 s, against 18 s for this file, on the author's org. */
+/* SQL Studio 1.4.1 - SQL Studio Frontend, the readable copy with its comments. Paste sql-studio-frontend.min.js instead: it is the same code, and Marketing Cloud Engagement served it in 2 s, against 18 s for this file, on the author's org. */
 /* Copyright (c) 2026 Mateusz Dąbrowski. Free to use, change and share, commercial use included, as long as this notice stays. Licensed under the EUPL 1.2: https://github.com/MateuszDabrowski/sqlstudio/blob/main/LICENSE */
 /* Includes Salesforce Lightning Design System icons, unchanged: © Salesforce, Inc., CC BY-ND 4.0, https://creativecommons.org/licenses/by-nd/4.0/ */
 /* Contents (line numbers are where each part starts in this finished file):
      1. SQL data: Data Views, functions and keywords - line 10
      2. SQL tools: lint rules, formatter and parser - line 1217
-     3. Styles - line 30628
-     4. The interface: editor, tabs, results, dialogs and runs - line 30632
+     3. Styles - line 30636
+     4. The interface: editor, tabs, results, dialogs and runs - line 30640
 */
 /* ================================================ sqlstudio-sql-data.js == */
 /*
@@ -29141,6 +29141,8 @@ window.SQLStudioSQL = {
     less), the Data Mapping card 260 in a 356 zone on a 556 pitch, the card inset and the gap between cards 48 and 36, and a card is 32 + 22
     for each field (at least one) + 18 high. */
     var DIAGRAM_APP_VERSION = '1.25.9';
+    /* The number of tables from which a data model asks Diagramforce to offer Auto Layout (diagramDataModel). */
+    var DIAGRAM_SUGGEST_LAYOUT_TABLES = 3;
     /* The header colours, all from the spec's both-themes palette (each reads at 3:1 or more on the light and the dark canvas): blue for a
     System Data View, orange for a Data Extension, amber for the query, and the neutral for a relationship line. The Sources, Query and Target
     zones take blue, amber and green, the colours of the Source, Data Lake Object and Activation layers. */
@@ -30119,7 +30121,7 @@ window.SQLStudioSQL = {
 
     /**
      * @function diagramDataModel
-     * @description Builds the datamodel diagram of an analysed query: one card for each table, the FROM table first at the left and the joined ones to its right in the order the query reads them, four to a row, and a field-to-field relationship line for each column pair of the joins, drawn from the ONE end to the MANY end. The MANY end's field is a foreign key.
+     * @description Builds the datamodel diagram of an analysed query: one card for each table, the FROM table first at the left and the joined ones to its right in the order the query reads them, four to a row, and a field-to-field relationship line for each column pair of the joins, drawn from the ONE end to the MANY end. The MANY end's field is a foreign key. With three tables or more it asks Diagramforce to offer Auto Layout (suggestAutoLayout), as the grid is a rough layout there.
      * @param {Object} model - The analysis of the query.
      * @param {boolean} isAll - True for every field the schema knows of each table.
      * @param {string} title - The diagram's title.
@@ -30176,13 +30178,19 @@ window.SQLStudioSQL = {
         var cells = cards.map(function (card) {
             return diagramObjectCell(card.id, card.rec.name, card.rec.kind === 'dataview' ? DIAGRAM_COLORS.dataView : DIAGRAM_COLORS.dataExtension, card.cells, g.modelWidth, card.x, card.y);
         });
-        return {
+        var diagram = {
             version: 1,
             appVersion: DIAGRAM_APP_VERSION,
             title: title,
-            diagramType: 'datamodel',
-            graph: { cells: cells.concat(links) }
+            diagramType: 'datamodel'
         };
+        /* The grid is a rough layout once a join can pass a card: Diagramforce then offers its Auto Layout, the hub layout for a table
+         * joined to several, and never moves a card on its own (Diagramforce's request, 2026-10-16, DIAGRAM_JSON_SPEC.md). One or two
+         * tables stand in one row with at most one join between neighbours, which Auto Layout cannot improve, so they get no prompt. A
+         * lineage is laid out by its zones and never asks. */
+        if (cards.length >= DIAGRAM_SUGGEST_LAYOUT_TABLES) diagram.suggestAutoLayout = true;
+        diagram.graph = { cells: cells.concat(links) };
+        return diagram;
     };
 
     /**
@@ -31010,7 +31018,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
     run's rows end it as soon as they appear. After it the run asks isrunning, as a run without a task ID does. */
     var TASK_ROW_WAIT_MS = 5 * 60 * 1000;
     /* The app's own version: a build test keeps it equal to the Backend's appVersion. */
-    var APP_VERSION = '1.4.0';
+    var APP_VERSION = '1.4.1';
     /* The public repository's release manifest, written at each release. Checked once a day. */
     var UPDATE_CHECK_URL = 'https://raw.githubusercontent.com/MateuszDabrowski/sqlstudio/main/latest.json';
     var UPDATE_CHECK_EVERY_MS = 24 * 60 * 60 * 1000;
