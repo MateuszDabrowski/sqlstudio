@@ -135,7 +135,7 @@
     /* ----------------------------------------------------------------------- */
 
     var appName        = 'SQLStudio';
-    var appVersion      = '1.3.0';
+    var appVersion      = '1.4.0';
     // No refresh tokens: see docs/EXTENDING.md ("Refresh tokens (optional, not shipped)") for why
     // and what it would take to add one back. Sessions last about 20 minutes; the frontend's
     // expiry modal re-authenticates with one click.
@@ -999,6 +999,44 @@
             throw apiError('BAD_REQUEST', 'Field "' + fieldName + '" must be ' + bound + ' characters.', null);
         };
         return value;
+    };
+
+    /* The characters a text of a row can hold that break the JSON answer or the browser's reading of it: the control
+    characters below U+0020 but tab, line feed and carriage return, and the halves of a surrogate pair. */
+    var JSON_UNSAFE_TEXT = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uD800-\uDFFF]/;
+
+    /**
+     * @function jsonSafeValue
+     * @description Makes a value of a result row safe to answer as JSON: in a text, each control character below
+     *              U+0020 other than tab, line feed and carriage return, and each half of a surrogate pair with no
+     *              other half, becomes U+FFFD. A binary column, as @@DBTS, reaches its Text field as raw bytes, and
+     *              its zero bytes stopped the row from loading: "The backend did not answer with JSON" (the author's
+     *              org, 2026-10-14). A whole surrogate pair, a number, a boolean and null pass as they are. Every read
+     *              path that answers rows calls it: the free read, the REST rowset and the WSProxy export.
+     * @param {*} value
+     * @returns {*} the value, a text with the unsafe characters replaced
+     */
+    function jsonSafeValue(value) {
+        if (typeof value !== 'string' || !JSON_UNSAFE_TEXT.test(value)) {
+            return value;
+        };
+        var parts = [];
+        for (var i = 0; i < value.length; i++) {
+            var unit = value.charCodeAt(i);
+            var isControl = unit < 32 && unit !== 9 && unit !== 10 && unit !== 13;
+            var isHigh = unit >= 55296 && unit <= 56319;
+            var isLow = unit >= 56320 && unit <= 57343;
+            var nextCode = (i + 1 < value.length) ? value.charCodeAt(i + 1) : 0;
+            if (isHigh && nextCode >= 56320 && nextCode <= 57343) {
+                parts.push(value.charAt(i) + value.charAt(i + 1));
+                i++;
+            } else if (isControl || isHigh || isLow) {
+                parts.push('\uFFFD');
+            } else {
+                parts.push(value.charAt(i));
+            };
+        };
+        return parts.join('');
     };
 
     /**
@@ -5656,7 +5694,7 @@
                 var rowValues = [];
                 for (var c = 0; c < columns.length; c++) {
                     var value = marked[i][columns[c]];
-                    rowValues.push((value === null || value === undefined) ? null : String(value));
+                    rowValues.push((value === null || value === undefined) ? null : jsonSafeValue(String(value)));
                 };
                 rows.push(rowValues);
             };
@@ -6750,7 +6788,7 @@
                     if (value === undefined) {
                         value = null;
                     };
-                    rowValues.push(value);
+                    rowValues.push(jsonSafeValue(value));
                 };
                 rows.push(rowValues);
             };
@@ -6873,7 +6911,7 @@
                 };
                 var rowValues = [];
                 for (var oc = 0; oc < lowerColumns.length; oc++) {
-                    rowValues.push(lowerValues.hasOwnProperty(lowerColumns[oc]) ? lowerValues[lowerColumns[oc]] : null);
+                    rowValues.push(lowerValues.hasOwnProperty(lowerColumns[oc]) ? jsonSafeValue(lowerValues[lowerColumns[oc]]) : null);
                 };
                 rows.push(rowValues);
             };

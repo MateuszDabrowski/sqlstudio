@@ -1,6 +1,6 @@
 # SQL Studio for Marketing Cloud Engagement
 
-SQL Studio for MCE is an open-source rebuild of Salesforce Labs' Query Studio for Marketing Cloud Engagement (MCE). It runs entirely inside MCE as a Cloud Page App. Everything SQL Studio creates, changes or starts for you runs with your own login and permissions. Inside MCE, it reads its own runs and results and the names and fields of the parent Business Unit's shared Data Extensions, sets up its own folder and logs on the first run, and cleans up its own temporary Data Extensions. It does this through WSProxy and MCE's own data functions, both built into MCE's server-side scripts. There is no external server, and no query or result leaves your account.
+SQL Studio for MCE is an open-source rebuild of Salesforce Labs' Query Studio for Marketing Cloud Engagement (MCE). It runs entirely inside MCE as a Cloud Page App. Everything SQL Studio creates, changes or starts for you runs with your own login and permissions. Inside MCE, it reads its own runs and results and the names and fields of the parent Business Unit's shared Data Extensions, sets up its own folder and logs on the first run, and cleans up its own temporary Data Extensions. It does this through WSProxy and MCE's own data functions, both built into MCE's server-side scripts. There is no external server, and no result ever leaves your account. A query leaves it only when you click Document, which hands its table and field names and its expressions to Diagramforce, the author's free and open source diagramming app, in another tab of your browser.
 
 Read what it does, how it works and the FAQ on the [SQL Studio page](https://mateuszdabrowski.pl/sql-studio).
 
@@ -9,7 +9,8 @@ Read what it does, how it works and the FAQ on the [SQL Studio page](https://mat
 - A SQL editor with T-SQL highlighting, autocompletion for Data Extensions, their fields and the System Data Views, and hover documentation.
 - MCE-specific lint that catches what would make a run fail, with one-click fixes, and a formatter that follows the author's [SQL style guide](https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-style-guide/).
 - Four query tabs that run at the same time, each on its own Query Activity from a pool of up to four per user, into a temporary Data Extension with a one-day retention. Date, number and boolean columns keep their types, and results page and export in full.
-- Save as, Open and Save for Query Activities, and query history.
+- Save as, Open and Save for Query Activities, which stop on lint errors with a Save anyway, and query history.
+- Document, which opens a query in Diagramforce as a data model of its tables and joins, or as lineage from its source fields through the query to its target Data Extension.
 
 ## Deploy
 
