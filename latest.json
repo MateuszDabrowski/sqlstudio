@@ -1,24 +1,24 @@
 {
-  "version": "1.4.0",
-  "date": "2026-10-16",
+  "version": "1.4.2",
+  "date": "2026-10-22",
   "highlights": [
-    "Document this query: open the query in Diagramforce, my free diagramming app, as a data model of its tables and joins, or as lineage from the source fields through the query to its target Data Extension. Only names and expressions leave SQL Studio, never rows.",
-    "Lint tested on Marketing Cloud Engagement itself: over 100 tests on a real account shaped 24 new rules and fixed dozens more. Lint catches what MCE refuses or breaks before you click Run, even a -- comment that hides the rest of the query from MCE's save, and valid SQL no longer gets false errors.",
-    "Safer saves: Save, Save As and Save to DE stop on lint errors, with Save anyway, so a Query Activity that would fail when its automation runs is caught before it is stored.",
-    "Format follows my extended style guide: the guide now covers blank lines around UNION, aligned end-of-line comments, table aliases on the tab stop, line comments and more, and Format lays out SQL as my articles do.",
-    "Claude skill, updated: SF MCE SQL gives Claude every new rule and fix, the facts from those tests and the extended style guide, so it writes, checks and fixes SQL the way MCE actually runs it. Get it from Help > Write SQL with Claude."
+    "Built on 400 tests of MCE's SQL engine: full check of queries the SQL Server engine refuses, breaks or fails on, and what it says when it does. Everything below comes from them.",
+    "Much better lint: SQL Studio now flags the usual causes of a run that fails with no reason, no longer flags valid SQL that MCE accepts, and links each finding to the section of my articles that explains it.",
+    "New warnings in Save As: Save As now warns before you save a Query Activity whose run would fail on a value too long for its field, text that is no date or number in a Date or Number field, a NULL in a required field or a repeated key.",
+    "Claude skill, updated: SF MCE SQL now knows the new rules and the facts from those tests, so Claude writes SQL the way MCE runs it. Get it from Help > Write SQL with Claude.",
+    "Update only the Frontend: if you run 1.4.0 or 1.4.1, replace only the Frontend Code Resource. The Backend and the Cloud Page are unchanged, so Help > About may still show Backend 1.4.0."
   ],
   "highlightLeads": [
-    "Document this query:",
-    "Lint tested on Marketing Cloud Engagement itself:",
-    "Safer saves:",
-    "Format follows my extended style guide:",
-    "Claude skill, updated:"
+    "Built on 400 tests of MCE's SQL engine:",
+    "Much better lint:",
+    "New warnings in Save As:",
+    "Claude skill, updated:",
+    "Update only the Frontend:"
   ],
   "updateGuide": "https://github.com/MateuszDabrowski/sqlstudio/blob/main/docs/DEPLOYMENT.md#8-updating",
   "changelog": "https://github.com/MateuszDabrowski/sqlstudio/blob/main/CHANGELOG.md",
   "skill": {
-    "version": "1.4.0",
+    "version": "1.4.2",
     "download": "https://github.com/MateuszDabrowski/sqlstudio/raw/main/skill/sf-mce-sql.skill"
   }
 }

@@ -1,11 +1,11 @@
-/* SQL Studio 1.4.1 - SQL Studio Frontend, the readable copy with its comments. Paste sql-studio-frontend.min.js instead: it is the same code, and Marketing Cloud Engagement served it in 2 s, against 18 s for this file, on the author's org. */
+/* SQL Studio 1.4.2 - SQL Studio Frontend, the readable copy with its comments. Paste sql-studio-frontend.min.js instead: it is the same code, and Marketing Cloud Engagement served it in 2 s, against 18 s for this file, on the author's org. */
 /* Copyright (c) 2026 Mateusz Dąbrowski. Free to use, change and share, commercial use included, as long as this notice stays. Licensed under the EUPL 1.2: https://github.com/MateuszDabrowski/sqlstudio/blob/main/LICENSE */
 /* Includes Salesforce Lightning Design System icons, unchanged: © Salesforce, Inc., CC BY-ND 4.0, https://creativecommons.org/licenses/by-nd/4.0/ */
 /* Contents (line numbers are where each part starts in this finished file):
      1. SQL data: Data Views, functions and keywords - line 10
-     2. SQL tools: lint rules, formatter and parser - line 1217
-     3. Styles - line 30636
-     4. The interface: editor, tabs, results, dialogs and runs - line 30640
+     2. SQL tools: lint rules, formatter and parser - line 1221
+     3. Styles - line 33793
+     4. The interface: editor, tabs, results, dialogs and runs - line 33797
 */
 /* ================================================ sqlstudio-sql-data.js == */
 /*
@@ -47,81 +47,85 @@ window.SQLStudioSQL = {
     ],
     keywords: [
         { name: 'SELECT', category: 'clause', description: 'Starts a query and lists the columns or expressions to return.', syntax: 'SELECT [TOP (n)] [DISTINCT] column_list FROM ...', example: 'SELECT SubscriberKey, EmailAddress FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-select/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/select-transact-sql', sfmc: 'Only SELECT queries run inside a Query Activity; INSERT, UPDATE, DELETE, DECLARE, EXEC and control-flow statements are not supported. A Query Activity that combines SELECT * with any JOIN fails validation.' },
-        { name: 'TOP', category: 'clause', description: 'Limits the result set to the first n rows.', syntax: 'SELECT TOP (n) column_list ...', example: 'SELECT TOP 10 SubscriberKey FROM _Subscribers ORDER BY DateJoined DESC', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-select/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/top-transact-sql', sfmc: 'Always pair TOP with ORDER BY, otherwise SQL Server may return an arbitrary subset of rows.' },
-        { name: 'PERCENT', category: 'modifier', description: 'Modifies TOP to return a percentage of rows instead of a fixed count, rounded up.', syntax: 'SELECT TOP (n) PERCENT column_list ...', example: 'SELECT TOP 10 PERCENT SubscriberKey FROM _Subscribers ORDER BY DateJoined DESC', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-select/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/top-transact-sql', sfmc: 'Works inside an Automation Studio Query Activity but produces an error when the same query is run directly in Query Studio.' },
-        { name: 'WITH TIES', category: 'modifier', description: 'Extends TOP to also include rows that tie the ORDER BY value of the last returned row.', syntax: 'SELECT TOP (n) WITH TIES column_list ... ORDER BY ...', example: 'SELECT TOP 5 WITH TIES SubscriberKey, BounceCount FROM _Subscribers ORDER BY BounceCount DESC', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-select/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/top-transact-sql', sfmc: 'Requires ORDER BY. Works in a Query Activity but throws an error in interactive Query Studio.' },
-        { name: 'DISTINCT', category: 'clause', description: 'Removes duplicate rows from the result set, based on the combination of all selected columns.', syntax: 'SELECT DISTINCT column_list FROM ...', example: 'SELECT DISTINCT Domain FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-select/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/select-clause-transact-sql', sfmc: 'Applies to the full combination of selected columns and runs before ORDER BY. Every ORDER BY column must also appear in the SELECT list when DISTINCT is used.' },
-        { name: 'FROM', category: 'clause', description: 'Specifies the Data Extension or Data View a query reads from.', syntax: 'SELECT column_list FROM table_name', example: 'SELECT SubscriberKey FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-from/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/from-transact-sql', sfmc: 'System Data Views use a leading underscore (_Subscribers). Names with spaces or hyphens need [brackets]. The legacy MID-prefixed multi-part name (12345.DataExtensionOnChildBU) now errors; use a Shared Data Extension with the Ent. prefix instead.' },
+        { name: 'TOP', category: 'clause', description: 'Limits the result set to the first n rows.', syntax: 'SELECT TOP (n) column_list ...', example: 'SELECT TOP 10 SubscriberKey FROM _Subscribers ORDER BY DateJoined DESC', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-select/#top', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/top-transact-sql', sfmc: 'Always pair TOP with ORDER BY, otherwise SQL Server may return an arbitrary subset of rows.' },
+        { name: 'PERCENT', category: 'modifier', description: 'Modifies TOP to return a percentage of rows instead of a fixed count, rounded up.', syntax: 'SELECT TOP (n) PERCENT column_list ...', example: 'SELECT TOP 10 PERCENT SubscriberKey FROM _Subscribers ORDER BY DateJoined DESC', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-select/#top-percent', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/top-transact-sql', sfmc: 'Works inside an Automation Studio Query Activity but produces an error when the same query is run directly in Query Studio.' },
+        { name: 'WITH TIES', category: 'modifier', description: 'Extends TOP to also include rows that tie the ORDER BY value of the last returned row.', syntax: 'SELECT TOP (n) WITH TIES column_list ... ORDER BY ...', example: 'SELECT TOP 5 WITH TIES SubscriberKey, BounceCount FROM _Subscribers ORDER BY BounceCount DESC', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-select/#top-with-ties', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/top-transact-sql', sfmc: 'Requires ORDER BY. Works in a Query Activity but throws an error in interactive Query Studio.' },
+        { name: 'DISTINCT', category: 'clause', description: 'Removes duplicate rows from the result set, based on the combination of all selected columns.', syntax: 'SELECT DISTINCT column_list FROM ...', example: 'SELECT DISTINCT Domain FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-select/#distinct', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/select-clause-transact-sql', sfmc: 'Applies to the full combination of selected columns and runs before ORDER BY. Every ORDER BY column must also appear in the SELECT list when DISTINCT is used.' },
+        { name: 'FROM', category: 'clause', description: 'Specifies the Data Extension or Data View a query reads from.', syntax: 'SELECT column_list FROM table_name', example: 'SELECT SubscriberKey FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-from/#basic-from', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/from-transact-sql', sfmc: 'System Data Views use a leading underscore (_Subscribers). Names with spaces or hyphens need [brackets]. The legacy MID-prefixed multi-part name (12345.DataExtensionOnChildBU) now errors; use a Shared Data Extension with the Ent. prefix instead.' },
         { name: 'WHERE', category: 'clause', description: 'Filters rows before grouping, based on a boolean condition.', syntax: 'SELECT column_list FROM table WHERE condition', example: "SELECT SubscriberKey FROM _Subscribers WHERE Status = 'Active'", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-where/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/where-transact-sql', sfmc: "Text comparisons ignore letter case and trailing spaces and keep accents, as text compares with the collation SQL_Latin1_General_CP1_CI_AS: 'abc' = 'ABC' and 'abc ' = 'abc' are true, 'café' = 'cafe' is false (org check, 2026-10-14). So LOWER() or UPPER() around a comparison is not needed. Any comparison with NULL, = NULL included, is never true, as ANSI_NULLS is on. Use IS NULL instead." },
-        { name: 'AND', category: 'logical-operator', description: 'Combines two conditions; both must be true.', syntax: 'condition1 AND condition2', example: "WHERE Status = 'Active' AND BounceCount = 0", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-where/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/and-transact-sql' },
-        { name: 'OR', category: 'logical-operator', description: 'Combines two conditions; at least one must be true.', syntax: 'condition1 OR condition2', example: "WHERE Status = 'Active' OR Status = 'Held'", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-where/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/or-transact-sql', sfmc: 'OR predicates are non-SARGable and can force a full scan on large tracking data views; an IN list of the same values is usually faster.' },
-        { name: 'NOT', category: 'logical-operator', description: 'Negates the condition that follows it.', syntax: 'NOT condition', example: "WHERE NOT Status = 'Unsubscribed'", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-where/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/not-transact-sql', sfmc: 'NOT IN, NOT EXISTS and NOT LIKE are non-SARGable. NOT IN (SELECT ...) returns zero rows if the subquery yields any NULL; filter it out or use NOT EXISTS.' },
-        { name: 'IN', category: 'logical-operator', description: 'Tests whether a value matches any value in a list or subquery.', syntax: 'column IN (value1, value2, ...) | column IN (SELECT ...)', example: "WHERE Status IN ('Active', 'Held')", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-where/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/in-transact-sql', sfmc: 'Evaluated faster than an equivalent chain of OR conditions. Cannot be combined with LIKE in the same predicate. NULL values inside the list are ignored.' },
+        { name: 'AND', category: 'logical-operator', description: 'Combines two conditions; both must be true.', syntax: 'condition1 AND condition2', example: "WHERE Status = 'Active' AND BounceCount = 0", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-where/#logical-operators', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/and-transact-sql' },
+        { name: 'OR', category: 'logical-operator', description: 'Combines two conditions; at least one must be true.', syntax: 'condition1 OR condition2', example: "WHERE Status = 'Active' OR Status = 'Held'", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-where/#logical-operators', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/or-transact-sql', sfmc: 'OR predicates are non-SARGable and can force a full scan on large tracking data views; an IN list of the same values is usually faster.' },
+        { name: 'NOT', category: 'logical-operator', description: 'Negates the condition that follows it.', syntax: 'NOT condition', example: "WHERE NOT Status = 'Unsubscribed'", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-where/#not-operator', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/not-transact-sql', sfmc: 'NOT IN, NOT EXISTS and NOT LIKE are non-SARGable. NOT IN (SELECT ...) returns zero rows if the subquery yields any NULL; filter it out or use NOT EXISTS.' },
+        { name: 'IN', category: 'logical-operator', description: 'Tests whether a value matches any value in a list or subquery.', syntax: 'column IN (value1, value2, ...) | column IN (SELECT ...)', example: "WHERE Status IN ('Active', 'Held')", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-where/#in-shorthand', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/in-transact-sql', sfmc: 'Evaluated faster than an equivalent chain of OR conditions. Cannot be combined with LIKE in the same predicate. NULL values inside the list are ignored.' },
         { name: 'EXISTS', category: 'logical-operator', description: 'Tests whether a subquery returns at least one row.', syntax: 'WHERE EXISTS (SELECT 1 FROM ... WHERE ...)', example: 'SELECT SubscriberKey FROM _Subscribers s WHERE EXISTS (SELECT 1 FROM _Open o WHERE o.SubscriberKey = s.SubscriberKey)', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/exists-transact-sql' },
-        { name: 'BETWEEN', category: 'logical-operator', description: 'Tests whether a value falls within an inclusive range.', syntax: 'column BETWEEN low AND high', example: "WHERE DateJoined BETWEEN '2024-01-01' AND '2024-01-31'", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-where/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/between-transact-sql', sfmc: 'Inclusive on both ends, so a datetime range like this example misses events that occur after midnight on the last day. Prefer col >= start AND col < next_day for date ranges.' },
+        { name: 'BETWEEN', category: 'logical-operator', description: 'Tests whether a value falls within an inclusive range.', syntax: 'column BETWEEN low AND high', example: "WHERE DateJoined BETWEEN '2024-01-01' AND '2024-01-31'", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-where/#between-shorthand', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/between-transact-sql', sfmc: 'Inclusive on both ends, so a datetime range like this example misses events that occur after midnight on the last day. Prefer col >= start AND col < next_day for date ranges.' },
         { name: 'LIKE', category: 'logical-operator', description: 'Matches a string against a wildcard pattern.', syntax: "column LIKE pattern [ESCAPE 'escape_char']", example: "WHERE EmailAddress LIKE '%@gmail.com'", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-like/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/like-transact-sql', sfmc: "Matching ignores letter case, as = does, but keeps trailing spaces: MCE's text values are nvarchar at Run, so 'abc ' LIKE 'abc' is false while 'abc ' = 'abc' is true (org check, 2026-10-14). LIKE cannot be combined with IN. Use several LIKE conditions joined with OR instead." },
+        { name: 'NOT LIKE', category: 'logical-operator', description: 'Matches the rows whose string does not fit a wildcard pattern. A NULL value matches neither LIKE nor NOT LIKE.', syntax: "column NOT LIKE pattern [ESCAPE 'escape_char']", example: "WHERE EmailAddress NOT LIKE '%@example.com'", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-like/#not-like', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/like-transact-sql', sfmc: 'Matches as LIKE does: letter case is ignored and trailing spaces count (org check, 2026-10-14). Join several NOT LIKE conditions with AND.' },
         { name: 'ESCAPE', category: 'clause', description: 'Defines an escape character so a wildcard character in LIKE can be matched literally.', syntax: "column LIKE pattern ESCAPE 'escape_char'", example: "WHERE Code LIKE '50!%' ESCAPE '!'", docs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/like-transact-sql', sfmc: "Wrapping the literal wildcard in [brackets] (e.g. LIKE '[%]') is the pattern shown in MCE's own docs and is more common than ESCAPE in Query Studio examples." },
-        { name: 'IS NULL', category: 'logical-operator', description: 'Tests whether a value is NULL.', syntax: 'column IS NULL', example: 'WHERE EmailAddress IS NULL', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-null-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/is-null-transact-sql', sfmc: 'The only reliable way to test for NULL; = NULL and != NULL never match anything.' },
-        { name: 'IS NOT NULL', category: 'logical-operator', description: 'Tests whether a value is not NULL.', syntax: 'column IS NOT NULL', example: 'WHERE EmailAddress IS NOT NULL', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-null-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/is-null-transact-sql' },
-        { name: 'AS', category: 'clause', description: 'Assigns an alias to a column, expression or table.', syntax: 'expression AS alias', example: "SELECT FirstName + ' ' + LastName AS FullName FROM Contacts", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-select/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/select-clause-transact-sql', sfmc: 'A computed column without an alias has no name and cannot map to a target Data Extension field; Query Studio surfaces this as "Field name cannot be blank".' },
-        { name: 'INNER JOIN', category: 'join', description: 'Returns only rows that have a match in both tables.', syntax: 'FROM t1 INNER JOIN t2 ON t1.col = t2.col', example: 'SELECT s.SubscriberKey, o.EventDate FROM _Subscribers AS s INNER JOIN _Open AS o ON s.SubscriberID = o.SubscriberID', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-join/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/from-transact-sql', sfmc: 'Write INNER JOIN explicitly rather than the bare JOIN keyword, per the MCE SQL style guide. Only join columns of the same data type.' },
-        { name: 'LEFT JOIN', category: 'join', description: 'Returns all rows from the left table, with matching rows from the right table or NULLs when there is no match.', syntax: 'FROM t1 LEFT JOIN t2 ON t1.col = t2.col', example: 'SELECT s.SubscriberKey, o.EventDate FROM _Subscribers AS s LEFT JOIN _Open AS o ON s.SubscriberID = o.SubscriberID', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-join/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/from-transact-sql', sfmc: 'Also written LEFT OUTER JOIN. Useful as an anti-join pattern: LEFT JOIN then WHERE right.Key IS NULL finds rows with no match.' },
-        { name: 'RIGHT JOIN', category: 'join', description: 'Returns all rows from the right table, with matching rows from the left table or NULLs when there is no match.', syntax: 'FROM t1 RIGHT JOIN t2 ON t1.col = t2.col', example: 'SELECT s.SubscriberKey, j.EmailName FROM _Sent AS s RIGHT JOIN _Job AS j ON s.JobID = j.JobID', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-join/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/from-transact-sql', sfmc: 'Also written RIGHT OUTER JOIN. Rewriting as a LEFT JOIN with the tables swapped is more common in the MCE community style.' },
-        { name: 'FULL JOIN', category: 'join', description: 'Returns all rows from both tables, with NULLs where either side has no match.', syntax: 'FROM t1 FULL JOIN t2 ON t1.col = t2.col', example: 'SELECT s.SubscriberKey, u.EventDate FROM _Subscribers AS s FULL JOIN _Unsubscribe AS u ON s.SubscriberID = u.SubscriberID', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-join/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/from-transact-sql', sfmc: 'Also written FULL OUTER JOIN.' },
+        { name: 'IS NULL', category: 'logical-operator', description: 'Tests whether a value is NULL.', syntax: 'column IS NULL', example: 'WHERE EmailAddress IS NULL', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-null-functions/#is-null', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/is-null-transact-sql', sfmc: 'The only reliable way to test for NULL; = NULL and != NULL never match anything.' },
+        { name: 'IS NOT NULL', category: 'logical-operator', description: 'Tests whether a value is not NULL.', syntax: 'column IS NOT NULL', example: 'WHERE EmailAddress IS NOT NULL', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-null-functions/#is-null', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/is-null-transact-sql' },
+        { name: 'AS', category: 'clause', description: 'Assigns an alias to a column, expression or table.', syntax: 'expression AS alias', example: "SELECT FirstName + ' ' + LastName AS FullName FROM Contacts", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-select/#aliasing-with-as', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/select-clause-transact-sql', sfmc: 'A computed column without an alias has no name and cannot map to a target Data Extension field; Query Studio surfaces this as "Field name cannot be blank".' },
+        { name: 'INNER JOIN', category: 'join', description: 'Returns only rows that have a match in both tables.', syntax: 'FROM t1 INNER JOIN t2 ON t1.col = t2.col', example: 'SELECT s.SubscriberKey, o.EventDate FROM _Subscribers AS s INNER JOIN _Open AS o ON s.SubscriberID = o.SubscriberID', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-join/#inner-join', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/from-transact-sql', sfmc: 'Write INNER JOIN explicitly rather than the bare JOIN keyword, per the MCE SQL style guide. Only join columns of the same data type.' },
+        { name: 'LEFT JOIN', category: 'join', description: 'Returns all rows from the left table, with matching rows from the right table or NULLs when there is no match.', syntax: 'FROM t1 LEFT JOIN t2 ON t1.col = t2.col', example: 'SELECT s.SubscriberKey, o.EventDate FROM _Subscribers AS s LEFT JOIN _Open AS o ON s.SubscriberID = o.SubscriberID', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-join/#left-and-right-joins', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/from-transact-sql', sfmc: 'Also written LEFT OUTER JOIN. Useful as an anti-join pattern: LEFT JOIN then WHERE right.Key IS NULL finds rows with no match.' },
+        { name: 'RIGHT JOIN', category: 'join', description: 'Returns all rows from the right table, with matching rows from the left table or NULLs when there is no match.', syntax: 'FROM t1 RIGHT JOIN t2 ON t1.col = t2.col', example: 'SELECT s.SubscriberKey, j.EmailName FROM _Sent AS s RIGHT JOIN _Job AS j ON s.JobID = j.JobID', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-join/#left-and-right-joins', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/from-transact-sql', sfmc: 'Also written RIGHT OUTER JOIN. Rewriting as a LEFT JOIN with the tables swapped is more common in the MCE community style.' },
+        { name: 'FULL JOIN', category: 'join', description: 'Returns all rows from both tables, with NULLs where either side has no match.', syntax: 'FROM t1 FULL JOIN t2 ON t1.col = t2.col', example: 'SELECT s.SubscriberKey, u.EventDate FROM _Subscribers AS s FULL JOIN _Unsubscribe AS u ON s.SubscriberID = u.SubscriberID', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-join/#full-join', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/from-transact-sql', sfmc: 'Also written FULL OUTER JOIN.' },
         { name: 'CROSS JOIN', category: 'join', description: 'Returns the Cartesian product of two tables: every row of the first combined with every row of the second.', syntax: 'FROM t1 CROSS JOIN t2', example: 'SELECT s.SubscriberKey, d.DayLabel FROM _Subscribers AS s CROSS JOIN CalendarDays AS d', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/from-transact-sql', sfmc: 'Works in a Query Activity. The row counts multiply: two tables of 1,000 rows give 1,000,000, so filter both sides first, or cross join a small table.' },
         { name: 'CROSS APPLY', category: 'join', description: 'Evaluates a subquery once per row of the left table, keeping only rows where the subquery returns at least one row.', syntax: 'FROM t1 CROSS APPLY (SELECT ... WHERE ... = t1.col) AS x', example: 'SELECT s.SubscriberKey, lastOpen.EventDate AS LastOpen FROM _Subscribers AS s CROSS APPLY (SELECT TOP 1 o.EventDate FROM _Open AS o WHERE o.SubscriberKey = s.SubscriberKey ORDER BY o.EventDate DESC) AS lastOpen', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/from-transact-sql', sfmc: 'Use it with a subquery, as a per-row lookup such as each subscriber\'s latest open. The query check refuses a table function with more than one argument after APPLY, such as STRING_SPLIT (org check, 2026-09-28).' },
         { name: 'OUTER APPLY', category: 'join', description: 'Like CROSS APPLY, but keeps left-side rows even when the subquery returns no rows (NULLs fill the right side).', syntax: 'FROM t1 OUTER APPLY (SELECT ... WHERE ... = t1.col) AS x', example: 'SELECT s.SubscriberKey, lastOpen.EventDate AS LastOpen FROM _Subscribers AS s OUTER APPLY (SELECT TOP 1 o.EventDate FROM _Open AS o WHERE o.SubscriberKey = s.SubscriberKey ORDER BY o.EventDate DESC) AS lastOpen', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/from-transact-sql', sfmc: 'Behaves like a LEFT JOIN against a per-row subquery: rows with no match stay, with NULLs on the right.' },
-        { name: 'ON', category: 'clause', description: 'Defines the join condition between two tables.', syntax: 'JOIN table2 ON table1.col = table2.col', example: 'INNER JOIN _Job AS j ON s.JobID = j.JobID', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-join/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/from-transact-sql', sfmc: 'A function wrapped around either side of the ON condition (e.g. CONVERT, DATEDIFF) has a significant performance impact; compare raw columns instead.' },
-        { name: 'GROUP BY', category: 'clause', description: 'Groups rows that share the same values in the listed columns, for use with aggregate functions.', syntax: 'SELECT col, AGG(other_col) FROM table GROUP BY col', example: 'SELECT Domain, COUNT(*) AS SubscriberCount FROM _Subscribers GROUP BY Domain', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-aggregate-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/select-group-by-transact-sql', sfmc: 'NULL values are grouped together as if equal. Every non-aggregated column in the SELECT list must also appear in GROUP BY.' },
-        { name: 'HAVING', category: 'clause', description: 'Filters grouped rows after aggregation, using a condition on an aggregate value.', syntax: 'GROUP BY col HAVING aggregate_condition', example: 'SELECT EmailAddress, COUNT(*) AS Cnt FROM _Subscribers GROUP BY EmailAddress HAVING COUNT(*) > 1', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-aggregate-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/select-having-transact-sql', sfmc: 'WHERE filters rows before GROUP BY; HAVING filters groups after GROUP BY. Execution order is FROM, WHERE, GROUP BY, HAVING, DISTINCT, ORDER BY.' },
-        { name: 'ORDER BY', category: 'clause', description: 'Sorts the result set by one or more columns.', syntax: 'SELECT ... ORDER BY col [ASC|DESC]', example: 'SELECT TOP 10 SubscriberKey FROM _Subscribers ORDER BY DateJoined DESC', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-select/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/select-order-by-clause-transact-sql', sfmc: "Sorts Text-typed columns alphabetically, so '10' sorts before '2' and dates stored as text sort by characters, not chronologically; CONVERT to a numeric or date type first. Inside a subquery, derived table or CTE, ORDER BY is only allowed together with TOP." },
-        { name: 'ASC', category: 'modifier', description: 'Sorts in ascending order; the default direction for ORDER BY.', syntax: 'ORDER BY col ASC', example: 'ORDER BY DateJoined ASC', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-select/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/select-order-by-clause-transact-sql' },
-        { name: 'DESC', category: 'modifier', description: 'Sorts in descending order.', syntax: 'ORDER BY col DESC', example: 'ORDER BY DateJoined DESC', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-select/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/select-order-by-clause-transact-sql' },
-        { name: 'UNION', category: 'set', description: 'Combines the results of two queries into one result set, removing duplicate rows.', syntax: 'SELECT ... UNION SELECT ...', example: 'SELECT SubscriberKey FROM ListA UNION SELECT SubscriberKey FROM ListB', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-join/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/set-operators-union-transact-sql', sfmc: 'Both sides must return the same number of columns, in the same order, with compatible types. Removing duplicates costs a sort; use UNION ALL when duplicates are impossible or wanted.' },
-        { name: 'UNION ALL', category: 'set', description: 'Combines the results of two queries into one result set, keeping duplicate rows.', syntax: 'SELECT ... UNION ALL SELECT ...', example: "SELECT SubscriberKey, 'A' AS Src FROM ListA UNION ALL SELECT SubscriberKey, 'B' FROM ListB", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-join/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/set-operators-union-transact-sql', sfmc: 'Faster than UNION because it skips the duplicate-removal sort; duplicates only surface in the target Data Extension if it has no primary key on that value.' },
-        { name: 'EXCEPT', category: 'set', description: "Returns rows from the first query that do not appear in the second query's results.", syntax: 'SELECT ... EXCEPT SELECT ...', example: 'SELECT SubscriberKey FROM _ListSubscribers WHERE ListID = 123 EXCEPT SELECT SubscriberKey FROM _Unsubscribe', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-join/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/set-operators-except-and-intersect-transact-sql', sfmc: 'Both sides need the same number of columns, in the same order, with compatible types, as with UNION.' },
-        { name: 'INTERSECT', category: 'set', description: "Returns only the rows that appear in both queries' results.", syntax: 'SELECT ... INTERSECT SELECT ...', example: 'SELECT SubscriberKey FROM ListA INTERSECT SELECT SubscriberKey FROM ListB', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-join/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/set-operators-except-and-intersect-transact-sql', sfmc: 'Both sides need the same number of columns, in the same order, with compatible types, as with UNION.' },
-        { name: 'CASE', category: 'case', description: 'Evaluates a list of conditions and returns a value for the first one that matches.', syntax: 'CASE WHEN cond THEN val [WHEN ... THEN ...] [ELSE default] END', example: "SELECT SubscriberKey, CASE WHEN BounceCount = 0 THEN 'Clean' WHEN BounceCount < 5 THEN 'Watch' ELSE 'Risk' END AS Health FROM _Subscribers", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-case/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/case-transact-sql', sfmc: 'Returns the THEN value of the first WHEN condition that evaluates to TRUE, in top-to-bottom order; a CASE with no ELSE returns NULL for unmatched rows.' },
+        { name: 'ON', category: 'clause', description: 'Defines the join condition between two tables.', syntax: 'JOIN table2 ON table1.col = table2.col', example: 'INNER JOIN _Job AS j ON s.JobID = j.JobID', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-join/#joining-on', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/from-transact-sql', sfmc: 'A function wrapped around either side of the ON condition (e.g. CONVERT, DATEDIFF) has a significant performance impact; compare raw columns instead.' },
+        { name: 'GROUP BY', category: 'clause', description: 'Groups rows that share the same values in the listed columns, for use with aggregate functions.', syntax: 'SELECT col, AGG(other_col) FROM table GROUP BY col', example: 'SELECT Domain, COUNT(*) AS SubscriberCount FROM _Subscribers GROUP BY Domain', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-aggregate-functions/#group-by', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/select-group-by-transact-sql', sfmc: 'NULL values are grouped together as if equal. Every non-aggregated column in the SELECT list must also appear in GROUP BY.' },
+        { name: 'HAVING', category: 'clause', description: 'Filters grouped rows after aggregation, using a condition on an aggregate value.', syntax: 'GROUP BY col HAVING aggregate_condition', example: 'SELECT EmailAddress, COUNT(*) AS Cnt FROM _Subscribers GROUP BY EmailAddress HAVING COUNT(*) > 1', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-aggregate-functions/#having', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/select-having-transact-sql', sfmc: 'WHERE filters rows before GROUP BY; HAVING filters groups after GROUP BY. Execution order is FROM, WHERE, GROUP BY, HAVING, DISTINCT, ORDER BY.' },
+        { name: 'ROLLUP', category: 'modifier', description: 'Adds a total and subtotals to GROUP BY. It groups by the columns in the brackets from right to left, dropping one column at a time.', syntax: 'GROUP BY ROLLUP (col1, col2, ...)', example: 'SELECT Domain, DATEPART(YEAR, DateJoined) AS YearJoined, COUNT(*) AS SubscriberCount FROM _Subscribers GROUP BY ROLLUP (Domain, DATEPART(YEAR, DateJoined))', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-aggregate-functions/#group-by-rollup', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/select-group-by-transact-sql', sfmc: "Runs in a Query Activity, as the author's article shows. A NULL in a column marks the row of a total or a subtotal, and the order of the columns in the brackets changes the result. Keep a column outside the brackets, GROUP BY Domain, ROLLUP(...), for a partial rollup with no grand total." },
+        { name: 'CUBE', category: 'modifier', description: 'Adds totals and subtotals to GROUP BY for every combination of the columns in the brackets.', syntax: 'GROUP BY CUBE (col1, col2, ...)', example: 'SELECT Domain, DATEPART(YEAR, DateJoined) AS YearJoined, COUNT(*) AS SubscriberCount FROM _Subscribers GROUP BY CUBE (Domain, DATEPART(YEAR, DateJoined))', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-aggregate-functions/#group-by-cube', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/select-group-by-transact-sql', sfmc: "Runs in a Query Activity, as the author's article shows. It gives more rows than ROLLUP, as it also totals each column on its own, such as every year across all domains. A NULL in a column marks a total." },
+        { name: 'ORDER BY', category: 'clause', description: 'Sorts the result set by one or more columns.', syntax: 'SELECT ... ORDER BY col [ASC|DESC]', example: 'SELECT TOP 10 SubscriberKey FROM _Subscribers ORDER BY DateJoined DESC', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-select/#top-with-order-by', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/select-order-by-clause-transact-sql', sfmc: "Sorts Text-typed columns alphabetically, so '10' sorts before '2' and dates stored as text sort by characters, not chronologically; CONVERT to a numeric or date type first. Inside a subquery, derived table or CTE, ORDER BY is only allowed together with TOP." },
+        { name: 'ASC', category: 'modifier', description: 'Sorts in ascending order; the default direction for ORDER BY.', syntax: 'ORDER BY col ASC', example: 'ORDER BY DateJoined ASC', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-select/#top-with-order-by', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/select-order-by-clause-transact-sql' },
+        { name: 'DESC', category: 'modifier', description: 'Sorts in descending order.', syntax: 'ORDER BY col DESC', example: 'ORDER BY DateJoined DESC', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-select/#top-with-order-by', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/select-order-by-clause-transact-sql' },
+        { name: 'UNION', category: 'set', description: 'Combines the results of two queries into one result set, removing duplicate rows.', syntax: 'SELECT ... UNION SELECT ...', example: 'SELECT SubscriberKey FROM ListA UNION SELECT SubscriberKey FROM ListB', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-join/#union', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/set-operators-union-transact-sql', sfmc: 'Both sides must return the same number of columns, in the same order, with compatible types. Removing duplicates costs a sort; use UNION ALL when duplicates are impossible or wanted.' },
+        { name: 'UNION ALL', category: 'set', description: 'Combines the results of two queries into one result set, keeping duplicate rows.', syntax: 'SELECT ... UNION ALL SELECT ...', example: "SELECT SubscriberKey, 'A' AS Src FROM ListA UNION ALL SELECT SubscriberKey, 'B' FROM ListB", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-join/#union', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/set-operators-union-transact-sql', sfmc: 'Faster than UNION because it skips the duplicate-removal sort; duplicates only surface in the target Data Extension if it has no primary key on that value.' },
+        { name: 'EXCEPT', category: 'set', description: "Returns rows from the first query that do not appear in the second query's results.", syntax: 'SELECT ... EXCEPT SELECT ...', example: 'SELECT SubscriberKey FROM _ListSubscribers WHERE ListID = 123 EXCEPT SELECT SubscriberKey FROM _Unsubscribe', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-join/#except', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/set-operators-except-and-intersect-transact-sql', sfmc: 'Both sides need the same number of columns, in the same order, with compatible types, as with UNION.' },
+        { name: 'INTERSECT', category: 'set', description: "Returns only the rows that appear in both queries' results.", syntax: 'SELECT ... INTERSECT SELECT ...', example: 'SELECT SubscriberKey FROM ListA INTERSECT SELECT SubscriberKey FROM ListB', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-join/#intersect', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/set-operators-except-and-intersect-transact-sql', sfmc: 'Both sides need the same number of columns, in the same order, with compatible types, as with UNION.' },
+        { name: 'CASE', category: 'case', description: 'Evaluates a list of conditions and returns a value for the first one that matches.', syntax: 'CASE WHEN cond THEN val [WHEN ... THEN ...] [ELSE default] END', example: "SELECT SubscriberKey, CASE WHEN BounceCount = 0 THEN 'Clean' WHEN BounceCount < 5 THEN 'Watch' ELSE 'Risk' END AS Health FROM _Subscribers", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-case/#conditional-values-with-case', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/case-transact-sql', sfmc: 'Returns the THEN value of the first WHEN condition that evaluates to TRUE, in top-to-bottom order; a CASE with no ELSE returns NULL for unmatched rows.' },
         { name: 'WHEN', category: 'case', description: 'Introduces one condition (searched CASE) or one value to match (simple CASE) inside a CASE expression.', syntax: 'CASE WHEN condition THEN result', example: "CASE WHEN Status = 'bounced' THEN 1 ELSE 0 END", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-case/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/case-transact-sql' },
         { name: 'THEN', category: 'case', description: 'Specifies the value to return when the preceding WHEN condition is true.', syntax: 'WHEN condition THEN result', example: "WHEN Status = 'bounced' THEN 1", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-case/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/case-transact-sql' },
         { name: 'ELSE', category: 'case', description: 'Specifies the default value a CASE expression returns when no WHEN condition matched.', syntax: 'CASE WHEN ... THEN ... ELSE default END', example: "CASE WHEN Status = 'bounced' THEN 1 ELSE 0 END", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-case/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/case-transact-sql', sfmc: 'Omitting ELSE means unmatched rows get NULL instead of a default value; add ELSE to control what gets written to the target Data Extension.' },
         { name: 'END', category: 'case', description: 'Closes a CASE expression.', syntax: 'CASE WHEN ... THEN ... END', example: "CASE WHEN Status = 'bounced' THEN 1 ELSE 0 END", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-case/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/case-transact-sql' },
-        { name: 'OVER', category: 'window', description: 'Defines the window (partition, order and frame) that a window or ranking function operates over.', syntax: 'function(...) OVER ([PARTITION BY col] [ORDER BY col] [frame])', example: 'SELECT SubscriberKey, ROW_NUMBER() OVER (PARTITION BY EmailAddress ORDER BY DateJoined DESC) AS rn FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-window-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/select-over-clause-transact-sql', sfmc: 'Common MCE dedup pattern: wrap the query in a subquery or CTE, then filter WHERE rn = 1 in the outer query to keep only the newest row per SubscriberKey.' },
-        { name: 'PARTITION BY', category: 'window', description: 'Divides the rows passed to a window function into groups; the function restarts for each group.', syntax: 'OVER (PARTITION BY col ORDER BY col)', example: 'SUM(BounceCount) OVER (PARTITION BY Domain)', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-window-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/select-over-clause-transact-sql' },
-        { name: 'ROWS BETWEEN', category: 'window', description: 'Defines an explicit window frame (a range of rows relative to the current row) for a window function.', syntax: 'OVER (ORDER BY col ROWS BETWEEN start AND end)', example: 'SELECT EventDate, SUM(Amount) OVER (ORDER BY EventDate ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS RunningTotal FROM Orders_DE', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-window-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/select-over-clause-transact-sql', sfmc: 'Useful for running totals inside a Query Activity.' },
+        { name: 'OVER', category: 'window', description: 'Defines the window (partition, order and frame) that a window or ranking function operates over.', syntax: 'function(...) OVER ([PARTITION BY col] [ORDER BY col] [frame])', example: 'SELECT SubscriberKey, ROW_NUMBER() OVER (PARTITION BY EmailAddress ORDER BY DateJoined DESC) AS rn FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-window-functions/#over-and-partition-by', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/select-over-clause-transact-sql', sfmc: 'Common MCE dedup pattern: wrap the query in a subquery or CTE, then filter WHERE rn = 1 in the outer query to keep only the newest row per SubscriberKey.' },
+        { name: 'PARTITION BY', category: 'window', description: 'Divides the rows passed to a window function into groups; the function restarts for each group.', syntax: 'OVER (PARTITION BY col ORDER BY col)', example: 'SUM(BounceCount) OVER (PARTITION BY Domain)', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-window-functions/#over-and-partition-by', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/select-over-clause-transact-sql' },
+        { name: 'ROWS BETWEEN', category: 'window', description: 'Defines an explicit window frame (a range of rows relative to the current row) for a window function.', syntax: 'OVER (ORDER BY col ROWS BETWEEN start AND end)', example: 'SELECT EventDate, SUM(Amount) OVER (ORDER BY EventDate ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS RunningTotal FROM Orders_DE', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-window-functions/#running-totals-and-frames', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/select-over-clause-transact-sql', sfmc: 'Useful for running totals inside a Query Activity.' },
+        { name: 'IGNORE NULLS', category: 'window', description: 'Makes FIRST_VALUE, LAST_VALUE, LAG and LEAD skip NULL values and return the nearest value that is not NULL.', syntax: 'LAST_VALUE(expression) IGNORE NULLS OVER (PARTITION BY col ORDER BY col ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)', example: 'SELECT DISTINCT SubscriberKey, LAST_VALUE(CouponCode) IGNORE NULLS OVER (PARTITION BY SubscriberKey ORDER BY OrderDate, OrderId ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS LastUsedCoupon FROM Orders', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-window-functions/#ignore-nulls', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/first-value-transact-sql', sfmc: "Added in SQL Server 2022, and it runs in MCE, while the WINDOW clause of the same version fails the query check (the author's article). Write it between the function and OVER." },
         { name: 'PIVOT', category: 'clause', description: 'Rotates unique values from one column into multiple output columns, aggregating as it goes.', syntax: 'SELECT ... FROM (source_query) AS src PIVOT (AGG(value_col) FOR pivot_col IN ([v1], [v2])) AS p', example: 'SELECT * FROM (SELECT Domain, DATENAME(MONTH, DateJoined) AS JoinMonth FROM _Subscribers) AS src PIVOT (COUNT(Domain) FOR JoinMonth IN ([January],[February])) AS p', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/from-using-pivot-and-unpivot', sfmc: 'The pivoted column list must be known and written out when you write the query.' },
         { name: 'UNPIVOT', category: 'clause', description: 'Rotates multiple columns into rows, the reverse of PIVOT.', syntax: 'SELECT ... FROM source UNPIVOT (value_col FOR name_col IN (col1, col2)) AS u', example: 'SELECT SubscriberKey, ChannelName, IsOptedIn FROM Prefs_DE UNPIVOT (IsOptedIn FOR ChannelName IN (EmailOptIn, SMSOptIn)) AS u', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/from-using-pivot-and-unpivot' },
-        { name: 'OFFSET FETCH', category: 'clause', description: 'Pages a sorted result set by skipping a number of rows and returning a fixed number after that.', syntax: 'ORDER BY col OFFSET n ROWS FETCH NEXT m ROWS ONLY', example: 'SELECT SubscriberKey FROM _Subscribers ORDER BY DateJoined OFFSET 20 ROWS FETCH NEXT 10 ROWS ONLY', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/select-order-by-clause-transact-sql', sfmc: 'Requires ORDER BY. TOP is more common in Query Activities than OFFSET and FETCH.' },
+        { name: 'OFFSET FETCH', category: 'clause', description: 'Pages a sorted result set by skipping a number of rows and returning a fixed number after that.', syntax: 'ORDER BY col OFFSET n ROWS FETCH NEXT m ROWS ONLY', example: 'SELECT SubscriberKey FROM _Subscribers ORDER BY DateJoined OFFSET 20 ROWS FETCH NEXT 10 ROWS ONLY', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-select/#order-by-without-top', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/select-order-by-clause-transact-sql', sfmc: 'Requires ORDER BY. TOP is more common in Query Activities than OFFSET and FETCH.' },
         { name: 'WITHIN GROUP', category: 'clause', description: 'Specifies the sort order used by an ordered-set aggregate, such as STRING_AGG, PERCENTILE_CONT or PERCENTILE_DISC.', syntax: 'STRING_AGG(expr, sep) WITHIN GROUP (ORDER BY col)', example: "SELECT Domain, STRING_AGG(CAST(SubscriberKey AS NVARCHAR(MAX)), ', ') WITHIN GROUP (ORDER BY DateJoined) AS Keys FROM _Subscribers GROUP BY Domain", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-window-functions/' },
         { name: 'ALL', category: 'modifier', description: 'In a subquery comparison, requires the condition to be true for every value the subquery returns; also the default (non-DISTINCT) mode for COUNT/UNION.', syntax: 'expr > ALL (subquery)', example: 'WHERE BounceCount > ALL (SELECT AVG(BounceCount) FROM _Subscribers)', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/all-transact-sql' },
         { name: 'ANY', category: 'modifier', description: 'In a subquery comparison, requires the condition to be true for at least one value the subquery returns.', syntax: 'expr = ANY (subquery)', example: 'WHERE SubscriberKey = ANY (SELECT SubscriberKey FROM _Open)', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/any-transact-sql' },
         { name: 'SOME', category: 'modifier', description: 'Synonym for ANY in a subquery comparison.', syntax: 'expr = SOME (subquery)', example: 'WHERE SubscriberKey = SOME (SELECT SubscriberKey FROM _Open)', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/any-transact-sql' },
         { name: 'COLLATE', category: 'modifier', description: 'Overrides the collation used to compare or sort a string expression.', syntax: 'expression COLLATE collation_name', example: "SELECT SubscriberKey FROM _Subscribers WHERE EmailAddress COLLATE Latin1_General_CS_AS LIKE '%@Example.com'", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-string-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/statements/collations', sfmc: "Text compares with the collation SQL_Latin1_General_CP1_CI_AS in MCE, so letter case is ignored and accents count, CHARINDEX included (org check, 2026-10-14). COLLATE works: 'abc' COLLATE Latin1_General_CS_AS = 'ABC' is false, and 'café' COLLATE Latin1_General_CI_AI = 'cafe' is true." },
-        { name: 'AT TIME ZONE', category: 'modifier', description: 'Attaches or converts a time zone offset on a datetime value, returning a datetimeoffset.', syntax: "datetime_expr AT TIME ZONE 'time_zone_name'", example: "SELECT EventDate AT TIME ZONE 'Central America Standard Time' AS EventDateOffset FROM _Open", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-date-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/at-time-zone-transact-sql', sfmc: "MCE server time, GETDATE(), is UTC-6 all year, also during US daylight saving, though the server's Windows zone is Central Time (org check, 2026-10-14). AT TIME ZONE 'Central Standard Time' follows daylight saving, so it tags server time an hour off in summer: on 14 October 2026 it ended -05:00. 'Central America Standard Time' keeps -06:00 all year, as TODATETIMEOFFSET(x, '-06:00') does. The result is a datetimeoffset. CONVERT it before writing it to a Date field." },
-        { name: 'Ent.', category: 'reference', description: 'Prefix that reads a shared or parent Business Unit object from a child Business Unit context.', syntax: 'FROM Ent.TableName', example: 'SELECT SubscriberKey FROM Ent._Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-from/', sfmc: "Required to read a shared/parent Data Extension, a Synchronized Data Extension, or a parent Business Unit's System Data View from a child Business Unit. Without it, _Subscribers and similar views return only the child Business Unit's own rows." },
+        { name: 'AT TIME ZONE', category: 'modifier', description: 'Attaches or converts a time zone offset on a datetime value, returning a datetimeoffset.', syntax: "datetime_expr AT TIME ZONE 'time_zone_name'", example: "SELECT EventDate AT TIME ZONE 'Central America Standard Time' AS EventDateOffset FROM _Open", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-date-functions/#at-time-zone', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/at-time-zone-transact-sql', sfmc: "MCE server time, GETDATE(), is UTC-6 all year, also during US daylight saving, though the server's Windows zone is Central Time (org check, 2026-10-14). AT TIME ZONE 'Central Standard Time' follows daylight saving, so it tags server time an hour off in summer: on 14 October 2026 it ended -05:00. 'Central America Standard Time' keeps -06:00 all year, as TODATETIMEOFFSET(x, '-06:00') does. The result is a datetimeoffset. CONVERT it before writing it to a Date field." },
+        { name: 'Ent.', category: 'reference', description: 'Prefix that reads a shared or parent Business Unit object from a child Business Unit context.', syntax: 'FROM Ent.TableName', example: 'SELECT SubscriberKey FROM Ent._Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-from/#enterprise-data-extension', sfmc: "Required to read a shared/parent Data Extension, a Synchronized Data Extension, or a parent Business Unit's System Data View from a child Business Unit. Without it, _Subscribers and similar views return only the child Business Unit's own rows." },
         { name: '*', category: 'reference', description: 'Selects every column of a table, or (inside COUNT) counts every row.', syntax: 'SELECT * FROM table | SELECT alias.* FROM table AS alias | COUNT(*)', example: 'SELECT COUNT(*) AS TotalRows FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-select/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/queries/select-clause-transact-sql', sfmc: 'Query Studio does not support SELECT * for column output, and a Query Activity that combines SELECT * with any JOIN fails validation. SELECT * also freezes its column list at save time, so new Data Extension columns are silently ignored later. COUNT(*) itself is unaffected and always allowed.' },
-        { name: '/* Comment */', category: 'comment', description: 'Block comment; text between /* and */ is ignored by the SQL engine.', syntax: '/* comment text */', example: 'SELECT SubscriberKey /* primary identifier */ FROM _Subscribers', docs: 'https://help.salesforce.com/s/articleView?id=mktg.mc_as_sql_reference.htm', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/slash-star-comment-transact-sql', sfmc: 'Block comments work anywhere, before SELECT too, and words such as delete in them are fine (org check, 2026-09-28). A -- line comment passes Validate, but the save of a Query Activity loses everything after it: the rest of the query, or the whole query where the comment comes before SELECT, which answers Cannot find table 0 (the author\'s org, 2026-10-15). Write comments as /* */, which lint\'s MCE100 does for you. An unpaired apostrophe in a comment is not fine either: Validate passes it, but the run then fails with Error while processing square brackets, or, with one in another comment too, runs with its text values changed. A pair in one comment is fine.' },
+        { name: '/* Comment */', category: 'comment', description: 'Block comment; text between /* and */ is ignored by the SQL engine.', syntax: '/* comment text */', example: 'SELECT SubscriberKey /* primary identifier */ FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-style-guide/#comments', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/slash-star-comment-transact-sql', sfmc: 'Block comments work anywhere, before SELECT too, and words such as delete in them are fine (org check, 2026-09-28). A -- line comment ends with its line for Validate, which passes it, but the save of a Query Activity treats it as never closed: everything below it becomes part of the comment, or the whole query where the comment comes before SELECT, which answers Cannot find table 0 (the author\'s org, 2026-10-15). A comment that closes the query passes the save, and the run then fails with no reason. Write comments as /* */, which lint\'s MCE100 does for you. An unpaired apostrophe in a comment is not fine either: Validate passes it, but the run then fails with Error while processing square brackets, or, with one in another comment too, runs with its text values changed. A pair in one comment is fine.' },
     ],
     functions: [
-        { name: 'LEN', category: 'string', signature: 'LEN(string_expression)', returns: 'int (bigint if the input is varchar(max)/nvarchar(max))', description: 'Returns the number of characters in a string, excluding trailing blanks.', example: 'SELECT SubscriberKey FROM _Subscribers WHERE LEN(SubscriberKey) != 18', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-string-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/len-transact-sql' },
-        { name: 'LEFT', category: 'string', signature: 'LEFT(character_expression, integer_expression)', returns: 'varchar or nvarchar', description: 'Returns the leftmost specified number of characters of a string.', example: 'SELECT LEFT(EmailAddress, 1) AS FirstLetter FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-string-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/left-transact-sql' },
-        { name: 'RIGHT', category: 'string', signature: 'RIGHT(character_expression, integer_expression)', returns: 'varchar or nvarchar', description: 'Returns the rightmost specified number of characters of a string.', example: 'SELECT RIGHT(EmailAddress, 4) FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-string-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/right-transact-sql' },
-        { name: 'SUBSTRING', category: 'string', signature: 'SUBSTRING(expression, start, length)', returns: 'varchar or nvarchar', description: 'Returns part of a string, starting at a 1-based position, for a given length.', example: "SELECT SUBSTRING(EmailAddress, 1, CHARINDEX('@', EmailAddress) - 1) AS LocalPart FROM _Subscribers", docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/substring-transact-sql', sfmc: 'String functions in MCE SQL are 1-based, like standard T-SQL.' },
-        { name: 'CHARINDEX', category: 'string', signature: 'CHARINDEX(expressionToFind, expressionToSearch [, start_location])', returns: 'int (bigint for very large inputs); 0 if not found, NULL if either input is NULL', description: 'Returns the starting position of the first occurrence of a substring inside a string.', example: "SELECT SubscriberKey FROM _Subscribers WHERE CHARINDEX('@gmail.com', EmailAddress) > 0", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-string-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/charindex-transact-sql', sfmc: 'Case-insensitive by default; add COLLATE Latin1_General_CS_AS to the searched expression for a case-sensitive match.' },
-        { name: 'PATINDEX', category: 'string', signature: "PATINDEX('%pattern%', expression)", returns: 'int', description: 'Returns the starting position of the first match of a LIKE-style wildcard pattern inside a string.', example: "SELECT PATINDEX('%[0-9]%', SubscriberKey) FROM _Subscribers", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-string-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/patindex-transact-sql', sfmc: 'Like CHARINDEX but supports the same wildcard patterns as LIKE (%, _, [], [^]).' },
-        { name: 'REPLACE', category: 'string', signature: 'REPLACE(string_expression, string_pattern, string_replacement)', returns: 'varchar or nvarchar', description: 'Replaces every occurrence of a substring with another substring.', example: "SELECT REPLACE(MobileNumber, '-', '') AS CleanNumber FROM _MobileAddress", docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/replace-transact-sql' },
+        { name: 'LEN', category: 'string', signature: 'LEN(string_expression)', returns: 'int (bigint if the input is varchar(max)/nvarchar(max))', description: 'Returns the number of characters in a string, excluding trailing blanks.', example: 'SELECT SubscriberKey FROM _Subscribers WHERE LEN(SubscriberKey) != 18', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-string-functions/#len', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/len-transact-sql' },
+        { name: 'LEFT', category: 'string', signature: 'LEFT(character_expression, integer_expression)', returns: 'varchar or nvarchar', description: 'Returns the leftmost specified number of characters of a string.', example: 'SELECT LEFT(EmailAddress, 1) AS FirstLetter FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-string-functions/#left--right', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/left-transact-sql' },
+        { name: 'RIGHT', category: 'string', signature: 'RIGHT(character_expression, integer_expression)', returns: 'varchar or nvarchar', description: 'Returns the rightmost specified number of characters of a string.', example: 'SELECT RIGHT(EmailAddress, 4) FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-string-functions/#left--right', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/right-transact-sql' },
+        { name: 'SUBSTRING', category: 'string', signature: 'SUBSTRING(expression, start, length)', returns: 'varchar or nvarchar', description: 'Returns part of a string, starting at a 1-based position, for a given length.', example: "SELECT SUBSTRING(EmailAddress, 1, CHARINDEX('@', EmailAddress) - 1) AS LocalPart FROM _Subscribers", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-string-functions/#substring', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/substring-transact-sql', sfmc: 'String functions in MCE SQL are 1-based, like standard T-SQL.' },
+        { name: 'CHARINDEX', category: 'string', signature: 'CHARINDEX(expressionToFind, expressionToSearch [, start_location])', returns: 'int (bigint for very large inputs); 0 if not found, NULL if either input is NULL', description: 'Returns the starting position of the first occurrence of a substring inside a string.', example: "SELECT SubscriberKey FROM _Subscribers WHERE CHARINDEX('@gmail.com', EmailAddress) > 0", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-string-functions/#charindex', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/charindex-transact-sql', sfmc: 'Case-insensitive by default; add COLLATE Latin1_General_CS_AS to the searched expression for a case-sensitive match.' },
+        { name: 'PATINDEX', category: 'string', signature: "PATINDEX('%pattern%', expression)", returns: 'int', description: 'Returns the starting position of the first match of a LIKE-style wildcard pattern inside a string.', example: "SELECT PATINDEX('%[0-9]%', SubscriberKey) FROM _Subscribers", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-string-functions/#patindex', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/patindex-transact-sql', sfmc: 'Like CHARINDEX but supports the same wildcard patterns as LIKE (%, _, [], [^]).' },
+        { name: 'REPLACE', category: 'string', signature: 'REPLACE(string_expression, string_pattern, string_replacement)', returns: 'varchar or nvarchar', description: 'Replaces every occurrence of a substring with another substring.', example: "SELECT REPLACE(MobileNumber, '-', '') AS CleanNumber FROM _MobileAddress", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-string-functions/#replace-and-translate', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/replace-transact-sql' },
         { name: 'STUFF', category: 'string', signature: 'STUFF(character_expression, start, length, replaceWith_expression)', returns: 'varchar or nvarchar', description: 'Deletes a specified length of characters starting at a position, then inserts a replacement string at that position.', example: "SELECT STUFF(MobileNumber, 1, 2, '+48') FROM _MobileAddress", docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/stuff-transact-sql' },
-        { name: 'CONCAT', category: 'string', signature: 'CONCAT(string1, string2 [, string3, ...])', returns: 'varchar or nvarchar', description: 'Joins two or more strings together, implicitly converting non-string arguments and treating NULL as an empty string.', example: "SELECT CONCAT(FirstName, ' ', LastName) AS FullName FROM Contacts_DE", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-string-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/concat-transact-sql', sfmc: "Unlike the + operator, CONCAT treats NULL as an empty text. With +, 'abc' + NULL is NULL, as CONCAT_NULL_YIELDS_NULL is on in MCE (org check, 2026-10-14)." },
+        { name: 'CONCAT', category: 'string', signature: 'CONCAT(string1, string2 [, string3, ...])', returns: 'varchar or nvarchar', description: 'Joins two or more strings together, implicitly converting non-string arguments and treating NULL as an empty string.', example: "SELECT CONCAT(FirstName, ' ', LastName) AS FullName FROM Contacts_DE", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-string-functions/#concat', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/concat-transact-sql', sfmc: "Unlike the + operator, CONCAT treats NULL as an empty text. With +, 'abc' + NULL is NULL, as CONCAT_NULL_YIELDS_NULL is on in MCE (org check, 2026-10-14)." },
         { name: 'CONCAT_WS', category: 'string', signature: 'CONCAT_WS(separator, string1, string2 [, ...])', returns: 'varchar or nvarchar', description: 'Joins two or more strings with a separator between each, skipping NULL arguments entirely.', example: "SELECT CONCAT_WS(', ', City, State, ZipCode) AS Address FROM Contacts_DE", docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/concat-ws-transact-sql', sfmc: 'Added in SQL Server 2017. MCE runs SQL Server 2022 (org check, 2026-09-28).' },
-        { name: 'LTRIM', category: 'string', signature: 'LTRIM(character_expression [, characters])', returns: 'varchar or nvarchar', description: 'Removes leading spaces from a string, or the characters given as its second argument.', example: 'SELECT LTRIM(FormInput) FROM Webform_DE', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-string-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/ltrim-transact-sql', sfmc: "The characters argument, LTRIM('xxabc', 'x') for abc, needs database compatibility level 160, which MCE runs: it validated and ran (org check, 2026-10-14)." },
-        { name: 'RTRIM', category: 'string', signature: 'RTRIM(character_expression [, characters])', returns: 'varchar or nvarchar', description: 'Removes trailing spaces from a string, or the characters given as its second argument.', example: 'SELECT RTRIM(FormInput) FROM Webform_DE', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-string-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/rtrim-transact-sql', sfmc: "The characters argument, RTRIM('abcxx', 'x') for abc, needs database compatibility level 160, which MCE runs: it validated and ran (org check, 2026-10-14)." },
-        { name: 'TRIM', category: 'string', signature: 'TRIM(string)', returns: 'varchar or nvarchar', description: 'Removes leading and trailing spaces (or a specified set of characters) from a string.', example: 'SELECT TRIM(FormInput) FROM Webform_DE', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-string-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/trim-transact-sql', sfmc: 'TRIM(text) strips spaces and works. Its FROM forms, TRIM(\'x\' FROM text) and TRIM(LEADING \'0\' FROM text), fail the query check, which reads that FROM as a table (org check, 2026-09-28). Use LTRIM and RTRIM instead, with the characters to cut as their second argument, LTRIM(x, \'0\'), which MCE runs at its database level 160 (org check, 2026-10-14).' },
-        { name: 'LOWER', category: 'string', signature: 'LOWER(character_expression)', returns: 'varchar or nvarchar', description: 'Converts a string to lowercase.', example: 'SELECT LOWER(EmailAddress) FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-string-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/lower-transact-sql', sfmc: 'Comparisons in MCE are already case-insensitive, so wrapping a WHERE column in LOWER/UPPER is usually unnecessary and can prevent index use.' },
-        { name: 'UPPER', category: 'string', signature: 'UPPER(character_expression)', returns: 'varchar or nvarchar', description: 'Converts a string to uppercase.', example: 'SELECT UPPER(SubscriberType) FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-string-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/upper-transact-sql' },
+        { name: 'LTRIM', category: 'string', signature: 'LTRIM(character_expression [, characters])', returns: 'varchar or nvarchar', description: 'Removes leading spaces from a string, or the characters given as its second argument.', example: 'SELECT LTRIM(FormInput) FROM Webform_DE', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-string-functions/#ltrim-rtrim-and-trim', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/ltrim-transact-sql', sfmc: "The characters argument, LTRIM('xxabc', 'x') for abc, needs database compatibility level 160, which MCE runs: it validated and ran (org check, 2026-10-14)." },
+        { name: 'RTRIM', category: 'string', signature: 'RTRIM(character_expression [, characters])', returns: 'varchar or nvarchar', description: 'Removes trailing spaces from a string, or the characters given as its second argument.', example: 'SELECT RTRIM(FormInput) FROM Webform_DE', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-string-functions/#ltrim-rtrim-and-trim', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/rtrim-transact-sql', sfmc: "The characters argument, RTRIM('abcxx', 'x') for abc, needs database compatibility level 160, which MCE runs: it validated and ran (org check, 2026-10-14)." },
+        { name: 'TRIM', category: 'string', signature: 'TRIM(string)', returns: 'varchar or nvarchar', description: 'Removes leading and trailing spaces (or a specified set of characters) from a string.', example: 'SELECT TRIM(FormInput) FROM Webform_DE', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-string-functions/#ltrim-rtrim-and-trim', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/trim-transact-sql', sfmc: 'TRIM(text) strips spaces and works. Its FROM forms, TRIM(\'x\' FROM text) and TRIM(LEADING \'0\' FROM text), fail the query check, which reads that FROM as a table (org check, 2026-09-28). Use LTRIM and RTRIM instead, with the characters to cut as their second argument, LTRIM(x, \'0\'), which MCE runs at its database level 160 (org check, 2026-10-14).' },
+        { name: 'LOWER', category: 'string', signature: 'LOWER(character_expression)', returns: 'varchar or nvarchar', description: 'Converts a string to lowercase.', example: 'SELECT LOWER(EmailAddress) FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-string-functions/#lower-upper-and-title-case', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/lower-transact-sql', sfmc: 'Comparisons in MCE are already case-insensitive, so wrapping a WHERE column in LOWER/UPPER is usually unnecessary and can prevent index use.' },
+        { name: 'UPPER', category: 'string', signature: 'UPPER(character_expression)', returns: 'varchar or nvarchar', description: 'Converts a string to uppercase.', example: 'SELECT UPPER(SubscriberType) FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-string-functions/#lower-upper-and-title-case', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/upper-transact-sql' },
         { name: 'REVERSE', category: 'string', signature: 'REVERSE(string_expression)', returns: 'varchar or nvarchar', description: 'Reverses the order of characters in a string.', example: 'SELECT REVERSE(SubscriberKey) FROM _Subscribers', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/reverse-transact-sql' },
         { name: 'SPACE', category: 'string', signature: 'SPACE(integer_expression)', returns: 'varchar', description: 'Returns a string made of the specified number of spaces.', example: 'SELECT FirstName + SPACE(1) + LastName AS FullName FROM Contacts_DE', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/space-transact-sql' },
         { name: 'REPLICATE', category: 'string', signature: 'REPLICATE(string_expression, integer_expression)', returns: 'varchar or nvarchar', description: 'Repeats a string a specified number of times.', example: "SELECT REPLICATE('0', 5 - LEN(ZipCode)) + ZipCode AS PaddedZip FROM Contacts_DE", docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/replicate-transact-sql' },
-        { name: 'TRANSLATE', category: 'string', signature: 'TRANSLATE(inputString, characters, translations)', returns: 'varchar or nvarchar', description: 'Replaces each character found in the characters argument with the character at the same position in translations.', example: "SELECT TRANSLATE(Phone, '() -', '    ') FROM _MobileAddress", docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/translate-transact-sql' },
+        { name: 'TRANSLATE', category: 'string', signature: 'TRANSLATE(inputString, characters, translations)', returns: 'varchar or nvarchar', description: 'Replaces each character found in the characters argument with the character at the same position in translations.', example: "SELECT TRANSLATE(Phone, '() -', '    ') FROM _MobileAddress", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-string-functions/#replace-and-translate', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/translate-transact-sql' },
         { name: 'QUOTENAME', category: 'string', signature: 'QUOTENAME(character_expression [, quote_character])', returns: 'nvarchar(258)', description: 'Wraps a string in delimiters (brackets by default) to make it a valid SQL Server identifier.', example: 'SELECT QUOTENAME(ColumnName) FROM MetadataList_DE', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/quotename-transact-sql' },
         { name: 'STR', category: 'string', signature: 'STR(float_expression [, length [, decimal]])', returns: 'char', description: 'Converts a numeric value to a right-justified character string.', example: 'SELECT STR(BounceCount, 5) FROM _Subscribers', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/str-transact-sql' },
         { name: 'UNICODE', category: 'string', signature: "UNICODE('character_expression')", returns: 'int', description: 'Returns the integer Unicode code point of the first character of the input string.', example: 'SELECT UNICODE(LEFT(EmailAddress, 1)) FROM _Subscribers', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/unicode-transact-sql' },
@@ -131,51 +135,51 @@ window.SQLStudioSQL = {
         { name: 'STRING_ESCAPE', category: 'string', signature: 'STRING_ESCAPE(text, type)', returns: 'nvarchar', description: 'Escapes special characters in a string for a given output format.', example: "SELECT STRING_ESCAPE(Notes, 'json') FROM Contacts_DE", docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/string-escape-transact-sql', sfmc: "The type argument currently only supports 'json'." },
         { name: 'SOUNDEX', category: 'string', signature: 'SOUNDEX(character_expression)', returns: 'char(4)', description: 'Returns a four-character code representing how a string sounds when spoken, for fuzzy name matching.', example: "SELECT * FROM Contacts_DE WHERE SOUNDEX(LastName) = SOUNDEX('Smith')", docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/soundex-transact-sql' },
         { name: 'DIFFERENCE', category: 'string', signature: 'DIFFERENCE(character_expression, character_expression)', returns: 'int (0-4)', description: 'Returns how similar the SOUNDEX values of two strings are, from 0 (no similarity) to 4 (identical).', example: "SELECT DIFFERENCE(LastName, 'Smith') FROM Contacts_DE", docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/difference-transact-sql' },
-        { name: 'GETDATE', category: 'date', signature: 'GETDATE()', returns: 'datetime', description: 'Returns the current date and time.', example: 'SELECT GETDATE() AS Now', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-date-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/getdate-transact-sql', sfmc: 'Returns MCE server time, UTC-6 all year, never moved for daylight saving: on 14 October 2026, in US daylight saving, it was 360 minutes behind GETUTCDATE() (org check, 2026-10-14).' },
-        { name: 'GETUTCDATE', category: 'date', signature: 'GETUTCDATE()', returns: 'datetime', description: 'Returns the current date and time in UTC.', example: 'SELECT GETUTCDATE() AS NowUtc', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-date-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/getutcdate-transact-sql', sfmc: 'Use this instead of GETDATE() for a timezone-independent timestamp; it still carries no DST logic since MCE server time never observes DST anyway.' },
+        { name: 'GETDATE', category: 'date', signature: 'GETDATE()', returns: 'datetime', description: 'Returns the current date and time.', example: 'SELECT GETDATE() AS Now', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-date-functions/#getdate--getutcdate', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/getdate-transact-sql', sfmc: 'Returns MCE server time, UTC-6 all year, never moved for daylight saving: on 14 October 2026, in US daylight saving, it was 360 minutes behind GETUTCDATE() (org check, 2026-10-14).' },
+        { name: 'GETUTCDATE', category: 'date', signature: 'GETUTCDATE()', returns: 'datetime', description: 'Returns the current date and time in UTC.', example: 'SELECT GETUTCDATE() AS NowUtc', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-date-functions/#getdate--getutcdate', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/getutcdate-transact-sql', sfmc: 'Use this instead of GETDATE() for a timezone-independent timestamp; it still carries no DST logic since MCE server time never observes DST anyway.' },
         { name: 'SYSDATETIME', category: 'date', signature: 'SYSDATETIME()', returns: 'datetime2(7)', description: 'Returns the current date and time with fractional-second precision.', example: 'SELECT SYSDATETIME() AS PreciseNow', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/sysdatetime-transact-sql' },
         { name: 'SYSUTCDATETIME', category: 'date', signature: 'SYSUTCDATETIME()', returns: 'datetime2(7)', description: 'Returns the current UTC date and time with fractional-second precision.', example: 'SELECT SYSUTCDATETIME() AS PreciseNowUtc', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/sysutcdatetime-transact-sql' },
-        { name: 'SYSDATETIMEOFFSET', category: 'date', signature: 'SYSDATETIMEOFFSET()', returns: 'datetimeoffset(7)', description: "Returns the current date and time along with the server's time zone offset.", example: 'SELECT SYSDATETIMEOFFSET() AS NowWithOffset', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-date-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/sysdatetimeoffset-transact-sql', sfmc: 'Ends with -06:00 all year in MCE, as the server clock keeps UTC-6, also during US daylight saving (org check, 2026-10-14).' },
-        { name: 'DATEADD', category: 'date', signature: 'DATEADD(datepart, number, date)', returns: 'same type as date', description: 'Adds (or subtracts, with a negative number) an interval to a date.', example: 'SELECT DATEADD(DAY, -7, GETDATE()) AS OneWeekAgo', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-date-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/dateadd-transact-sql', sfmc: 'Does not account for time zone offsets; it operates on the raw date value.' },
-        { name: 'DATEDIFF', category: 'date', signature: 'DATEDIFF(datepart, startdate, enddate)', returns: 'int', description: 'Returns the number of datepart boundaries crossed between two dates.', example: 'SELECT SubscriberKey, DATEDIFF(DAY, DateJoined, GETDATE()) AS DaysSinceJoin FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-date-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/datediff-transact-sql', sfmc: 'Wrapping a data-view column in DATEDIFF inside WHERE/ON is non-SARGable and forces a full scan; compare against DATEADD(...) on the raw column instead. With SECOND or MILLISECOND, the result overflows int after about 68 years; use DATEDIFF_BIG for very large spans.' },
-        { name: 'DATEDIFF_BIG', category: 'date', signature: 'DATEDIFF_BIG(datepart, startdate, enddate)', returns: 'bigint', description: 'Same as DATEDIFF but returns a bigint, avoiding int overflow for very large second/millisecond spans.', example: "SELECT DATEDIFF_BIG(MILLISECOND, '2000-01-01', GETDATE())", docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/datediff-big-transact-sql' },
-        { name: 'DATEPART', category: 'date', signature: 'DATEPART(datepart, date)', returns: 'int', description: 'Returns a single part of a date (year, month, day, etc.) as an integer.', example: 'SELECT DATEPART(YEAR, DateJoined) AS JoinYear FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-date-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/datepart-transact-sql', sfmc: "The session's DATEFIRST is 7, so DATEPART(WEEKDAY, x) gives 1 for Sunday, and DATEPART(WEEK, '2026-01-04') gives 2 where ISO_WEEK gives 1 (org check, 2026-10-14). Use full date part names, YEAR rather than yy, as the MCE SQL style guide does." },
-        { name: 'DATENAME', category: 'date', signature: 'DATENAME(datepart, date)', returns: 'nvarchar', description: 'Returns a single part of a date as its string name.', example: 'SELECT DATENAME(WEEKDAY, DateJoined) AS JoinWeekday FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-date-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/datename-transact-sql', sfmc: 'The session language is us_english, so the names are English: Sunday, October (org check, 2026-10-14). The result is text, so use DATEPART for comparisons and arithmetic.' },
-        { name: 'DAY', category: 'date', signature: 'DAY(date)', returns: 'int', description: 'Shorthand for DATEPART(DAY, date).', example: 'SELECT DAY(DateJoined) FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-date-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/day-transact-sql' },
-        { name: 'MONTH', category: 'date', signature: 'MONTH(date)', returns: 'int', description: 'Shorthand for DATEPART(MONTH, date).', example: 'SELECT MONTH(DateJoined) FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-date-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/month-transact-sql' },
-        { name: 'YEAR', category: 'date', signature: 'YEAR(date)', returns: 'int', description: 'Shorthand for DATEPART(YEAR, date).', example: 'SELECT YEAR(DateJoined) FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-date-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/year-transact-sql' },
+        { name: 'SYSDATETIMEOFFSET', category: 'date', signature: 'SYSDATETIMEOFFSET()', returns: 'datetimeoffset(7)', description: "Returns the current date and time along with the server's time zone offset.", example: 'SELECT SYSDATETIMEOFFSET() AS NowWithOffset', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-date-functions/#getdate--getutcdate', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/sysdatetimeoffset-transact-sql', sfmc: 'Ends with -06:00 all year in MCE, as the server clock keeps UTC-6, also during US daylight saving (org check, 2026-10-14).' },
+        { name: 'DATEADD', category: 'date', signature: 'DATEADD(datepart, number, date)', returns: 'same type as date', description: 'Adds (or subtracts, with a negative number) an interval to a date.', example: 'SELECT DATEADD(DAY, -7, GETDATE()) AS OneWeekAgo', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-date-functions/#dateadd', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/dateadd-transact-sql', sfmc: 'Does not account for time zone offsets; it operates on the raw date value.' },
+        { name: 'DATEDIFF', category: 'date', signature: 'DATEDIFF(datepart, startdate, enddate)', returns: 'int', description: 'Returns the number of datepart boundaries crossed between two dates.', example: 'SELECT SubscriberKey, DATEDIFF(DAY, DateJoined, GETDATE()) AS DaysSinceJoin FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-date-functions/#datediff', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/datediff-transact-sql', sfmc: 'Wrapping a data-view column in DATEDIFF inside WHERE/ON is non-SARGable and forces a full scan; compare against DATEADD(...) on the raw column instead. With SECOND or MILLISECOND, the result overflows int after about 68 years; use DATEDIFF_BIG for very large spans.' },
+        { name: 'DATEDIFF_BIG', category: 'date', signature: 'DATEDIFF_BIG(datepart, startdate, enddate)', returns: 'bigint', description: 'Same as DATEDIFF but returns a bigint, avoiding int overflow for very large second/millisecond spans.', example: "SELECT DATEDIFF_BIG(MILLISECOND, '2000-01-01', GETDATE())", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-date-functions/#datediff', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/datediff-big-transact-sql' },
+        { name: 'DATEPART', category: 'date', signature: 'DATEPART(datepart, date)', returns: 'int', description: 'Returns a single part of a date (year, month, day, etc.) as an integer.', example: 'SELECT DATEPART(YEAR, DateJoined) AS JoinYear FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-date-functions/#datepart', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/datepart-transact-sql', sfmc: "The session's DATEFIRST is 7, so DATEPART(WEEKDAY, x) gives 1 for Sunday, and DATEPART(WEEK, '2026-01-04') gives 2 where ISO_WEEK gives 1 (org check, 2026-10-14). Use full date part names, YEAR rather than yy, as the MCE SQL style guide does." },
+        { name: 'DATENAME', category: 'date', signature: 'DATENAME(datepart, date)', returns: 'nvarchar', description: 'Returns a single part of a date as its string name.', example: 'SELECT DATENAME(WEEKDAY, DateJoined) AS JoinWeekday FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-date-functions/#datename', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/datename-transact-sql', sfmc: 'The session language is us_english, so the names are English: Sunday, October (org check, 2026-10-14). The result is text, so use DATEPART for comparisons and arithmetic.' },
+        { name: 'DAY', category: 'date', signature: 'DAY(date)', returns: 'int', description: 'Shorthand for DATEPART(DAY, date).', example: 'SELECT DAY(DateJoined) FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-date-functions/#datepart', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/day-transact-sql' },
+        { name: 'MONTH', category: 'date', signature: 'MONTH(date)', returns: 'int', description: 'Shorthand for DATEPART(MONTH, date).', example: 'SELECT MONTH(DateJoined) FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-date-functions/#datepart', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/month-transact-sql' },
+        { name: 'YEAR', category: 'date', signature: 'YEAR(date)', returns: 'int', description: 'Shorthand for DATEPART(YEAR, date).', example: 'SELECT YEAR(DateJoined) FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-date-functions/#datepart', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/year-transact-sql' },
         { name: 'EOMONTH', category: 'date', signature: 'EOMONTH(start_date [, month_to_add])', returns: 'date', description: 'Returns the last day of the month for a given date, optionally after adding a number of months.', example: 'SELECT EOMONTH(GETDATE()) AS LastDayOfMonth', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/eomonth-transact-sql' },
-        { name: 'DATEFROMPARTS', category: 'date', signature: 'DATEFROMPARTS(year, month, day)', returns: 'date', description: 'Builds a date value from separate year, month and day integers.', example: 'SELECT DATEFROMPARTS(2026, 1, 31) AS CampaignDate', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-date-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/datefromparts-transact-sql', sfmc: 'Returns NULL if any part is NULL, rather than an error.' },
-        { name: 'DATETIMEFROMPARTS', category: 'date', signature: 'DATETIMEFROMPARTS(year, month, day, hour, minute, seconds, milliseconds)', returns: 'datetime', description: 'Builds a datetime value from separate integer components.', example: 'SELECT DATETIMEFROMPARTS(2026, 1, 31, 23, 59, 59, 0) AS CampaignEnd', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-date-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/datetimefromparts-transact-sql' },
+        { name: 'DATEFROMPARTS', category: 'date', signature: 'DATEFROMPARTS(year, month, day)', returns: 'date', description: 'Builds a date value from separate year, month and day integers.', example: 'SELECT DATEFROMPARTS(2026, 1, 31) AS CampaignDate', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-date-functions/#datefromparts--datetimefromparts', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/datefromparts-transact-sql', sfmc: 'Returns NULL if any part is NULL, rather than an error.' },
+        { name: 'DATETIMEFROMPARTS', category: 'date', signature: 'DATETIMEFROMPARTS(year, month, day, hour, minute, seconds, milliseconds)', returns: 'datetime', description: 'Builds a datetime value from separate integer components.', example: 'SELECT DATETIMEFROMPARTS(2026, 1, 31, 23, 59, 59, 0) AS CampaignEnd', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-date-functions/#datefromparts--datetimefromparts', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/datetimefromparts-transact-sql' },
         { name: 'DATETIME2FROMPARTS', category: 'date', signature: 'DATETIME2FROMPARTS(year, month, day, hour, minute, seconds, fractions, precision)', returns: 'datetime2', description: 'Builds a datetime2 value (higher precision than DATETIMEFROMPARTS) from separate integer components.', example: 'SELECT DATETIME2FROMPARTS(2026, 1, 31, 23, 59, 59, 0, 0) AS CampaignEnd', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/datetime2fromparts-transact-sql' },
-        { name: 'TIMEFROMPARTS', category: 'date', signature: 'TIMEFROMPARTS(hour, minute, seconds, fractions, precision)', returns: 'time', description: 'Builds a time-of-day value from separate integer components.', example: 'SELECT TIMEFROMPARTS(9, 30, 0, 0, 0) AS SendTime', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-date-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/timefromparts-transact-sql', sfmc: 'Of limited use in MCE since most Data Extension date fields store a full datetime, not a bare time value.' },
+        { name: 'TIMEFROMPARTS', category: 'date', signature: 'TIMEFROMPARTS(hour, minute, seconds, fractions, precision)', returns: 'time', description: 'Builds a time-of-day value from separate integer components.', example: 'SELECT TIMEFROMPARTS(9, 30, 0, 0, 0) AS SendTime', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-date-functions/#datefromparts--datetimefromparts', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/timefromparts-transact-sql', sfmc: 'Of limited use in MCE since most Data Extension date fields store a full datetime, not a bare time value.' },
         { name: 'ISDATE', category: 'date', signature: 'ISDATE(expression)', returns: 'int (1 or 0)', description: 'Returns 1 if a string is a valid date, time or datetime value, otherwise 0.', example: 'SELECT * FROM ImportedRows_DE WHERE ISDATE(RawDate) = 1', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/isdate-transact-sql' },
-        { name: 'TODATETIMEOFFSET', category: 'date', signature: 'TODATETIMEOFFSET(datetime_expr, time_zone_offset)', returns: 'datetimeoffset', description: 'Attaches a fixed time zone offset to a date/time value, without applying any Daylight Saving Time logic.', example: "SELECT TODATETIMEOFFSET(GETDATE(), '-06:00') AS ServerTimeWithOffset", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-date-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/todatetimeoffset-transact-sql', sfmc: "The preferred way to attach MCE's fixed Central Standard Time offset, since AT TIME ZONE 'Central Standard Time' would incorrectly apply real DST rules." },
+        { name: 'TODATETIMEOFFSET', category: 'date', signature: 'TODATETIMEOFFSET(datetime_expr, time_zone_offset)', returns: 'datetimeoffset', description: 'Attaches a fixed time zone offset to a date/time value, without applying any Daylight Saving Time logic.', example: "SELECT TODATETIMEOFFSET(GETDATE(), '-06:00') AS ServerTimeWithOffset", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-date-functions/#at-time-zone-vs-todatetimeoffset', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/todatetimeoffset-transact-sql', sfmc: "The preferred way to attach MCE's fixed Central Standard Time offset, since AT TIME ZONE 'Central Standard Time' would incorrectly apply real DST rules." },
         { name: 'SWITCHOFFSET', category: 'date', signature: 'SWITCHOFFSET(datetimeoffset_expr, time_zone_offset)', returns: 'datetimeoffset', description: 'Converts a datetimeoffset value to a different time zone offset, keeping the same point in time.', example: "SELECT SWITCHOFFSET(SYSDATETIMEOFFSET(), '+00:00') AS AsUtcOffset", docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/switchoffset-transact-sql' },
         { name: 'CURRENT_TIMEZONE', category: 'date', signature: 'CURRENT_TIMEZONE()', returns: 'varchar', description: "Returns the name of the server's time zone.", example: 'SELECT CURRENT_TIMEZONE() AS ServerTimeZone', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/current-timezone-transact-sql', sfmc: 'Returns "(UTC-06:00) Central Time (US & Canada)" in MCE, while the server clock keeps UTC-6 all year and never moves for daylight saving (org check, 2026-10-14).' },
-        { name: 'DATETRUNC', category: 'date', signature: 'DATETRUNC(datepart, date)', returns: 'the type of date', description: 'Returns the date cut down to the start of its date part, such as the first day of its month.', example: 'SELECT SubscriberKey, DATETRUNC(MONTH, DateJoined) AS JoinMonth FROM _Subscribers', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/datetrunc-transact-sql', sfmc: 'Added in SQL Server 2022. Validate accepted it with MONTH and WEEK in MCE (org check, 2026-10-14). A WEEK starts on Sunday, as DATEFIRST is 7.' },
+        { name: 'DATETRUNC', category: 'date', signature: 'DATETRUNC(datepart, date)', returns: 'the type of date', description: 'Returns the date cut down to the start of its date part, such as the first day of its month.', example: 'SELECT SubscriberKey, DATETRUNC(MONTH, DateJoined) AS JoinMonth FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-date-functions/#last-full-month', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/datetrunc-transact-sql', sfmc: 'Added in SQL Server 2022. Validate accepted it with MONTH and WEEK in MCE (org check, 2026-10-14). A WEEK starts on Sunday, as DATEFIRST is 7.' },
         { name: 'DATE_BUCKET', category: 'date', signature: 'DATE_BUCKET(datepart, number, date [, origin])', returns: 'the type of date', description: 'Returns the start of the bucket of number date parts that holds the date, counted from the origin, 1900-01-01 by default.', example: 'SELECT SubscriberKey, DATE_BUCKET(WEEK, 1, DateJoined) AS JoinWeek FROM _Subscribers', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/date-bucket-transact-sql', sfmc: 'Added in SQL Server 2022. Validate accepted it in MCE (org check, 2026-10-14).' },
-        { name: 'CAST', category: 'conversion', signature: 'CAST(expression AS data_type)', returns: 'the target data_type', description: 'Converts an expression from one data type to another, using ANSI standard syntax.', example: 'SELECT CAST(BounceCount AS VARCHAR(10)) FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-conversion-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/cast-and-convert-transact-sql', sfmc: 'CONVERT is generally preferred in MCE: Query Studio has been reported to reject CAST in some SELECT list positions, and CONVERT additionally accepts style codes for date formatting.' },
-        { name: 'CONVERT', category: 'conversion', signature: 'CONVERT(data_type, expression [, style])', returns: 'the target data_type', description: 'Converts an expression from one data type to another, with an optional style code that controls date/number formatting.', example: 'SELECT CONVERT(VARCHAR(10), GETDATE(), 101) AS TodayUS', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-conversion-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/cast-and-convert-transact-sql', sfmc: "The session reads date text as month, day, year, so CONVERT(DATETIME, '01/02/2026') and CAST('01/02/2026' AS DATETIME) are 2 January, and style 103 reads it day first, 1 February (org check, 2026-10-14). Write a date as 'yyyymmdd' to be safe. A datetime as text with no style reads 'Oct 14 2026  1:45PM'. Converting to INT cuts the decimals, 6.9 to 6, and DECIMAL with no precision and scale rounds, 6.9 to 7, so write DECIMAL(p, s). FLOAT and REAL are approximate and misbehave in WHERE comparisons." },
-        { name: 'TRY_CAST', category: 'conversion', signature: 'TRY_CAST(expression AS data_type)', returns: 'the target data_type, or NULL on failure', description: 'Same as CAST, but returns NULL instead of raising an error when the conversion fails.', example: 'SELECT TRY_CAST(RawValue AS INT) FROM ImportedRows_DE', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/try-cast-transact-sql' },
-        { name: 'TRY_CONVERT', category: 'conversion', signature: 'TRY_CONVERT(data_type, expression [, style])', returns: 'the target data_type, or NULL on failure', description: 'Same as CONVERT, but returns NULL instead of raising an error when the conversion fails.', example: 'SELECT TRY_CONVERT(DATE, RawDate, 103) FROM ImportedRows_DE', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/try-convert-transact-sql' },
+        { name: 'CAST', category: 'conversion', signature: 'CAST(expression AS data_type)', returns: 'the target data_type', description: 'Converts an expression from one data type to another, using ANSI standard syntax.', example: 'SELECT CAST(BounceCount AS VARCHAR(10)) FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-conversion-functions/#cast', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/cast-and-convert-transact-sql', sfmc: 'CONVERT is generally preferred in MCE: Query Studio has been reported to reject CAST in some SELECT list positions, and CONVERT additionally accepts style codes for date formatting.' },
+        { name: 'CONVERT', category: 'conversion', signature: 'CONVERT(data_type, expression [, style])', returns: 'the target data_type', description: 'Converts an expression from one data type to another, with an optional style code that controls date/number formatting.', example: 'SELECT CONVERT(VARCHAR(10), GETDATE(), 101) AS TodayUS', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-conversion-functions/#convert', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/cast-and-convert-transact-sql', sfmc: "The session reads date text as month, day, year, so CONVERT(DATETIME, '01/02/2026') and CAST('01/02/2026' AS DATETIME) are 2 January, and style 103 reads it day first, 1 February (org check, 2026-10-14). Write a date as 'yyyymmdd' to be safe. A datetime as text with no style reads 'Oct 14 2026  1:45PM'. Converting to INT cuts the decimals, 6.9 to 6, and DECIMAL with no precision and scale rounds, 6.9 to 7, so write DECIMAL(p, s). FLOAT and REAL are approximate and misbehave in WHERE comparisons." },
+        { name: 'TRY_CAST', category: 'conversion', signature: 'TRY_CAST(expression AS data_type)', returns: 'the target data_type, or NULL on failure', description: 'Same as CAST, but returns NULL instead of raising an error when the conversion fails.', example: 'SELECT TRY_CAST(RawValue AS INT) FROM ImportedRows_DE', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-conversion-functions/#try_convert', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/try-cast-transact-sql' },
+        { name: 'TRY_CONVERT', category: 'conversion', signature: 'TRY_CONVERT(data_type, expression [, style])', returns: 'the target data_type, or NULL on failure', description: 'Same as CONVERT, but returns NULL instead of raising an error when the conversion fails.', example: 'SELECT TRY_CONVERT(DATE, RawDate, 103) FROM ImportedRows_DE', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-conversion-functions/#try_convert', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/try-convert-transact-sql' },
         { name: 'PARSE', category: 'conversion', signature: 'PARSE(string_value AS data_type [USING culture])', returns: 'the target data_type', description: 'Converts a culture-formatted string (e.g. a localized date) into a date, time or numeric type.', example: "SELECT PARSE('31 January 2026' AS DATE USING 'en-US') AS ParsedDate", docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/parse-transact-sql', sfmc: "Runs in MCE, as the CLR is there: PARSE('October 14, 2026' AS DATE USING 'en-US') gave 2026-10-14 (org check, 2026-10-14). The culture is en-US when USING is left out. It is slower than CONVERT on large tables, so prefer CONVERT with a style when the format is fixed." },
         { name: 'TRY_PARSE', category: 'conversion', signature: 'TRY_PARSE(string_value AS data_type [USING culture])', returns: 'the target data_type, or NULL on failure', description: 'Same as PARSE, but returns NULL instead of raising an error when the conversion fails.', example: "SELECT TRY_PARSE(RawDate AS DATE USING 'en-GB') FROM ImportedRows_DE", docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/try-parse-transact-sql', sfmc: "Runs in MCE: TRY_PARSE('not a date' AS DATE) gave NULL (org check, 2026-10-14). The culture is en-US when USING is left out. It is as slow as PARSE on large tables." },
-        { name: 'FORMAT', category: 'conversion', signature: 'FORMAT(value, format_specifier [, culture])', returns: 'nvarchar', description: 'Formats a date or numeric value into a string using .NET-style format strings.', example: "SELECT FORMAT(GETUTCDATE(), 'dd/MM/yyyy') AS EuroDate", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-date-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/format-transact-sql', sfmc: "Runs in MCE, as the CLR is there: FORMAT(1234567.891, 'N2') gave 1,234,567.89, as the session culture is en-US, and with 'pl-PL' it gave 1 234 567,89 (org check, 2026-10-14). It is slow on large tables, and it takes dates and numbers, so CONVERT a text column first." },
-        { name: 'IIF', category: 'logical', signature: 'IIF(boolean_expression, true_value, false_value)', returns: 'the common type of true_value/false_value', description: 'Shorthand for a two-branch CASE expression.', example: "SELECT SubscriberKey, IIF(BounceCount > 0, 'Has Bounces', 'Clean') AS BounceFlag FROM _Subscribers", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-case/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/logical-functions-iif-transact-sql' },
+        { name: 'FORMAT', category: 'conversion', signature: 'FORMAT(value, format_specifier [, culture])', returns: 'nvarchar', description: 'Formats a date or numeric value into a string using .NET-style format strings.', example: "SELECT FORMAT(GETUTCDATE(), 'dd/MM/yyyy') AS EuroDate", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-date-functions/#format-with-dates', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/format-transact-sql', sfmc: "Runs in MCE, as the CLR is there: FORMAT(1234567.891, 'N2') gave 1,234,567.89, as the session culture is en-US, and with 'pl-PL' it gave 1 234 567,89 (org check, 2026-10-14). It is slow on large tables, and it takes dates and numbers, so CONVERT a text column first." },
+        { name: 'IIF', category: 'logical', signature: 'IIF(boolean_expression, true_value, false_value)', returns: 'the common type of true_value/false_value', description: 'Shorthand for a two-branch CASE expression.', example: "SELECT SubscriberKey, IIF(BounceCount > 0, 'Has Bounces', 'Clean') AS BounceFlag FROM _Subscribers", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-case/#iif-shorthand', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/logical-functions-iif-transact-sql' },
         { name: 'CHOOSE', category: 'logical', signature: 'CHOOSE(index, val1, val2 [, val3, ...])', returns: 'the common type of the value list', description: 'Returns the value at the given 1-based position in a list.', example: "SELECT CHOOSE(DATEPART(MONTH, GETDATE()), 'Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec') AS MonthName", docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/logical-functions-choose-transact-sql' },
         { name: 'ISNUMERIC', category: 'logical', signature: 'ISNUMERIC(expression)', returns: 'int (1 or 0)', description: 'Returns 1 if an expression can be evaluated as a numeric type, otherwise 0.', example: 'SELECT * FROM ImportedRows_DE WHERE ISNUMERIC(RawAmount) = 1', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/isnumeric-transact-sql', sfmc: "Known quirk: ISNUMERIC also returns 1 for standalone '+', '-', '.', and ',' characters, which are not actually convertible numbers; validate with TRY_CAST/TRY_CONVERT if that matters." },
         { name: 'GREATEST', category: 'logical', signature: 'GREATEST(expression1 [, ...expressionN])', returns: 'the type of highest precedence of the arguments', description: 'Returns the largest value of a list of expressions, leaving NULL out.', example: 'SELECT SubscriberKey, GREATEST(DateJoined, DateUnsubscribed) AS LastChange FROM _Subscribers', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/logical-functions-greatest-transact-sql', sfmc: 'Added in SQL Server 2022. Validate accepted it in MCE (org check, 2026-10-14).' },
         { name: 'LEAST', category: 'logical', signature: 'LEAST(expression1 [, ...expressionN])', returns: 'the type of highest precedence of the arguments', description: 'Returns the smallest value of a list of expressions, leaving NULL out.', example: 'SELECT SubscriberKey, LEAST(DateJoined, DateUnsubscribed) AS FirstChange FROM _Subscribers', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/logical-functions-least-transact-sql', sfmc: 'Added in SQL Server 2022. Validate accepted it in MCE (org check, 2026-10-14).' },
-        { name: 'ISNULL', category: 'null', signature: 'ISNULL(check_expression, replacement_value)', returns: 'the type of check_expression', description: 'Returns check_expression if it is not NULL, otherwise returns replacement_value.', example: 'SELECT SubscriberKey FROM Orders_DE WHERE ISNULL(PurchaseCount, 0) < 5', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-null-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/isnull-transact-sql', sfmc: 'Takes exactly two arguments and returns the data type of the first one; use COALESCE when you need more than one fallback or type-precedence behavior.' },
-        { name: 'COALESCE', category: 'null', signature: 'COALESCE(expression1, expression2 [, expression3, ...])', returns: 'the highest-precedence type among the arguments', description: 'Returns the first non-NULL expression from a list.', example: "SELECT CONCAT(FirstName, ' ', COALESCE(MiddleName + ' ', ''), LastName) AS FullName FROM Contacts_DE", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-null-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/coalesce-transact-sql', sfmc: 'AVG and SUM silently ignore NULL rows, which can skew results; wrap the column in COALESCE(col, 0) first if a NULL should count as zero.' },
-        { name: 'NULLIF', category: 'null', signature: 'NULLIF(expression1, expression2)', returns: 'the type of expression1', description: 'Returns NULL if the two expressions are equal, otherwise returns expression1.', example: 'SELECT SubscriberKey, NULLIF(WorkEmailAddress, EmailAddress) AS WorkEmailIfDifferent FROM Contacts_DE', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-null-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/nullif-transact-sql', sfmc: 'Divide by NULLIF(x, 0) when x can be 0: MCE runs with ANSI_WARNINGS on, so one division by zero fails the whole run, with no reason given (org check, 2026-10-14). NULLIF gives NULL for that row instead.' },
-        { name: 'COUNT', category: 'aggregate', signature: 'COUNT(* | [ALL] expression | DISTINCT expression)', returns: 'int', description: 'Counts rows. COUNT(*) counts every row including NULLs and duplicates; COUNT(column) skips NULLs; COUNT(DISTINCT column) skips NULLs and duplicates.', example: 'SELECT COUNT(*) AS TotalRows, COUNT(DISTINCT EmailAddress) AS UniqueEmails FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-aggregate-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/count-transact-sql' },
+        { name: 'ISNULL', category: 'null', signature: 'ISNULL(check_expression, replacement_value)', returns: 'the type of check_expression', description: 'Returns check_expression if it is not NULL, otherwise returns replacement_value.', example: 'SELECT SubscriberKey FROM Orders_DE WHERE ISNULL(PurchaseCount, 0) < 5', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-null-functions/#isnull', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/isnull-transact-sql', sfmc: 'Takes exactly two arguments and returns the data type of the first one; use COALESCE when you need more than one fallback or type-precedence behavior.' },
+        { name: 'COALESCE', category: 'null', signature: 'COALESCE(expression1, expression2 [, expression3, ...])', returns: 'the highest-precedence type among the arguments', description: 'Returns the first non-NULL expression from a list.', example: "SELECT CONCAT(FirstName, ' ', COALESCE(MiddleName + ' ', ''), LastName) AS FullName FROM Contacts_DE", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-null-functions/#coalesce', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/coalesce-transact-sql', sfmc: 'AVG and SUM silently ignore NULL rows, which can skew results; wrap the column in COALESCE(col, 0) first if a NULL should count as zero.' },
+        { name: 'NULLIF', category: 'null', signature: 'NULLIF(expression1, expression2)', returns: 'the type of expression1', description: 'Returns NULL if the two expressions are equal, otherwise returns expression1.', example: 'SELECT SubscriberKey, NULLIF(WorkEmailAddress, EmailAddress) AS WorkEmailIfDifferent FROM Contacts_DE', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-null-functions/#nullif', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/language-elements/nullif-transact-sql', sfmc: 'Divide by NULLIF(x, 0) when x can be 0: MCE runs with ANSI_WARNINGS on, so one division by zero fails the whole run, with no reason given (org check, 2026-10-14). NULLIF gives NULL for that row instead.' },
+        { name: 'COUNT', category: 'aggregate', signature: 'COUNT(* | [ALL] expression | DISTINCT expression)', returns: 'int', description: 'Counts rows. COUNT(*) counts every row including NULLs and duplicates; COUNT(column) skips NULLs; COUNT(DISTINCT column) skips NULLs and duplicates.', example: 'SELECT COUNT(*) AS TotalRows, COUNT(DISTINCT EmailAddress) AS UniqueEmails FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-aggregate-functions/#count', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/count-transact-sql' },
         { name: 'COUNT_BIG', category: 'aggregate', signature: 'COUNT_BIG(* | [ALL] expression | DISTINCT expression)', returns: 'bigint', description: 'Same as COUNT but returns bigint, for row counts too large for int.', example: 'SELECT COUNT_BIG(*) FROM _Sent', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/count-big-transact-sql' },
-        { name: 'SUM', category: 'aggregate', signature: 'SUM([ALL | DISTINCT] expression)', returns: "the input's numeric type (widened where needed)", description: 'Adds up all the values in a numeric column, ignoring NULLs.', example: 'SELECT SUM(BounceCount) AS AllBounces FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-aggregate-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/sum-transact-sql', sfmc: 'Ignores NULL rows rather than treating them as zero; COALESCE the column first if that matters.' },
-        { name: 'AVG', category: 'aggregate', signature: 'AVG([ALL | DISTINCT] expression)', returns: "the input's numeric type (widened where needed)", description: 'Returns the average of the non-NULL values in a numeric column.', example: 'SELECT AVG(BounceCount) AS AverageBounceCount FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-aggregate-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/avg-transact-sql', sfmc: 'Ignores NULL rows when computing the average, which can skew the result upward or downward versus treating them as zero; COALESCE the column first if needed.' },
-        { name: 'MIN', category: 'aggregate', signature: 'MIN(expression)', returns: "the input's type", description: 'Returns the smallest value in a column.', example: 'SELECT MIN(DateJoined) AS EarliestJoin FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-aggregate-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/min-transact-sql' },
-        { name: 'MAX', category: 'aggregate', signature: 'MAX(expression)', returns: "the input's type", description: 'Returns the largest value in a column.', example: 'SELECT MAX(LEN(SubscriberKey)) AS LongestKey FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-aggregate-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/max-transact-sql' },
+        { name: 'SUM', category: 'aggregate', signature: 'SUM([ALL | DISTINCT] expression)', returns: "the input's numeric type (widened where needed)", description: 'Adds up all the values in a numeric column, ignoring NULLs.', example: 'SELECT SUM(BounceCount) AS AllBounces FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-aggregate-functions/#sum', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/sum-transact-sql', sfmc: 'Ignores NULL rows rather than treating them as zero; COALESCE the column first if that matters.' },
+        { name: 'AVG', category: 'aggregate', signature: 'AVG([ALL | DISTINCT] expression)', returns: "the input's numeric type (widened where needed)", description: 'Returns the average of the non-NULL values in a numeric column.', example: 'SELECT AVG(BounceCount) AS AverageBounceCount FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-aggregate-functions/#avg', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/avg-transact-sql', sfmc: 'Ignores NULL rows when computing the average, which can skew the result upward or downward versus treating them as zero; COALESCE the column first if needed.' },
+        { name: 'MIN', category: 'aggregate', signature: 'MIN(expression)', returns: "the input's type", description: 'Returns the smallest value in a column.', example: 'SELECT MIN(DateJoined) AS EarliestJoin FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-aggregate-functions/#min-and-max', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/min-transact-sql' },
+        { name: 'MAX', category: 'aggregate', signature: 'MAX(expression)', returns: "the input's type", description: 'Returns the largest value in a column.', example: 'SELECT MAX(LEN(SubscriberKey)) AS LongestKey FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-aggregate-functions/#min-and-max', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/max-transact-sql' },
         { name: 'STDEV', category: 'aggregate', signature: 'STDEV(expression)', returns: 'float', description: 'Returns the statistical standard deviation of all values in a column (sample standard deviation).', example: 'SELECT STDEV(BounceCount) FROM _Subscribers', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/stdev-transact-sql' },
         { name: 'STDEVP', category: 'aggregate', signature: 'STDEVP(expression)', returns: 'float', description: 'Returns the standard deviation for the full population of values in a column.', example: 'SELECT STDEVP(BounceCount) FROM _Subscribers', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/stdevp-transact-sql' },
         { name: 'VAR', category: 'aggregate', signature: 'VAR(expression)', returns: 'float', description: 'Returns the statistical variance of all values in a column (sample variance).', example: 'SELECT VAR(BounceCount) FROM _Subscribers', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/var-transact-sql' },
@@ -183,22 +187,22 @@ window.SQLStudioSQL = {
         { name: 'GROUPING', category: 'aggregate', signature: 'GROUPING(column_expression)', returns: 'tinyint (1 or 0)', description: 'Used with ROLLUP or CUBE; returns 1 when the row is a subtotal/grand-total row for that column, 0 for a normal detail row.', example: 'SELECT Domain, GROUPING(Domain) AS IsSubtotal, COUNT(*) FROM _Subscribers GROUP BY ROLLUP (Domain)', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/grouping-transact-sql' },
         { name: 'GROUPING_ID', category: 'aggregate', signature: 'GROUPING_ID(column1 [, column2, ...])', returns: 'int', description: 'Like GROUPING, but for multiple columns at once; returns a bitmask identifying which columns are subtotaled in the current row.', example: 'SELECT Domain, YEAR(DateJoined) AS JoinYear, GROUPING_ID(Domain, YEAR(DateJoined)) FROM _Subscribers GROUP BY ROLLUP (Domain, YEAR(DateJoined))', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/grouping-id-transact-sql' },
         { name: 'CHECKSUM_AGG', category: 'aggregate', signature: 'CHECKSUM_AGG(expression)', returns: 'int', description: 'Returns a checksum computed across all the values in a group, useful for cheaply detecting whether any value in a column changed.', example: 'SELECT Domain, CHECKSUM_AGG(BounceCount) AS BounceChecksum FROM _Subscribers GROUP BY Domain', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/checksum-agg-transact-sql', sfmc: 'Can produce the same checksum for different data (collisions); use only as a cheap change-detection heuristic, not as a unique identifier.' },
-        { name: 'STRING_AGG', category: 'aggregate', signature: 'STRING_AGG(expression, separator) [WITHIN GROUP (ORDER BY sort_expression)]', returns: 'varchar or nvarchar', description: 'Concatenates the non-NULL values of a column across a group into a single delimited string.', example: "SELECT Domain, STRING_AGG(CAST(SubscriberKey AS NVARCHAR(MAX)), ', ') WITHIN GROUP (ORDER BY DateJoined) AS Keys FROM _Subscribers GROUP BY Domain", docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/string-agg-transact-sql', sfmc: 'Added in SQL Server 2017. MCE runs SQL Server 2022 (org check, 2026-09-28). Cast the value to NVARCHAR(MAX), as the example does: STRING_AGG of a field gives NVARCHAR(4000), and a longer list fails the run.' },
+        { name: 'STRING_AGG', category: 'aggregate', signature: 'STRING_AGG(expression, separator) [WITHIN GROUP (ORDER BY sort_expression)]', returns: 'varchar or nvarchar', description: 'Concatenates the non-NULL values of a column across a group into a single delimited string.', example: "SELECT Domain, STRING_AGG(CAST(SubscriberKey AS NVARCHAR(MAX)), ', ') WITHIN GROUP (ORDER BY DateJoined) AS Keys FROM _Subscribers GROUP BY Domain", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-string-functions/#string_agg', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/string-agg-transact-sql', sfmc: 'Added in SQL Server 2017. MCE runs SQL Server 2022 (org check, 2026-09-28). Cast the value to NVARCHAR(MAX), as the example does: STRING_AGG of a field gives NVARCHAR(4000), and a longer list fails the run.' },
         { name: 'APPROX_COUNT_DISTINCT', category: 'aggregate', signature: 'APPROX_COUNT_DISTINCT(expression)', returns: 'bigint', description: 'Returns the approximate number of distinct values of a group, NULL left out, within 2% of the true count, with less memory than COUNT(DISTINCT ...).', example: 'SELECT Domain, APPROX_COUNT_DISTINCT(SubscriberKey) AS Subscribers FROM _Subscribers GROUP BY Domain', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/approx-count-distinct-transact-sql', sfmc: 'Validate accepted it in MCE (org check, 2026-10-14).' },
         { name: 'APPROX_PERCENTILE_CONT', category: 'aggregate', signature: 'APPROX_PERCENTILE_CONT(numeric_literal) WITHIN GROUP (ORDER BY order_by_expression)', returns: 'the type of the ORDER BY expression', description: 'Returns an approximate percentile of a group, interpolated between its values, faster than PERCENTILE_CONT on large data.', example: 'SELECT Domain, APPROX_PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY BounceCount) AS MedianBounces FROM _Subscribers GROUP BY Domain', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/approx-percentile-cont-transact-sql', sfmc: 'Added in SQL Server 2022. Validate accepted it in MCE (org check, 2026-10-14). It is an aggregate with WITHIN GROUP and no OVER, where PERCENTILE_CONT is a window function.' },
         { name: 'APPROX_PERCENTILE_DISC', category: 'aggregate', signature: 'APPROX_PERCENTILE_DISC(numeric_literal) WITHIN GROUP (ORDER BY order_by_expression)', returns: 'the type of the ORDER BY expression', description: 'Returns an approximate percentile of a group as one of its values, faster than PERCENTILE_DISC on large data.', example: 'SELECT Domain, APPROX_PERCENTILE_DISC(0.5) WITHIN GROUP (ORDER BY BounceCount) AS MedianBounces FROM _Subscribers GROUP BY Domain', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/approx-percentile-disc-transact-sql', sfmc: 'Added in SQL Server 2022. Validate accepted it in MCE (org check, 2026-10-14). It is an aggregate with WITHIN GROUP and no OVER, where PERCENTILE_DISC is a window function.' },
-        { name: 'ROW_NUMBER', category: 'window', signature: 'ROW_NUMBER() OVER ([PARTITION BY col] ORDER BY col)', returns: 'bigint', description: 'Assigns a unique, sequential integer to each row within its partition, in the order defined by ORDER BY.', example: 'SELECT * FROM (SELECT SubscriberKey, ROW_NUMBER() OVER (PARTITION BY EmailAddress ORDER BY DateJoined DESC) AS rn FROM _Subscribers) AS x WHERE rn = 1', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-window-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/row-number-transact-sql', sfmc: 'The standard MCE pattern for deduplicating a Data Extension: number the rows per key, then keep only rn = 1 in an outer query.' },
-        { name: 'RANK', category: 'window', signature: 'RANK() OVER ([PARTITION BY col] ORDER BY col)', returns: 'bigint', description: 'Ranks each row within its partition, giving tied rows the same rank and leaving gaps in the sequence after ties.', example: 'SELECT SubscriberKey, RANK() OVER (ORDER BY BounceCount DESC) AS BounceRank FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-window-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/rank-transact-sql' },
-        { name: 'DENSE_RANK', category: 'window', signature: 'DENSE_RANK() OVER ([PARTITION BY col] ORDER BY col)', returns: 'bigint', description: 'Like RANK, but leaves no gaps in the ranking sequence after ties.', example: 'SELECT SubscriberKey, DENSE_RANK() OVER (ORDER BY BounceCount DESC) AS BounceRank FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-window-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/dense-rank-transact-sql' },
-        { name: 'NTILE', category: 'window', signature: 'NTILE(integer_expression) OVER ([PARTITION BY col] ORDER BY col)', returns: 'int', description: 'Distributes rows within a partition as evenly as possible into the specified number of groups.', example: 'SELECT SubscriberKey, NTILE(4) OVER (ORDER BY BounceCount) AS Quartile FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-window-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/ntile-transact-sql' },
-        { name: 'LAG', category: 'window', signature: 'LAG(scalar_expression [, offset [, default]]) OVER ([PARTITION BY col] ORDER BY col)', returns: 'the type of scalar_expression', description: 'Returns the value of an expression from a row a fixed number of positions before the current row in the same partition.', example: 'SELECT SubscriberKey, EventDate, LAG(EventDate) OVER (PARTITION BY SubscriberKey ORDER BY EventDate) AS PreviousOpenDate FROM _Open', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-window-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/lag-transact-sql' },
-        { name: 'LEAD', category: 'window', signature: 'LEAD(scalar_expression [, offset [, default]]) OVER ([PARTITION BY col] ORDER BY col)', returns: 'the type of scalar_expression', description: 'Returns the value of an expression from a row a fixed number of positions after the current row in the same partition.', example: 'SELECT SubscriberKey, EventDate, LEAD(EventDate) OVER (PARTITION BY SubscriberKey ORDER BY EventDate) AS NextOpenDate FROM _Open', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-window-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/lead-transact-sql' },
-        { name: 'FIRST_VALUE', category: 'window', signature: 'FIRST_VALUE(scalar_expression) OVER ([PARTITION BY col] ORDER BY col [frame])', returns: 'the type of scalar_expression', description: 'Returns the value of an expression from the first row of the window frame.', example: 'SELECT SubscriberKey, EventDate, FIRST_VALUE(EventDate) OVER (PARTITION BY SubscriberKey ORDER BY EventDate) AS FirstOpenDate FROM _Open', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-window-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/first-value-transact-sql' },
-        { name: 'LAST_VALUE', category: 'window', signature: 'LAST_VALUE(scalar_expression) OVER ([PARTITION BY col] ORDER BY col [frame])', returns: 'the type of scalar_expression', description: 'Returns the value of an expression from the last row of the window frame.', example: 'SELECT SubscriberKey, EventDate, LAST_VALUE(EventDate) OVER (PARTITION BY SubscriberKey ORDER BY EventDate ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS LastOpenDate FROM _Open', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-window-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/last-value-transact-sql', sfmc: 'Needs an explicit ROWS BETWEEN ... AND UNBOUNDED FOLLOWING frame to see the true last row; the default frame only looks back to the current row.' },
-        { name: 'PERCENT_RANK', category: 'window', signature: 'PERCENT_RANK() OVER ([PARTITION BY col] ORDER BY col)', returns: 'float', description: 'Returns the relative rank of the current row, as a value between 0 and 1, within its partition.', example: 'SELECT SubscriberKey, PERCENT_RANK() OVER (ORDER BY BounceCount) AS BouncePercentile FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-window-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/percent-rank-transact-sql' },
-        { name: 'CUME_DIST', category: 'window', signature: 'CUME_DIST() OVER ([PARTITION BY col] ORDER BY col)', returns: 'float', description: 'Returns the cumulative distribution of a value within a partition: the fraction of rows with a value less than or equal to the current row.', example: 'SELECT SubscriberKey, CUME_DIST() OVER (ORDER BY BounceCount) AS BounceCumeDist FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-window-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/cume-dist-transact-sql' },
-        { name: 'PERCENTILE_CONT', category: 'window', signature: 'PERCENTILE_CONT(numeric_literal) WITHIN GROUP (ORDER BY col) OVER ([PARTITION BY col])', returns: "float or the ORDER BY column's type", description: 'Returns a percentile value, interpolating between the two closest data points if the exact percentile falls between them.', example: 'SELECT Domain, PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY BounceCount) OVER (PARTITION BY Domain) AS MedianBounces FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-window-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/percentile-cont-transact-sql', sfmc: 'Works in a Query Activity (org check, 2026-09-28).' },
-        { name: 'PERCENTILE_DISC', category: 'window', signature: 'PERCENTILE_DISC(numeric_literal) WITHIN GROUP (ORDER BY col) OVER ([PARTITION BY col])', returns: "the ORDER BY column's type", description: 'Returns a percentile value, always picking an actual value from the data set rather than interpolating.', example: 'SELECT Domain, PERCENTILE_DISC(0.5) WITHIN GROUP (ORDER BY BounceCount) OVER (PARTITION BY Domain) AS MedianBounces FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-window-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/percentile-disc-transact-sql', sfmc: 'Works in a Query Activity (org check, 2026-09-28).' },
+        { name: 'ROW_NUMBER', category: 'window', signature: 'ROW_NUMBER() OVER ([PARTITION BY col] ORDER BY col)', returns: 'bigint', description: 'Assigns a unique, sequential integer to each row within its partition, in the order defined by ORDER BY.', example: 'SELECT * FROM (SELECT SubscriberKey, ROW_NUMBER() OVER (PARTITION BY EmailAddress ORDER BY DateJoined DESC) AS rn FROM _Subscribers) AS x WHERE rn = 1', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-window-functions/#row_number', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/row-number-transact-sql', sfmc: 'The standard MCE pattern for deduplicating a Data Extension: number the rows per key, then keep only rn = 1 in an outer query.' },
+        { name: 'RANK', category: 'window', signature: 'RANK() OVER ([PARTITION BY col] ORDER BY col)', returns: 'bigint', description: 'Ranks each row within its partition, giving tied rows the same rank and leaving gaps in the sequence after ties.', example: 'SELECT SubscriberKey, RANK() OVER (ORDER BY BounceCount DESC) AS BounceRank FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-window-functions/#rank-and-dense_rank', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/rank-transact-sql' },
+        { name: 'DENSE_RANK', category: 'window', signature: 'DENSE_RANK() OVER ([PARTITION BY col] ORDER BY col)', returns: 'bigint', description: 'Like RANK, but leaves no gaps in the ranking sequence after ties.', example: 'SELECT SubscriberKey, DENSE_RANK() OVER (ORDER BY BounceCount DESC) AS BounceRank FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-window-functions/#rank-and-dense_rank', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/dense-rank-transact-sql' },
+        { name: 'NTILE', category: 'window', signature: 'NTILE(integer_expression) OVER ([PARTITION BY col] ORDER BY col)', returns: 'int', description: 'Distributes rows within a partition as evenly as possible into the specified number of groups.', example: 'SELECT SubscriberKey, NTILE(4) OVER (ORDER BY BounceCount) AS Quartile FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-window-functions/#ntile', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/ntile-transact-sql' },
+        { name: 'LAG', category: 'window', signature: 'LAG(scalar_expression [, offset [, default]]) OVER ([PARTITION BY col] ORDER BY col)', returns: 'the type of scalar_expression', description: 'Returns the value of an expression from a row a fixed number of positions before the current row in the same partition.', example: 'SELECT SubscriberKey, EventDate, LAG(EventDate) OVER (PARTITION BY SubscriberKey ORDER BY EventDate) AS PreviousOpenDate FROM _Open', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-window-functions/#lag-and-lead', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/lag-transact-sql' },
+        { name: 'LEAD', category: 'window', signature: 'LEAD(scalar_expression [, offset [, default]]) OVER ([PARTITION BY col] ORDER BY col)', returns: 'the type of scalar_expression', description: 'Returns the value of an expression from a row a fixed number of positions after the current row in the same partition.', example: 'SELECT SubscriberKey, EventDate, LEAD(EventDate) OVER (PARTITION BY SubscriberKey ORDER BY EventDate) AS NextOpenDate FROM _Open', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-window-functions/#lag-and-lead', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/lead-transact-sql' },
+        { name: 'FIRST_VALUE', category: 'window', signature: 'FIRST_VALUE(scalar_expression) OVER ([PARTITION BY col] ORDER BY col [frame])', returns: 'the type of scalar_expression', description: 'Returns the value of an expression from the first row of the window frame.', example: 'SELECT SubscriberKey, EventDate, FIRST_VALUE(EventDate) OVER (PARTITION BY SubscriberKey ORDER BY EventDate) AS FirstOpenDate FROM _Open', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-window-functions/#first_value-and-last_value', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/first-value-transact-sql' },
+        { name: 'LAST_VALUE', category: 'window', signature: 'LAST_VALUE(scalar_expression) OVER ([PARTITION BY col] ORDER BY col [frame])', returns: 'the type of scalar_expression', description: 'Returns the value of an expression from the last row of the window frame.', example: 'SELECT SubscriberKey, EventDate, LAST_VALUE(EventDate) OVER (PARTITION BY SubscriberKey ORDER BY EventDate ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS LastOpenDate FROM _Open', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-window-functions/#first_value-and-last_value', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/last-value-transact-sql', sfmc: 'Needs an explicit ROWS BETWEEN ... AND UNBOUNDED FOLLOWING frame to see the true last row; the default frame only looks back to the current row.' },
+        { name: 'PERCENT_RANK', category: 'window', signature: 'PERCENT_RANK() OVER ([PARTITION BY col] ORDER BY col)', returns: 'float', description: 'Returns the relative rank of the current row, as a value between 0 and 1, within its partition.', example: 'SELECT SubscriberKey, PERCENT_RANK() OVER (ORDER BY BounceCount) AS BouncePercentile FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-window-functions/#percentile_cont-and-percentile_disc', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/percent-rank-transact-sql' },
+        { name: 'CUME_DIST', category: 'window', signature: 'CUME_DIST() OVER ([PARTITION BY col] ORDER BY col)', returns: 'float', description: 'Returns the cumulative distribution of a value within a partition: the fraction of rows with a value less than or equal to the current row.', example: 'SELECT SubscriberKey, CUME_DIST() OVER (ORDER BY BounceCount) AS BounceCumeDist FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-window-functions/#percentile_cont-and-percentile_disc', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/cume-dist-transact-sql' },
+        { name: 'PERCENTILE_CONT', category: 'window', signature: 'PERCENTILE_CONT(numeric_literal) WITHIN GROUP (ORDER BY col) OVER ([PARTITION BY col])', returns: "float or the ORDER BY column's type", description: 'Returns a percentile value, interpolating between the two closest data points if the exact percentile falls between them.', example: 'SELECT Domain, PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY BounceCount) OVER (PARTITION BY Domain) AS MedianBounces FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-window-functions/#percentile_cont-and-percentile_disc', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/percentile-cont-transact-sql', sfmc: 'Works in a Query Activity (org check, 2026-09-28).' },
+        { name: 'PERCENTILE_DISC', category: 'window', signature: 'PERCENTILE_DISC(numeric_literal) WITHIN GROUP (ORDER BY col) OVER ([PARTITION BY col])', returns: "the ORDER BY column's type", description: 'Returns a percentile value, always picking an actual value from the data set rather than interpolating.', example: 'SELECT Domain, PERCENTILE_DISC(0.5) WITHIN GROUP (ORDER BY BounceCount) OVER (PARTITION BY Domain) AS MedianBounces FROM _Subscribers', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-window-functions/#percentile_cont-and-percentile_disc', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/percentile-disc-transact-sql', sfmc: 'Works in a Query Activity (org check, 2026-09-28).' },
         { name: 'ABS', category: 'math', signature: 'ABS(numeric_expression)', returns: "the input's numeric type", description: 'Returns the absolute (non-negative) value of a number.', example: 'SELECT ABS(BalanceChange) FROM Transactions_DE', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/abs-transact-sql' },
         { name: 'CEILING', category: 'math', signature: 'CEILING(numeric_expression)', returns: "the input's numeric type", description: 'Rounds a number up to the smallest following integer.', example: 'SELECT CEILING(4.2) AS RoundedUp', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/ceiling-transact-sql' },
         { name: 'FLOOR', category: 'math', signature: 'FLOOR(numeric_expression)', returns: "the input's numeric type", description: 'Rounds a number down to the largest preceding integer.', example: 'SELECT FLOOR(4.8) AS RoundedDown', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/floor-transact-sql' },
@@ -231,7 +235,7 @@ window.SQLStudioSQL = {
         { name: 'USER_NAME', category: 'system', signature: 'USER_NAME([id])', returns: 'nvarchar', description: 'Returns the database user name corresponding to a given ID, or the current user if omitted.', example: 'SELECT USER_NAME() AS CurrentDbUser', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/user-name-transact-sql', sfmc: "Returns a generic database user for the whole account, such as C12345678_User, not the marketer's login." },
         { name: 'HOST_NAME', category: 'system', signature: 'HOST_NAME()', returns: 'nvarchar', description: 'Returns the workstation name of the current session.', example: 'SELECT HOST_NAME() AS ClientHost', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/host-name-transact-sql', sfmc: "Returns the name of the Marketing Cloud Engagement server that ran the query, not the marketer's computer." },
         { name: 'DATALENGTH', category: 'system', signature: 'DATALENGTH(expression)', returns: 'int (bigint for max types)', description: 'Returns the number of bytes used to store an expression, which can differ from LEN for Unicode or trimmed strings.', example: 'SELECT SubscriberKey, DATALENGTH(SubscriberKey) AS ByteLength FROM _Subscribers', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/datalength-transact-sql' },
-        { name: 'NEWID', category: 'system', signature: 'NEWID()', returns: 'uniqueidentifier', description: 'Generates a new pseudorandom GUID in the standard XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX format.', example: 'SELECT NEWID() AS UniqueRowId', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-string-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/newid-transact-sql', sfmc: 'Gives a new value on every row (org check, 2026-10-14). Commonly used to generate a unique key for a results Data Extension, and as a workaround for Synchronized Data Extension fields named Object:Field that cannot be selected directly.' },
+        { name: 'NEWID', category: 'system', signature: 'NEWID()', returns: 'uniqueidentifier', description: 'Generates a new pseudorandom GUID in the standard XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX format.', example: 'SELECT NEWID() AS UniqueRowId', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-string-functions/#newid', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/newid-transact-sql', sfmc: 'Gives a new value on every row (org check, 2026-10-14). Commonly used to generate a unique key for a results Data Extension, and as a workaround for Synchronized Data Extension fields named Object:Field that cannot be selected directly.' },
         { name: 'COMPRESS', category: 'system', signature: 'COMPRESS(expression)', returns: 'varbinary(max)', description: 'Compresses a text or binary value with the GZIP algorithm.', example: 'SELECT SubscriberKey, DATALENGTH(COMPRESS(EmailAddress)) AS CompressedBytes FROM _Subscribers', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/compress-transact-sql', sfmc: 'Runs in MCE (org check, 2026-10-14). The result is varbinary, which a Text field holds as unreadable characters: read its size with DATALENGTH, or write it as hex with CONVERT(VARCHAR(MAX), x, 2).' },
         { name: 'SESSIONPROPERTY', category: 'system', signature: 'SESSIONPROPERTY(option)', returns: 'sql_variant', description: 'Returns the setting of a SET option of the session, 1 for on and 0 for off.', example: "SELECT CAST(SESSIONPROPERTY('QUOTED_IDENTIFIER') AS INT) AS QuotedIdentifier", docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/sessionproperty-transact-sql', sfmc: 'In MCE ANSI_NULLS, ANSI_PADDING, ANSI_WARNINGS, CONCAT_NULL_YIELDS_NULL and QUOTED_IDENTIFIER are on, and ARITHABORT and NUMERIC_ROUNDABORT off (org check, 2026-10-14). The result is sql_variant: CAST it before writing it to a field.' },
         { name: 'CONNECTIONPROPERTY', category: 'system', signature: 'CONNECTIONPROPERTY(property)', returns: 'sql_variant', description: 'Returns a property of the connection the query runs on, such as net_transport.', example: "SELECT CAST(CONNECTIONPROPERTY('net_transport') AS NVARCHAR(128)) AS NetTransport", docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/connectionproperty-transact-sql', sfmc: "Runs in MCE: 'net_transport' gave TCP (org check, 2026-10-14)." },
@@ -248,13 +252,13 @@ window.SQLStudioSQL = {
         { name: '@@OPTIONS', category: 'system', signature: '@@OPTIONS', returns: 'int', description: 'Returns the SET options of the session as one number, a bit for each option that is on.', example: 'SELECT @@OPTIONS AS SessionOptions', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/options-transact-sql', sfmc: 'Returns 5944 in MCE: ANSI_WARNINGS, ANSI_PADDING, ANSI_NULLS, QUOTED_IDENTIFIER, NOCOUNT, ANSI_NULL_DFLT_ON and CONCAT_NULL_YIELDS_NULL (org check, 2026-10-14).' },
         { name: '@@LOCK_TIMEOUT', category: 'system', signature: '@@LOCK_TIMEOUT', returns: 'int', description: 'Returns the lock time-out of the session in milliseconds, -1 for none.', example: 'SELECT @@LOCK_TIMEOUT AS LockTimeout', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/lock-timeout-transact-sql', sfmc: 'Returns -1 in MCE, so the query waits for a lock with no time-out (org check, 2026-10-14).' },
         { name: '@@TRANCOUNT', category: 'system', signature: '@@TRANCOUNT', returns: 'int', description: 'Returns the number of transactions open on the connection.', example: 'SELECT @@TRANCOUNT AS OpenTransactions', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/trancount-transact-sql', sfmc: 'Returns 2 in MCE, which runs the query inside transactions of its own (org check, 2026-10-14).' },
-        { name: 'ISJSON', category: 'json', signature: 'ISJSON(expression [, VALUE | ARRAY | OBJECT | SCALAR])', returns: 'int (1 or 0)', description: 'Returns 1 if a string contains valid JSON, otherwise 0. The optional second argument, from SQL Server 2022, asks for a JSON value, array, object or scalar.', example: 'SELECT * FROM WebhookPayload_DE WHERE ISJSON(RawPayload) = 1', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-json-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/isjson-transact-sql', sfmc: 'Works in a Query Activity, the type argument included: ISJSON(\'[1,2]\', ARRAY) returned 1 (org check, 2026-09-28).' },
-        { name: 'JSON_VALUE', category: 'json', signature: 'JSON_VALUE(expression, path)', returns: 'nvarchar', description: 'Extracts a single scalar value from a JSON string at the given path.', example: "SELECT JSON_VALUE(RawPayload, '$.orderId') AS OrderId FROM WebhookPayload_DE", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-json-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/json-value-transact-sql', sfmc: 'Works in a Query Activity. OPENJSON does not, so read one value at a time with JSON_VALUE. A value over 4,000 characters comes back as NULL, so read a long object or array with JSON_QUERY instead (org check, 2026-09-28). Text that is not valid JSON fails the whole query, and the run ends with 0 rows, so guard it: CASE WHEN ISJSON(x) = 1 THEN JSON_VALUE(x, path) END.' },
-        { name: 'JSON_QUERY', category: 'json', signature: 'JSON_QUERY(expression [, path])', returns: 'nvarchar', description: 'Extracts an object or array fragment from a JSON string at the given path.', example: "SELECT JSON_QUERY(RawPayload, '$.lineItems') AS LineItems FROM WebhookPayload_DE", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-json-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/json-query-transact-sql', sfmc: 'Works in a Query Activity (org check, 2026-09-28).' },
-        { name: 'JSON_MODIFY', category: 'json', signature: 'JSON_MODIFY(expression, path, new_value)', returns: 'nvarchar', description: 'Returns a JSON string with the value at the given path updated, inserted or removed.', example: "SELECT JSON_MODIFY(RawPayload, '$.status', 'processed') FROM WebhookPayload_DE", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-json-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/json-modify-transact-sql', sfmc: 'Works in a Query Activity (org check, 2026-09-28).' },
-        { name: 'JSON_OBJECT', category: 'json', signature: 'JSON_OBJECT([key : value [, ...]] [NULL ON NULL | ABSENT ON NULL])', returns: 'nvarchar(max)', description: 'Builds JSON object text from key: value pairs. Keeps a NULL value as null unless ABSENT ON NULL is given.', example: "SELECT JSON_OBJECT('key': s.SubscriberKey, 'email': s.EmailAddress) AS Payload FROM _Subscribers AS s", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-json-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/json-object-transact-sql', sfmc: 'A SQL Server 2022 function that works in a Query Activity (org check, 2026-09-28).' },
-        { name: 'JSON_ARRAY', category: 'json', signature: 'JSON_ARRAY([value [, ...]] [NULL ON NULL | ABSENT ON NULL])', returns: 'nvarchar(max)', description: 'Builds JSON array text from a list of values. Leaves a NULL value out unless NULL ON NULL is given.', example: 'SELECT JSON_ARRAY(s.SubscriberKey, s.EmailAddress) AS Pair FROM _Subscribers AS s', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-json-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/json-array-transact-sql', sfmc: 'A SQL Server 2022 function that works in a Query Activity. JSON_ARRAY(1, \'two\', NULL) returned [1,"two"] (org check, 2026-09-28).' },
-        { name: 'JSON_PATH_EXISTS', category: 'json', signature: 'JSON_PATH_EXISTS(expression, path)', returns: 'int (1, 0 or NULL)', description: 'Returns 1 when the path exists in the JSON text, 0 when it does not, and NULL for a NULL expression.', example: "SELECT w.SubscriberKey FROM WebhookPayload_DE AS w WHERE JSON_PATH_EXISTS(w.RawPayload, '$.orderId') = 1", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-json-functions/', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/json-path-exists-transact-sql', sfmc: 'A SQL Server 2022 function that works in a Query Activity (org check, 2026-09-28).' },
+        { name: 'ISJSON', category: 'json', signature: 'ISJSON(expression [, VALUE | ARRAY | OBJECT | SCALAR])', returns: 'int (1 or 0)', description: 'Returns 1 if a string contains valid JSON, otherwise 0. The optional second argument, from SQL Server 2022, asks for a JSON value, array, object or scalar.', example: 'SELECT * FROM WebhookPayload_DE WHERE ISJSON(RawPayload) = 1', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-json-functions/#isjson', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/isjson-transact-sql', sfmc: 'Works in a Query Activity, the type argument included: ISJSON(\'[1,2]\', ARRAY) returned 1 (org check, 2026-09-28).' },
+        { name: 'JSON_VALUE', category: 'json', signature: 'JSON_VALUE(expression, path)', returns: 'nvarchar', description: 'Extracts a single scalar value from a JSON string at the given path.', example: "SELECT JSON_VALUE(RawPayload, '$.orderId') AS OrderId FROM WebhookPayload_DE", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-json-functions/#json_value', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/json-value-transact-sql', sfmc: 'Works in a Query Activity. OPENJSON does not, so read one value at a time with JSON_VALUE. A value over 4,000 characters comes back as NULL, so read a long object or array with JSON_QUERY instead (org check, 2026-09-28). Text that is not valid JSON fails the whole query, and the run ends with 0 rows, so guard it: CASE WHEN ISJSON(x) = 1 THEN JSON_VALUE(x, path) END.' },
+        { name: 'JSON_QUERY', category: 'json', signature: 'JSON_QUERY(expression [, path])', returns: 'nvarchar', description: 'Extracts an object or array fragment from a JSON string at the given path.', example: "SELECT JSON_QUERY(RawPayload, '$.lineItems') AS LineItems FROM WebhookPayload_DE", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-json-functions/#json_query', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/json-query-transact-sql', sfmc: 'Works in a Query Activity (org check, 2026-09-28).' },
+        { name: 'JSON_MODIFY', category: 'json', signature: 'JSON_MODIFY(expression, path, new_value)', returns: 'nvarchar', description: 'Returns a JSON string with the value at the given path updated, inserted or removed.', example: "SELECT JSON_MODIFY(RawPayload, '$.status', 'processed') FROM WebhookPayload_DE", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-json-functions/#json_modify', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/json-modify-transact-sql', sfmc: 'Works in a Query Activity (org check, 2026-09-28).' },
+        { name: 'JSON_OBJECT', category: 'json', signature: 'JSON_OBJECT([key : value [, ...]] [NULL ON NULL | ABSENT ON NULL])', returns: 'nvarchar(max)', description: 'Builds JSON object text from key: value pairs. Keeps a NULL value as null unless ABSENT ON NULL is given.', example: "SELECT JSON_OBJECT('key': s.SubscriberKey, 'email': s.EmailAddress) AS Payload FROM _Subscribers AS s", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-json-functions/#json_object-and-json_array', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/json-object-transact-sql', sfmc: 'A SQL Server 2022 function that works in a Query Activity (org check, 2026-09-28).' },
+        { name: 'JSON_ARRAY', category: 'json', signature: 'JSON_ARRAY([value [, ...]] [NULL ON NULL | ABSENT ON NULL])', returns: 'nvarchar(max)', description: 'Builds JSON array text from a list of values. Leaves a NULL value out unless NULL ON NULL is given.', example: 'SELECT JSON_ARRAY(s.SubscriberKey, s.EmailAddress) AS Pair FROM _Subscribers AS s', docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-json-functions/#json_object-and-json_array', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/json-array-transact-sql', sfmc: 'A SQL Server 2022 function that works in a Query Activity. JSON_ARRAY(1, \'two\', NULL) returned [1,"two"] (org check, 2026-09-28).' },
+        { name: 'JSON_PATH_EXISTS', category: 'json', signature: 'JSON_PATH_EXISTS(expression, path)', returns: 'int (1, 0 or NULL)', description: 'Returns 1 when the path exists in the JSON text, 0 when it does not, and NULL for a NULL expression.', example: "SELECT w.SubscriberKey FROM WebhookPayload_DE AS w WHERE JSON_PATH_EXISTS(w.RawPayload, '$.orderId') = 1", docs: 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-json-functions/#json_path_exists', officialDocs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/json-path-exists-transact-sql', sfmc: 'A SQL Server 2022 function that works in a Query Activity (org check, 2026-09-28).' },
         { name: 'HASHBYTES', category: 'hash', signature: 'HASHBYTES(algorithm, input)', returns: 'varbinary', description: 'Computes a cryptographic hash of the input using the specified algorithm (MD5, SHA1, SHA2_256, SHA2_512, etc.).', example: "SELECT CONVERT(VARCHAR(64), HASHBYTES('SHA2_256', EmailAddress), 2) AS EmailHash FROM _Subscribers", docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/hashbytes-transact-sql', sfmc: 'SHA2_256 and MD5 both run in MCE (org check, 2026-10-14). The result is varbinary, which a Text field holds as unreadable characters, so wrap it in CONVERT(VARCHAR(64), HASHBYTES(...), 2) for hex text. MD2, MD4, SHA and SHA1 are deprecated: prefer SHA2_256 or SHA2_512.' },
         { name: 'CHECKSUM', category: 'hash', signature: 'CHECKSUM(* | expression [, expression2, ...])', returns: 'int', description: 'Computes a checksum value over a row or a list of expressions, useful for cheap change detection.', example: 'SELECT SubscriberKey, CHECKSUM(EmailAddress, Status, BounceCount) AS RowChecksum FROM _Subscribers', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/checksum-transact-sql', sfmc: 'Can produce identical checksums for different input (collisions); good for spotting likely changes, not for uniquely identifying a row.' },
         { name: 'BINARY_CHECKSUM', category: 'hash', signature: 'BINARY_CHECKSUM(* | expression [, expression2, ...])', returns: 'int', description: 'Like CHECKSUM, but sensitive to the exact binary representation, so it can detect a case-only change that CHECKSUM would treat as unchanged under a case-insensitive collation.', example: 'SELECT SubscriberKey, BINARY_CHECKSUM(EmailAddress) AS RowChecksum FROM _Subscribers', docs: 'https://learn.microsoft.com/en-us/sql/t-sql/functions/binary-checksum-transact-sql' },
@@ -358,7 +362,7 @@ window.SQLStudioSQL = {
                 { name: 'SubscriberKey', type: 'Text', length: 254, sqlType: 'nvarchar(254)', description: 'A potential alternate identifier for subscribers.' },
                 { name: 'SubscriberType', type: 'Text', length: 100, description: 'The subscriber type for the affected subscriber.', values: [{ value: 'ExactTarget', label: '' }, { value: 'Unknown External System', label: '' }] },
                 { name: 'Status', type: 'Text', length: 12, sqlType: 'varchar', nullable: true, description: 'The status of the subscriber. A varchar, not an nvarchar (org check, 2026-10-14), so STRING_AGG of it needs a CAST to NVARCHAR(MAX) beside a text separator, which MCE writes as nvarchar.', values: [{ value: 'active', label: '' }, { value: 'held', label: '' }, { value: 'unsubscribed', label: '' }, { value: 'bounced', label: '' }] },
-                { name: 'Locale', type: 'Locale', nullable: true, description: 'The locale code for the subscriber.' }
+                { name: 'Locale', type: 'Locale', sqlType: 'int', nullable: true, description: 'The locale code for the subscriber. An int, MaxLength 4, not a text like a Data Extension\'s Locale field (org check, 2026-10-21).' }
             ]
         },
         {
@@ -1209,7 +1213,7 @@ window.SQLStudioSQL = {
         { name: 'EmailAddress', description: 'Text field validated as an email address.', sqlType: 'nvarchar' },
         { name: 'Phone', description: 'Text field intended for a phone or mobile number.', sqlType: 'nvarchar' },
         { name: 'Decimal', description: 'Fixed-precision decimal number; configured with a total length and a number of decimal places.', sqlType: 'decimal' },
-        { name: 'Locale', description: "Locale code, e.g. for a subscriber's language/region.", sqlType: 'int' }
+        { name: 'Locale', description: "Locale code, e.g. for a subscriber's language/region, such as en-US. A varchar of 5 characters, not an int (the article session's org test C09, 2026-10-20).", sqlType: 'varchar' }
     ]
 };
 
@@ -1229,10 +1233,16 @@ window.SQLStudioSQL = {
     'use strict';
 
     // ------------------------------------------------------------------
-    // RESERVED_WORDS - the T-SQL reserved keyword list: the 184 reserved
+    // RESERVED_WORDS - the T-SQL reserved keyword list: the reserved
     // keywords of SQL Server in Microsoft's "Reserved Keywords
     // (Transact-SQL)", without its ODBC and future keywords, which SQL
     // Server takes as names (the syntax audit compared them, 2026-10-14).
+    // DISK and PRECISION are left out, 182 of Microsoft's 184: Marketing
+    // Cloud Engagement reads both as plain names, as a column or table
+    // alias, a qualifier and a bare column, and DISK in ORDER BY and as a
+    // table name it looks up (round 5, 6, 7 and 8 org tests B03, B03, B02
+    // and B03). The PRECISION of the type DOUBLE PRECISION is read by its
+    // word wherever a type is read.
     // ------------------------------------------------------------------
     var RESERVED_WORDS = [
         'ADD', 'ALL', 'ALTER', 'AND', 'ANY', 'AS', 'ASC', 'AUTHORIZATION',
@@ -1243,7 +1253,7 @@ window.SQLStudioSQL = {
         'CURRENT', 'CURRENT_DATE', 'CURRENT_TIME', 'CURRENT_TIMESTAMP',
         'CURRENT_USER', 'CURSOR',
         'DATABASE', 'DBCC', 'DEALLOCATE', 'DECLARE', 'DEFAULT', 'DELETE',
-        'DENY', 'DESC', 'DISK', 'DISTINCT', 'DISTRIBUTED', 'DOUBLE', 'DROP',
+        'DENY', 'DESC', 'DISTINCT', 'DISTRIBUTED', 'DOUBLE', 'DROP',
         'DUMP',
         'ELSE', 'END', 'ERRLVL', 'ESCAPE', 'EXCEPT', 'EXEC', 'EXECUTE',
         'EXISTS', 'EXIT', 'EXTERNAL',
@@ -1260,7 +1270,7 @@ window.SQLStudioSQL = {
         'NATIONAL', 'NOCHECK', 'NONCLUSTERED', 'NOT', 'NULL', 'NULLIF',
         'OF', 'OFF', 'OFFSETS', 'ON', 'OPEN', 'OPENDATASOURCE', 'OPENQUERY',
         'OPENROWSET', 'OPENXML', 'OPTION', 'OR', 'ORDER', 'OUTER', 'OVER',
-        'PERCENT', 'PIVOT', 'PLAN', 'PRECISION', 'PRIMARY', 'PRINT', 'PROC',
+        'PERCENT', 'PIVOT', 'PLAN', 'PRIMARY', 'PRINT', 'PROC',
         'PROCEDURE', 'PUBLIC',
         'RAISERROR', 'READ', 'READTEXT', 'RECONFIGURE', 'REFERENCES',
         'REPLICATION', 'RESTORE', 'RESTRICT', 'RETURN', 'REVERT', 'REVOKE',
@@ -1320,6 +1330,14 @@ window.SQLStudioSQL = {
         return set;
     }());
 
+    /* The words of Microsoft's reserved list that Marketing Cloud Engagement's query check accepts as an alias after AS without brackets, so
+     * MCE020 leaves them out: AS Precision passed Validate, while AS Key and AS Order were refused with "Incorrect syntax near the keyword"
+     * (round 2 org tests B21, B19 and B20, 2026-10-21). Round 5 tried 31 words as column aliases, one query each (org test B03,
+     * 2026-10-21): Precision and Disk passed, and every other word was refused, which confirms the rest of the list. Rounds 7 and 8 showed
+     * both are plain names, after a dot and as a bare column too (org tests B02 and B03), so both left RESERVED_WORDS and the list is
+     * empty. It stays, with isAliasKeyword, for a word an org test finds MCE takes only as an alias. */
+    var RESERVED_ALIAS_ACCEPTED = [];
+
     var STATEMENT_START_DISALLOWED = [
         'INSERT', 'UPDATE', 'DELETE', 'MERGE', 'CREATE', 'ALTER', 'DROP',
         'TRUNCATE', 'EXEC', 'EXECUTE', 'DECLARE', 'SET', 'PRINT', 'GOTO',
@@ -1348,6 +1366,40 @@ window.SQLStudioSQL = {
         STYLE: DOCS_BASE + 'sql/sql-style-guide/',
         BASICS: DOCS_BASE + 'sql/sql-basics/',
         DV: DOCS_BASE + 'config/system-data-views/',
+        /* The author's MCE SQL Errors article (2026-10-21): a section for each answer of the syntax check, the save and the run, which a
+         * finding about one of them links where it explains more than the article of the function (the review of 1.4.2 RC2). */
+        ERRORS: DOCS_BASE + 'sql/sql-errors/',
+        ERR_SELECT: DOCS_BASE + 'sql/sql-errors/#only-select-queries-are-valid',
+        ERR_VARIABLE: DOCS_BASE + 'sql/sql-errors/#must-declare-the-scalar-variable',
+        ERR_UNKNOWN_TABLE: DOCS_BASE + 'sql/sql-errors/#not-a-known-data-extension-or-system-data-view',
+        ERR_MULTIPART: DOCS_BASE + 'sql/sql-errors/#table-has-a-multi-part-specification',
+        ERR_COMMA_JOIN: DOCS_BASE + 'sql/sql-errors/#old-style-join-syntax-is-not-allowed',
+        ERR_RESERVED: DOCS_BASE + 'sql/sql-errors/#reserved-word-may-not-appear-in-your-query',
+        ERR_ENT: DOCS_BASE + 'sql/sql-errors/#ent-prefix-only-from-a-child-account',
+        ERR_SYNTAX: DOCS_BASE + 'sql/sql-errors/#incorrect-syntax-near',
+        ERR_ORDER_BY: DOCS_BASE + 'sql/sql-errors/#order-by-clause-is-invalid-in-views',
+        ERR_NO_NAME: DOCS_BASE + 'sql/sql-errors/#no-column-name-was-specified',
+        ERR_TWICE: DOCS_BASE + 'sql/sql-errors/#column-was-specified-multiple-times',
+        ERR_NOT_GROUPED: DOCS_BASE + 'sql/sql-errors/#column-is-invalid-in-the-select-list',
+        ERR_COLUMN: DOCS_BASE + 'sql/sql-errors/#invalid-column-name',
+        ERR_BOUND: DOCS_BASE + 'sql/sql-errors/#multi-part-identifier-could-not-be-bound',
+        ERR_WINDOW: DOCS_BASE + 'sql/sql-errors/#window-function-errors',
+        ERR_AGGREGATE: DOCS_BASE + 'sql/sql-errors/#aggregate-union-and-order-by-errors',
+        ERR_STRING_AGG: DOCS_BASE + 'sql/sql-errors/#string_agg-argument-data-type',
+        ERR_JSON: DOCS_BASE + 'sql/sql-errors/#json-text-is-not-properly-formatted',
+        ERR_BRACKETS: DOCS_BASE + 'sql/sql-errors/#error-while-processing-square-brackets',
+        ERR_LINE_COMMENT: DOCS_BASE + 'sql/sql-errors/#errors-from-line-comments',
+        ERR_UPDATE_TYPE: DOCS_BASE + 'sql/sql-errors/#update-type-must-be-update',
+        ERR_SYSTEM: DOCS_BASE + 'sql/sql-errors/#automation-failed-due-to-system-error',
+        ERR_CONVERSION: DOCS_BASE + 'sql/sql-errors/#conversion-failed-when-converting',
+        ERR_DATE: DOCS_BASE + 'sql/sql-errors/#could-not-convert-date',
+        ERR_KEY: DOCS_BASE + 'sql/sql-errors/#violation-of-primary-key-constraint',
+        /* Sections of the function articles, where they help more than the errors article: the workaround for a table function MCE refuses,
+         * and the calls MCE102 names. */
+        STRING_SPLIT: DOCS_BASE + 'sql/sql-string-functions/#string_split',
+        OPENJSON: DOCS_BASE + 'sql/sql-json-functions/#openjson',
+        DATEDIFF: DOCS_BASE + 'sql/sql-date-functions/#datediff',
+        UNIX: DOCS_BASE + 'sql/sql-date-functions/#unix-timestamps',
         SFREF: 'https://help.salesforce.com/s/articleView?id=mktg.mc_as_sql_reference.htm',
         SFOPT: 'https://help.salesforce.com/s/articleView?id=mktg.mc_as_optimize_the_query_activity.htm',
         SFBUILD: 'https://help.salesforce.com/s/articleView?id=mktg.mc_as_use_the_sql_query_activity.htm',
@@ -1740,6 +1792,22 @@ window.SQLStudioSQL = {
      * @returns {boolean} True for such a keyword.
      */
     function isUnreservedKeyword(tok) { return !!tok && tok.type === 'keyword' && !tok.quote && !RESERVED_SET[tok.upper]; }
+
+    /**
+     * @function isAcceptedAliasKeyword
+     * @description Tests whether a token is a reserved word that the query check accepts as an alias without brackets (RESERVED_ALIAS_ACCEPTED, empty since Precision left the reserved words), which is a name only where an alias or a qualifier stands.
+     * @param {Object} tok - Token to test, or null/undefined.
+     * @returns {boolean} True for such a word, written bare.
+     */
+    function isAcceptedAliasKeyword(tok) { return !!tok && tok.type === 'keyword' && !tok.quote && RESERVED_ALIAS_ACCEPTED.indexOf(tok.upper) !== -1; }
+
+    /**
+     * @function isAliasKeyword
+     * @description Tests whether a token is a keyword that is a name where an alias or a qualifier stands: a word SQL Server does not reserve (isUnreservedKeyword) or one the query check accepts as an alias (isAcceptedAliasKeyword).
+     * @param {Object} tok - Token to test, or null/undefined.
+     * @returns {boolean} True for such a keyword.
+     */
+    function isAliasKeyword(tok) { return isUnreservedKeyword(tok) || isAcceptedAliasKeyword(tok); }
 
     /**
      * @function matchParen
@@ -2436,7 +2504,7 @@ window.SQLStudioSQL = {
                     var declaredColumns2 = null;
                     /* With no AS too: (SELECT ...) Zone is named Zone, as SQL Server reads it (the second verification of the lint round,
                      * 2026-10-14). */
-                    if (isName(tokens[j]) || isUnreservedKeyword(tokens[j])) {
+                    if (isName(tokens[j]) || isAliasKeyword(tokens[j])) {
                         alias2 = tokens[j].value;
                         j++;
                         /* AS x(a, b): the derived table's (or VALUES constructor's) own column names. */
@@ -2490,7 +2558,7 @@ window.SQLStudioSQL = {
                     var hasAs3 = isKw(tokens[j], 'AS');
                     if (hasAs3) j++;
                     var alias3 = null;
-                    if (isUnreservedKeyword(tokens[j]) && (hasAs3 || !isKw(tokens[j], 'APPLY'))) {
+                    if (isAliasKeyword(tokens[j]) && (hasAs3 || !isKw(tokens[j], 'APPLY'))) {
                         /* FROM Orders AS Time: the alias is Time, which the tokenizer reads as a keyword (the second verification pass, 2026-10-14),
                          * and so it is with no AS, FROM Orders Time (the second verification of the lint round, 2026-10-14). */
                         alias3 = tokens[j].value;
@@ -2998,8 +3066,8 @@ window.SQLStudioSQL = {
      */
     function plainColumnSource(exprTokens) {
         if (!exprTokens.length || exprTokens.length % 2 === 0) return null;
-        var isPlainChain = exprTokens.every(function (t, idx) {
-            return idx % 2 === 0 ? (isName(t) || isUnreservedKeyword(t)) : (t.type === 'punct' && t.value === '.');
+        var isPlainChain = exprTokens.every(function (t, idx, all) {
+            return idx % 2 === 0 ? (isName(t) || isUnreservedKeyword(t) || (isAcceptedAliasKeyword(t) && idx < all.length - 1)) : (t.type === 'punct' && t.value === '.');
         });
         if (!isPlainChain) return null;
         var column = exprTokens[exprTokens.length - 1];
@@ -3055,7 +3123,7 @@ window.SQLStudioSQL = {
         /* A word SQL Server does not reserve is an alias with no AS too, FROM c Time, as the parse reads it, but APPLY, which joins: the
          * rewrite wrote FROM (body) AS c Time, which the syntax check refused, so it offered none (the merge check of the lint round,
          * 2026-10-14). */
-        var hasAlias = ref.next && (isKw(ref.next, 'AS') || (isUnreservedKeyword(ref.next) && !isKw(ref.next, 'APPLY')) || (isName(ref.next) && !isKw(ref.next, 'WHERE') && !isKw(ref.next, 'INNER') && !isKw(ref.next, 'LEFT') && !isKw(ref.next, 'RIGHT') && !isKw(ref.next, 'FULL') && !isKw(ref.next, 'CROSS') && !isKw(ref.next, 'JOIN') && !isKw(ref.next, 'ON') && !isKw(ref.next, 'GROUP') && !isKw(ref.next, 'ORDER') && !isKw(ref.next, 'UNION')));
+        var hasAlias = ref.next && (isKw(ref.next, 'AS') || (isAliasKeyword(ref.next) && !isKw(ref.next, 'APPLY')) || (isName(ref.next) && !isKw(ref.next, 'WHERE') && !isKw(ref.next, 'INNER') && !isKw(ref.next, 'LEFT') && !isKw(ref.next, 'RIGHT') && !isKw(ref.next, 'FULL') && !isKw(ref.next, 'CROSS') && !isKw(ref.next, 'JOIN') && !isKw(ref.next, 'ON') && !isKw(ref.next, 'GROUP') && !isKw(ref.next, 'ORDER') && !isKw(ref.next, 'UNION')));
         var replacement = '(' + body + ')' + (hasAlias ? '' : ' AS ' + name.value);
         var edits = [
             { start: significant[0].start, end: mainStart.start, text: '' },
@@ -3209,7 +3277,7 @@ window.SQLStudioSQL = {
         };
 
         // alias = expr  (Total = Points + 1, or 'Total' = Points + 1)
-        if (tokList.length >= 3 && (isName(tokList[0]) || isUnreservedKeyword(tokList[0]) || tokList[0].type === 'string') && tokList[1].type === 'operator' && tokList[1].value === '=') {
+        if (tokList.length >= 3 && (isName(tokList[0]) || isAliasKeyword(tokList[0]) || tokList[0].type === 'string') && tokList[1].type === 'operator' && tokList[1].value === '=') {
             var assignedName = tokList[0].type === 'string' ? stringLiteralContent(tokList[0]) : tokList[0].value;
             return Object.assign({}, base, { name: assignedName, kind: 'alias', nameStart: tokList[0].start, nameEnd: tokList[0].end, tokens: tokList });
         };
@@ -3220,7 +3288,7 @@ window.SQLStudioSQL = {
         // too often two words of one expression. The alias may be a word the tokenizer reads as a keyword though
         // SQL Server does not reserve it, COUNT(*) Rows, at the item's own level (the second verification of the
         // lint round, 2026-10-14).
-        var isKeywordAlias = isUnreservedKeyword(last) && last.depth === tokList[0].depth;
+        var isKeywordAlias = isAliasKeyword(last) && last.depth === tokList[0].depth;
         if ((isName(last) || isKeywordAlias) && tokList.length >= 2 && !(prev && prev.type === 'punct' && prev.value === '.') &&
             (isKw(prev, 'COLLATE') === false) &&
             (
@@ -3235,8 +3303,8 @@ window.SQLStudioSQL = {
 
         // plain column reference: name ('.' name)*. A word the tokenizer reads as a keyword though SQL Server does not reserve it, as Time,
         // is a name here (the verification of the lint round, 2026-10-14).
-        var isPlainChain = tokList.every(function (t, idx) {
-            return idx % 2 === 0 ? (isName(t) || isUnreservedKeyword(t)) : (t.type === 'punct' && t.value === '.');
+        var isPlainChain = tokList.every(function (t, idx, all) {
+            return idx % 2 === 0 ? (isName(t) || isUnreservedKeyword(t) || (isAcceptedAliasKeyword(t) && idx < all.length - 1)) : (t.type === 'punct' && t.value === '.');
         });
         if (isPlainChain) {
             var sourceTable = tokList.length >= 3 ? tokList[tokList.length - 3].value : null;
@@ -5141,6 +5209,329 @@ window.SQLStudioSQL = {
     };
 
     // ==================================================================
+    // inferTextLengths(sql, schema)
+    // ==================================================================
+
+    /**
+     * @function runOwnerOfReference
+     * @description The schema field a plain column reference of a SELECT names, when it can be told for certain: the one FROM entry a
+     * qualifier names, or for a bare name every FROM entry, each a known table with a complete field list, and exactly one with the field.
+     * A derived table, a CTE, a table function and a table whose fields are not known give nothing, as the length of a field behind them
+     * is not what the column holds.
+     * @param {Object} sel - the parsed SELECT the reference belongs to
+     * @param {?string} qualifier - the alias or table name before the field, or null for a bare name
+     * @param {string} name - the field name
+     * @param {Object} env - the typing's environment
+     * @returns {?{field: Object, table: Object}} the schema field and the table that holds it, or null
+     */
+    function runOwnerOfReference(sel, qualifier, name, env) {
+        var from = sel.from || [];
+        var entries = from;
+        if (qualifier) {
+            var named = findFromEntry(from, qualifier);
+            entries = named ? [named] : [];
+        };
+        var owners = [];
+        for (var i = 0; i < entries.length; i++) {
+            if (runInnerOfEntry(entries[i], env)) return null;
+            var table = typingTableOfEntry(entries[i], env);
+            if (!table || hasOpenFieldList(table)) return null;
+            var field = findFieldNamed(table, name);
+            if (field) owners.push({
+                field: field,
+                table: table
+            });
+        };
+        return owners.length === 1 ? owners[0] : null;
+    };
+
+    /**
+     * @function runFieldOfReference
+     * @description The schema field a plain column reference of a SELECT names (runOwnerOfReference), or null.
+     * @param {Object} sel - the parsed SELECT the reference belongs to
+     * @param {?string} qualifier - the alias or table name before the field, or null for a bare name
+     * @param {string} name - the field name
+     * @param {Object} env - the typing's environment
+     * @returns {?Object} the schema field, or null
+     */
+    function runFieldOfReference(sel, qualifier, name, env) {
+        var owner = runOwnerOfReference(sel, qualifier, name, env);
+        return owner ? owner.field : null;
+    };
+
+    /**
+     * @function inferTextLengths
+     * @description How long a text each output column of a query can hold, for the Save As check of a target's Text fields (round 2 org
+     * test D15, 2026-10-21: 19 characters written into a Text field of 10 saved, and the run failed with "String or binary data would be
+     * truncated"). Two kinds of column have a length that is known: a plain reference to a field of text of a known table, a Text, Email,
+     * EmailAddress or Phone field (TEXT_FIELD_TYPES), with the length the schema gives it (textFieldLength), and a text literal with its own length. An
+     * EmailAddress field of 254 characters into a Text field of 50 is the same case as a Text field of 254: every one is nvarchar. Everything else, an expression, a call, a field of a derived table
+     * or a CTE, a star, a column of a UNION, has none, since what it holds is not what a length of the schema says. Never asks for
+     * anything the schema does not already hold, and never throws.
+     * @param {string} sql - SQL text to analyze.
+     * @param {Object} schema - Schema object used to resolve table and field references.
+     * @returns {Array<?Object>} One entry per column in extractColumns(sql, schema).columns, in the same order: { length, isLiteral, field }, the most characters the column holds, whether it is a text literal (always that long) and, for a field, the field's name, or null when no length is known. An empty array when the query does not parse.
+     */
+    function inferTextLengths(sql, schema) {
+        return readOutputColumns(sql, schema, function (item, parsed, env) {
+            if ((item.kind === 'column' || item.kind === 'alias') && item.sourceColumn) {
+                var owner = runOwnerOfReference(parsed, item.sourceTable, item.sourceColumn, env);
+                var field = owner ? owner.field : null;
+                var length = field && TEXT_FIELD_TYPES[field.type] === true ? textFieldLength(field, owner.table.kind === 'dataview') : 0;
+                if (length > 0) {
+                    return {
+                        length: length,
+                        isLiteral: false,
+                        field: field.name
+                    };
+                };
+            } else if (item.kind === 'alias') {
+                var expression = aliasItemExpressionTokens(item);
+                if (expression.length === 1 && expression[0].type === 'string') {
+                    return {
+                        length: stringLiteralContent(expression[0]).length,
+                        isLiteral: true,
+                        field: null
+                    };
+                };
+            };
+            return null;
+        });
+    };
+
+    /**
+     * @function readOutputColumns
+     * @description The work that inferTextLengths and inferTextSources share: reads each item of a query's select list with a function of
+     * the caller's, for the Save As check, and keeps the answers in the order of extractColumns' columns. A star gives null for each
+     * column it makes, and a query that cannot be read for certain (runIsReadable) gives null for every column. Never throws.
+     * @param {string} sql - SQL text to analyze.
+     * @param {Object} schema - Schema object used to resolve table and field references.
+     * @param {function(Object, Object, Object): ?Object} describe - Called with a select-list item that is no star, the parsed SELECT and the typing's environment (runFieldOfReference takes the last two), and gives what to keep for that column, or null.
+     * @returns {Array<?Object>} One entry per column in extractColumns(sql, schema).columns, in the same order, or an empty array when the query does not parse.
+     */
+    function readOutputColumns(sql, schema, describe) {
+        sql = sql == null ? '' : String(sql);
+        var parsed;
+        try {
+            parsed = parse(sql, schema);
+        } catch (e) {
+            return [];
+        };
+        var extracted = extractColumnsFromParsed(parsed, sql);
+        var none = extracted.columns.map(function () { return null; });
+        if (parsed._noSelect || !extracted.columns.length || !runIsReadable(parsed)) return none;
+        var env = {
+            ctx: parsed._ctx || {
+                schemaIndex: ensureIndex(schema),
+                ctes: {}
+            },
+            byName: ensureIndex(schema),
+            active: [],
+            cache: [],
+            record: null
+        };
+        var answers = [];
+        try {
+            parsed.selectList.items.forEach(function (item) {
+                var width = item.kind === 'star' && item._resolvedColumns ? item._resolvedColumns.length : 1;
+                if (item.kind === 'star') {
+                    for (var k = 0; k < width; k++) answers.push(null);
+                    return;
+                };
+                answers.push(describe(item, parsed, env));
+            });
+        } catch (e) {
+            return none;
+        };
+        return answers.length === extracted.columns.length ? answers : none;
+    };
+
+    /* The types of a schema field that hold text, which a Number or Decimal field takes only when every value is a number. */
+    var TEXT_FIELD_TYPES = {
+        Text: true,
+        Email: true,
+        EmailAddress: true,
+        Phone: true
+    };
+
+    /* The most characters of a Phone and an EmailAddress field of a Data Extension, for a field whose schema gives no length. A Data
+     * Extension's Phone field carries none, and an MCE Phone field is an nvarchar of 100 bytes, so 50 characters, as an EmailAddress field
+     * is 254 (round 2 org test C09, 2026-10-20). Round 6 org test A12 item 5: a Phone column into a Text field of 10 got no length note,
+     * where an EmailAddress column of 254 got one. A Data View's field is not read so: no test gave the length of one. */
+    var DEFAULT_TEXT_FIELD_LENGTHS = {
+        Phone: 50,
+        EmailAddress: 254
+    };
+
+    /**
+     * @function textFieldLength
+     * @description How many characters a field of text can hold, for the length check of Save As and of the skill's target report: the
+     * length the schema gives the field, else, for a Data Extension's field, 50 for a Phone field and 254 for an EmailAddress field
+     * (DEFAULT_TEXT_FIELD_LENGTHS), else 0 for a field whose length is not known. A Text field with no length is not read as any.
+     * @param {?Object} field - A schema field, {type, length}.
+     * @param {boolean} [isDataView] - true for a field of a Data View, which gets no default.
+     * @returns {number} The length in characters, or 0 when it is not known.
+     */
+    function textFieldLength(field, isDataView) {
+        if (!field) return 0;
+        if (typeof field.length === 'number' && field.length > 0) return field.length;
+        return isDataView ? 0 : (DEFAULT_TEXT_FIELD_LENGTHS[field.type] || 0);
+    };
+
+    /**
+     * @function isStringAggCall
+     * @description Tells whether an expression is one STRING_AGG call and nothing else, with or without the WITHIN GROUP clause after it.
+     * @param {Array<Object>} tokens - The expression's tokens.
+     * @returns {boolean}
+     */
+    function isStringAggCall(tokens) {
+        if (tokens.length < 4 || tokens[0].quote || tokens[0].upper !== 'STRING_AGG' || !isPunctToken(tokens[1], '(')) return false;
+        var close = matchParen(tokens, 1);
+        if (close === tokens.length - 1) return true;
+        return isKw(tokens[close + 1], 'WITHIN') && isKw(tokens[close + 2], 'GROUP') && isPunctToken(tokens[close + 3], '(') && matchParen(tokens, close + 3) === tokens.length - 1;
+    };
+
+    /**
+     * @function inferTextSources
+     * @description What text each output column of a query can put into a field of the target, for the Save As check of a target's
+     * Number, Decimal and Text fields. Three kinds of column are known: a plain reference to a Text, Email, EmailAddress or Phone field of
+     * a known table (round 3 org tests G11 and D13, 2026-10-21: text into a Decimal field failed the run with only the system-error line,
+     * and into a Number field with the Action Log quoting the value, when a value was no number), a text literal, whose text is known, and a
+     * STRING_AGG call as the whole expression (round 3 org tests G05 and C15b: a list past 4,000 characters failed the run, and one of
+     * 5,444 ran once the value was CAST to NVARCHAR(MAX)). Everything else, an expression, another call, a field of a derived table or a CTE,
+     * a star, has none. Never asks for anything the schema does not already hold, and never throws.
+     * @param {string} sql - SQL text to analyze.
+     * @param {Object} schema - Schema object used to resolve table and field references.
+     * @returns {Array<?Object>} One entry per column in extractColumns(sql, schema).columns, in the same order: { kind: 'field', field, type } for a text field, { kind: 'literal', text } for a text literal, { kind: 'stringAgg' } for a STRING_AGG list, or null. An empty array when the query does not parse.
+     */
+    function inferTextSources(sql, schema) {
+        return readOutputColumns(sql, schema, function (item, parsed, env) {
+            if ((item.kind === 'column' || item.kind === 'alias') && item.sourceColumn) {
+                var field = runFieldOfReference(parsed, item.sourceTable, item.sourceColumn, env);
+                if (field && TEXT_FIELD_TYPES[field.type] === true) return {
+                    kind: 'field',
+                    field: field.name,
+                    type: field.type
+                };
+            } else if (item.kind === 'alias') {
+                var expression = aliasItemExpressionTokens(item);
+                if (expression.length === 1 && expression[0].type === 'string') return {
+                    kind: 'literal',
+                    text: stringLiteralContent(expression[0])
+                };
+                if (isStringAggCall(expression)) return { kind: 'stringAgg' };
+            };
+            return null;
+        });
+    };
+
+    /* The int a Number field holds, whose range a text converted into one has to fit: 2147483647 up, 2147483648 down. */
+    var INT_MAX_VALUE = 2147483647;
+
+    /**
+     * @function isNumericText
+     * @description Tells whether a text could convert into a field of the type for the Save As check of text going into a Number or Decimal
+     * field, by SQL Server's rules for converting text to int and to decimal, [Likely] for MCE as the org tests put only a text with no
+     * digit into such a field (round 3 org tests D13 and G11, 2026-10-21). A Number field is an int: it takes a whole number in the int's
+     * range, with an optional sign and blanks around, and a blank text, which SQL Server reads as 0, and it refuses 1.5 and 1e3. A Decimal
+     * field takes a whole number or one with a decimal point, and refuses a blank text and an exponent, which only float and real read.
+     * With no type the text has to convert into one of the two. It gives true for a text that may convert and false for one that does not,
+     * as abc, 12abc, 1,5 or $5 for both. The precision of a Decimal field is not compared.
+     * @param {string} text - The text, without its quotes.
+     * @param {string} [fieldType] - 'Number' or 'Decimal', the type of the field it goes into, in any letter case.
+     * @returns {boolean}
+     */
+    function isNumericText(text, fieldType) {
+        var value = String(text);
+        /* A blank between the sign and the digits is let through, as it is not known to fail. */
+        var whole = /^\s*([-+]?)\s*(\d*)\s*$/.exec(value);
+        var isInt = !!whole && (whole[2] === '' || Number(whole[2]) <= INT_MAX_VALUE + (whole[1] === '-' ? 1 : 0));
+        var isDecimal = /^\s*[-+]?\s*(\d+\.?\d*|\.\d+)\s*$/.test(value);
+        var type = String(fieldType || '').toLowerCase();
+        if (type === 'number') return isInt;
+        if (type === 'decimal') return isDecimal;
+        return isInt || isDecimal;
+    };
+
+    /**
+     * @function readsAsDate
+     * @description Tells whether a text may convert into a Date field, as MCE's session reads a date: month first, with Sunday as day 1
+     * (round 2 org test D17: '12/31/2026' and '2026-12-31' were written as 31 December 2026, and '31/12/2026' failed the whole run with
+     * only the system-error line). A text that reads as no date at all (isDateText), and a numeric date with a month or a day that does not
+     * exist, is read as 'no': 12/31/2026 and 2026-12-31 as the 31st of month 12, 31/12/2026 as month 31. A blank text is 1900-01-01 and
+     * reads. A text with a month's name, a time alone and every form not told apart are let through, as they are not known to fail.
+     * @param {string} text - The text, without its quotes.
+     * @returns {boolean} false for a text that fails, true for one that may convert.
+     */
+    function readsAsDate(text) {
+        var value = String(text).trim();
+        if (value === '') return true;
+        if (!isDateText(value)) return false;
+        var m = /^(\d{1,4})([-/.])(\d{1,2})\2(\d{1,4})(?:[ T].*)?$/.exec(value);
+        var compact = /^(\d{4})(\d{2})(\d{2})(?:\s+.*)?$/.exec(value);
+        var year;
+        var month;
+        var day;
+        if (m && m[1].length === 4) {
+            year = Number(m[1]);
+            month = Number(m[3]);
+            day = Number(m[4]);
+        } else if (m) {
+            month = Number(m[1]);
+            day = Number(m[3]);
+            year = Number(m[4]);
+        } else if (compact) {
+            year = Number(compact[1]);
+            month = Number(compact[2]);
+            day = Number(compact[3]);
+        } else {
+            return true;
+        };
+        /* A year of two digits is 1950 to 2049, as SQL Server's default cutoff reads it. */
+        if (m && m[1].length !== 4 && m[4].length <= 2) year += year > 49 ? 1900 : 2000;
+        return month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth(year, month);
+    };
+
+    /**
+     * @function isNullConstant
+     * @description Tells whether an expression is the NULL constant and nothing else: NULL itself, or a CAST, TRY_CAST, CONVERT or
+     * TRY_CONVERT of it, with parentheses around any of them.
+     * @param {Array<Object>} tokens - The expression's tokens.
+     * @returns {boolean}
+     */
+    function isNullConstant(tokens) {
+        var span = {
+            start: 0,
+            end: tokens.length
+        };
+        for (var guard = 0; guard < 10 && span.end > span.start; guard++) {
+            span = unwrapParens(tokens, span.start, span.end);
+            if (span.end - span.start === 1) return isKw(tokens[span.start], 'NULL');
+            var parts = castParts(tokens, span);
+            if (!parts) return false;
+            span = parts.value;
+        };
+        return false;
+    };
+
+    /**
+     * @function inferNullColumns
+     * @description Which output columns of a query are the NULL constant, for the Save As check of a target's required and primary key
+     * fields: a NULL with a name, or a CAST or CONVERT of NULL (round 2 org tests D11 and D22, 2026-10-21: a NULL written into a required
+     * field or a primary key failed the run, with "Cannot insert a NULL value into a non-nullable column." in the Action Log). An
+     * expression that may give NULL, a column and a star are not told apart from any other column. Never asks for anything the schema does
+     * not already hold, and never throws.
+     * @param {string} sql - SQL text to analyze.
+     * @param {Object} schema - Schema object used to resolve table and field references.
+     * @returns {Array<boolean>} One entry per column in extractColumns(sql, schema).columns, in the same order: true for a NULL constant. An empty array when the query does not parse.
+     */
+    function inferNullColumns(sql, schema) {
+        return readOutputColumns(sql, schema, function (item) {
+            return item.kind === 'alias' && isNullConstant(aliasItemExpressionTokens(item));
+        }).map(function (entry) { return entry === true; });
+    };
+
+    // ==================================================================
     // inferValueType(values, limits) and isEmailAddress(value)
     // ==================================================================
     /* The Save to DE overlay's last resort for a column the SQL does not type, when every row of the result is on screen (the author's
@@ -5646,7 +6037,7 @@ window.SQLStudioSQL = {
         if (j < 0 || !isName(tokens[j])) return null;
         var column = tokens[j].value;
         var alias = null;
-        if (j - 2 >= 0 && tokens[j - 1].type === 'punct' && tokens[j - 1].value === '.' && isName(tokens[j - 2])) {
+        if (j - 2 >= 0 && tokens[j - 1].type === 'punct' && tokens[j - 1].value === '.' && (isName(tokens[j - 2]) || isAliasKeyword(tokens[j - 2]))) {
             alias = tokens[j - 2].value;
         };
         return {
@@ -5852,10 +6243,10 @@ window.SQLStudioSQL = {
                     isAliasNext: true
                 };
             };
-            if (!isName(tokens[i + 1])) return null;
+            if (!isName(tokens[i + 1]) && !isAliasKeyword(tokens[i + 1])) return null;
             hasAlias = true;
             i += 2;
-        } else if (i <= lastIdx && isName(tokens[i])) {
+        } else if (i <= lastIdx && (isName(tokens[i]) || isAcceptedAliasKeyword(tokens[i]))) {
             hasAlias = true;
             i += 1;
         };
@@ -6029,7 +6420,8 @@ window.SQLStudioSQL = {
                     break;
                 };
             };
-            var aliasName = aliasTok && isName(aliasTok) ? aliasTok.value : null;
+            /* An alias that is a word the tokenizer reads as a keyword, Time or Zone (isAliasKeyword), names its table like any other. */
+            var aliasName = aliasTok && (isName(aliasTok) || isAliasKeyword(aliasTok)) ? aliasTok.value : null;
             var match = scopeEntryFor(aliasName);
             return {
                 kind: 'column', alias: aliasName, table: match ? match.table : null,
@@ -6191,7 +6583,7 @@ window.SQLStudioSQL = {
         var dot = tokens[idx - 2];
         var alias = tokens[idx - 3];
         var lead = tokens[idx - 4];
-        if (!isName(column) || !dot || dot.type !== 'punct' || dot.value !== '.' || !isName(alias) || !(isKw(lead, 'ON') || isKw(lead, 'AND'))) return null;
+        if (!isName(column) || !dot || dot.type !== 'punct' || dot.value !== '.' || !(isName(alias) || isAliasKeyword(alias)) || !(isKw(lead, 'ON') || isKw(lead, 'AND'))) return null;
         var closedCases = 0;
         for (var k = idx - 4; k >= 0; k--) {
             var t = tokens[k];
@@ -9500,7 +9892,8 @@ window.SQLStudioSQL = {
         while (j < to) {
             var t = core[j];
             /* After the first name the chain has just read a dot, and the first name needs one after it, but for a table's. */
-            var isKeywordName = isUnreservedKeyword(t) && (j > q || !!isTableName || isPunctToken(core[j + 1], '.'));
+            var isKeywordName = (isUnreservedKeyword(t) && (j > q || !!isTableName || isPunctToken(core[j + 1], '.'))) ||
+                (isAcceptedAliasKeyword(t) && j === q && isPunctToken(core[j + 1], '.'));
             if (!(isName(t) || t.type === 'number' || isKeywordName)) break;
             parts.push(t);
             j++;
@@ -9573,7 +9966,7 @@ window.SQLStudioSQL = {
                 continue;
             };
             /* A keyword SQL Server does not reserve starts a reference before a dot, Time.OrderId (referenceChain). */
-            var isKeywordQualifier = isUnreservedKeyword(t) && isPunctToken(core[q + 1], '.');
+            var isKeywordQualifier = isAliasKeyword(t) && isPunctToken(core[q + 1], '.');
             if ((!isName(t) && !isKeywordQualifier) || isPunctToken(core[q - 1], '.') || (core[q - 1] && core[q - 1].value === ':' && core[q - 2] && core[q - 2].value === ':')) continue;
             if (!t.quote && GROUP_AGGREGATES[t.upper] && isPunctToken(core[q + 1], '(')) {
                 if (overAfterCall(core, matchParen(core, q + 1)) === -1) {
@@ -9588,7 +9981,7 @@ window.SQLStudioSQL = {
             /* A name in double quotes is a column, as one in brackets is: QUOTED_IDENTIFIER is on in MCE (the author's org, 2026-10-14, item 50).
              * One where a text is meant is MCE096's alone (quotedTextPlaceAt). */
             var isSkipped = isPunctToken(core[chain.end], '(') || isPunctToken(core[chain.end - 1], '.') || isNonColumnName(core, q, top) ||
-                chain.parts.some(function (p) { return (p.type !== 'identifier' && !isUnreservedKeyword(p)) || p.unterminated; }) || (chain.parts.length === 1 && quotedTextPlaceAt(core, q));
+                chain.parts.some(function (p) { return (p.type !== 'identifier' && !isAliasKeyword(p)) || p.unterminated; }) || (chain.parts.length === 1 && quotedTextPlaceAt(core, q));
             if (!isSkipped) {
                 reading.refs.push({
                     first: q,
@@ -12256,7 +12649,7 @@ window.SQLStudioSQL = {
             var columnStart = item.kind === 'alias' ? item.sourceStart : item.nameStart;
             token = core[tokenIndexAtOrAfter(core, columnStart)];
             if (!token || token.start !== columnStart) return null;
-        } else if (item.kind === 'alias' && !item.sourceColumn && item.tokens && item.tokens.length === 2 && isName(item.tokens[0]) && (isName(item.tokens[1]) || isUnreservedKeyword(item.tokens[1]))) {
+        } else if (item.kind === 'alias' && !item.sourceColumn && item.tokens && item.tokens.length === 2 && isName(item.tokens[0]) && (isName(item.tokens[1]) || isAliasKeyword(item.tokens[1]))) {
             /* The parse gives no source to col Name, as it may be two words of one expression, but two plain names are a column and its alias.
              * So is a name and a word SQL Server does not reserve, col Time, which Format writes as col AS Time: MCE062 marked the column alone
              * there, and the whole item after Format (the merge check of the lint round, 2026-10-14). */
@@ -13803,7 +14196,7 @@ window.SQLStudioSQL = {
                     isInFixAll: !hasComment
                 }];
             };
-            findings.push(['MCE063', 'error', 'Marketing Cloud Engagement refuses a VALUES table constructor, as its query check reads VALUES as a Data Extension name: VALUES is not a known data extension or system data view. Write the rows as SELECT ... UNION ALL SELECT ....', DOCS.FROM, core[v + 1], core[v + 1], valuesFix]);
+            findings.push(['MCE063', 'error', 'Marketing Cloud Engagement refuses a VALUES table constructor, as its query check reads VALUES as a Data Extension name: VALUES is not a known data extension or system data view. Write the rows as SELECT ... UNION ALL SELECT ....', DOCS.ERR_UNKNOWN_TABLE, core[v + 1], core[v + 1], valuesFix]);
             v = valuesClose;
         };
         return findings;
@@ -13836,7 +14229,7 @@ window.SQLStudioSQL = {
             if (!isTablePlace) continue;
             var name = sql.slice(schemaWord.start, core[k + 2].end) + (isPunctToken(core[k + 3], '(') ? '(' : '');
             var word = schemaWord.upper === 'SYS' ? 'sys' : 'INFORMATION_SCHEMA';
-            findings.push(['MCE063', 'error', 'MCE refuses system views: \'' + word + '\' is a reserved word and may not appear in your query. The ' + name + ' table has a multi-part specification. This is not allowed. ' + name + ' is not a known data extension or system data view. Remove it.', DOCS.FROM, schemaWord, core[k + 2]]);
+            findings.push(['MCE063', 'error', 'MCE refuses system views: \'' + word + '\' is a reserved word and may not appear in your query. The ' + name + ' table has a multi-part specification. This is not allowed. ' + name + ' is not a known data extension or system data view. Remove it.', DOCS.ERR_MULTIPART, schemaWord, core[k + 2]]);
         };
         return findings;
     };
@@ -13872,7 +14265,7 @@ window.SQLStudioSQL = {
                 from = arg.end;
             };
         };
-        return ['MCE067', 'error', 'MCE refuses .nodes() after APPLY: The ' + text + ' table has a multi-part specification. This is not allowed. ' + text + ' is not a known data extension or system data view. Read each value with .value() in the select list instead.', DOCS.FROM, significant[start], method];
+        return ['MCE067', 'error', 'MCE refuses .nodes() after APPLY: The ' + text + ' table has a multi-part specification. This is not allowed. ' + text + ' is not a known data extension or system data view. Read each value with .value() in the select list instead.', DOCS.ERR_MULTIPART, significant[start], method];
     };
 
     /**
@@ -14201,7 +14594,7 @@ window.SQLStudioSQL = {
             } else {
                 message = tableMessage(place) + advice;
             };
-            return ['MCE077', 'error', message, DOCS.SFREF, core[p0], core[select], fixes];
+            return ['MCE077', 'error', message, place === 'START' ? DOCS.ERR_SELECT : DOCS.ERR_UNKNOWN_TABLE, core[p0], core[select], fixes];
         };
         /* The finding of a join in parentheses that opens with a derived table, from the ( at p to the SELECT. */
         var groupRunFinding = function (p, select, place) {
@@ -14222,7 +14615,7 @@ window.SQLStudioSQL = {
                 groups.forEach(function (group) { edits = edits.concat(removalEdits(group.open, group.close)); });
                 fixes = [{ title: 'Remove the parentheses around the join', edits: edits, isSafe: true, isInFixAll: true }];
             };
-            return ['MCE077', 'error', tableMessage(place) + advice, DOCS.SFREF, core[p], core[select], fixes];
+            return ['MCE077', 'error', tableMessage(place) + advice, DOCS.ERR_UNKNOWN_TABLE, core[p], core[select], fixes];
         };
         var p = 0;
         while (p < n) {
@@ -14389,6 +14782,13 @@ window.SQLStudioSQL = {
      * and MCE020 offers no brackets for them. */
     var RESERVED_IN_BRACKETS = ['EXEC', 'SYSTEM_USER', 'CURRENT_USER'];
 
+    /* The words whose refusal has a text of its own: AS Index got "Incorrect syntax near 'Index'. If this is intended as a part of a table
+     * hint, A WITH keyword and parenthesis are now required. See SQL Server Books Online for proper syntax." (round 5 org test B03), where
+     * every other word got "Incorrect syntax near the keyword '<Word>'." The rest of the text is dropped from the message, to keep it short. */
+    var RESERVED_ALIAS_OWN_TEXT = {
+        INDEX: 'Incorrect syntax near \'{word}\'. If this is intended as a part of a table hint, A WITH keyword and parenthesis are now required.'
+    };
+
     /* The clause, join and set operator words that end an alias after AS, for MCE020 (isReservedAliasAt). */
     var RESERVED_ALIAS_ENDS = ['FROM', 'WHERE', 'GROUP', 'ORDER', 'HAVING', 'UNION', 'EXCEPT', 'INTERSECT', 'JOIN', 'INNER', 'LEFT', 'RIGHT', 'FULL', 'CROSS', 'OUTER', 'ON', 'WITH', 'OPTION', 'FOR', 'PIVOT', 'UNPIVOT', 'TABLESAMPLE'];
 
@@ -14398,17 +14798,192 @@ window.SQLStudioSQL = {
      * Server refuses it there. The alias ends at the word: a comma, a ;, a ), the end of the text, or a clause, join or set operator word
      * comes next (RESERVED_ALIAS_ENDS). MCE005 and MCE063 leave such a word to MCE020, so each mistake is one finding: MCE005 had called
      * AS Exec a stored procedure call, and MCE063 gave AS System_User and AS Current_User a second error (the final verification of the
-     * lint round, 2026-10-15).
+     * lint round, 2026-10-15). A word of RESERVED_ALIAS_ACCEPTED is none, as the query check accepts it as an alias (an empty list since
+     * Precision and Disk, the two words it passed so, left the reserved words, round 7 and 8 org tests B02 and B03).
      * @param {Array<Object>} core - Comment-free token stream.
      * @param {number} i - Index of the word.
      * @returns {boolean}
      */
     function isReservedAliasAt(core, i) {
         var word = core[i];
-        if (!word || word.type !== 'keyword' || !isKw(core[i - 1], 'AS') || !RESERVED_SET[word.upper]) return false;
+        if (!word || word.type !== 'keyword' || !isKw(core[i - 1], 'AS') || !RESERVED_SET[word.upper] || RESERVED_ALIAS_ACCEPTED.indexOf(word.upper) !== -1) return false;
         var after = core[i + 1];
         return !after || (after.type === 'punct' && (after.value === ',' || after.value === ';' || after.value === ')')) ||
             (after.type === 'keyword' && RESERVED_ALIAS_ENDS.indexOf(after.upper) !== -1);
+    };
+
+    /* The reserved words that follow FROM, JOIN or APPLY without being a table name, for MCE020 (isReservedTableNameAt): the clause, join
+     * and set operator words of RESERVED_ALIAS_ENDS, as FROM ... WHERE with the name still to be typed, except ORDER and GROUP, which are
+     * clause words only before BY, and the rowset functions and keywords that take the place of a table. */
+    var RESERVED_TABLE_NAME_SKIPPED = RESERVED_ALIAS_ENDS.filter(function (w) { return w !== 'ORDER' && w !== 'GROUP'; }).concat([
+        'SELECT', 'VALUES', 'OPENROWSET', 'OPENQUERY', 'OPENDATASOURCE', 'OPENXML', 'CONTAINSTABLE', 'FREETEXTTABLE',
+        'SEMANTICKEYPHRASETABLE', 'SEMANTICSIMILARITYDETAILSTABLE', 'SEMANTICSIMILARITYTABLE'
+    ]);
+
+    /**
+     * @function isTableListFrom
+     * @description Tells whether the FROM at core[i] starts a table list, and not the FROM of TRIM(BOTH '-' FROM x), which the query
+     * check reads as a table list too (MCE066), or of IS DISTINCT FROM. A FROM inside parentheses starts a table list when a SELECT comes
+     * before it in the same parentheses, as in a subquery.
+     * @param {Array<Object>} core - Comment-free token stream.
+     * @param {number} i - Index of the FROM.
+     * @returns {boolean}
+     */
+    function isTableListFrom(core, i) {
+        if (core[i].isDistinctFrom) return false;
+        var depth = 0;
+        for (var j = i - 1; j >= 0; j--) {
+            if (isPunctToken(core[j], ')')) {
+                depth++;
+            } else if (isPunctToken(core[j], '(')) {
+                if (depth === 0) return false;
+                depth--;
+            } else if (depth === 0 && isKw(core[j], 'SELECT')) {
+                return true;
+            };
+        };
+        return false;
+    };
+
+    /* The words that end the search back from a comma for the FROM of its table list (isTableListComma): the comma is in a select list,
+     * a GROUP BY, ORDER BY or PARTITION BY list, a SET or a VALUES list, or after a FOR or an OPTION, none of them a table list. */
+    var TABLE_LIST_COMMA_STOPS = ['SELECT', 'WHERE', 'BY', 'HAVING', 'UNION', 'EXCEPT', 'INTERSECT', 'INTO', 'SET', 'VALUES', 'FOR', 'OPTION', 'WINDOW'];
+
+    /**
+     * @function isTableListComma
+     * @description Tells whether the comma at core[i] separates the tables of a table list, as in FROM Orders o, Order p, at the level of
+     * the FROM (isTableListFrom) that comes before it with no select list, clause or parenthesis between them. MCE078 reports the comma
+     * itself, which MCE's query check refuses.
+     * @param {Array<Object>} core - Comment-free token stream.
+     * @param {number} i - Index of the comma.
+     * @returns {boolean}
+     */
+    function isTableListComma(core, i) {
+        var depth = 0;
+        for (var j = i - 1; j >= 0; j--) {
+            var t = core[j];
+            if (isPunctToken(t, ')')) {
+                depth++;
+            } else if (isPunctToken(t, '(')) {
+                if (depth === 0) return false;
+                depth--;
+            } else if (depth === 0 && t.type === 'keyword') {
+                if (t.upper === 'FROM') return isTableListFrom(core, j);
+                if (TABLE_LIST_COMMA_STOPS.indexOf(t.upper) !== -1) return false;
+            };
+        };
+        return false;
+    };
+
+    /**
+     * @function reservedTableLead
+     * @description Where the table name starts that a reserved word written with no brackets is, as FROM Order: the index of the word, or
+     * of the Ent of FROM Ent.Order, for a shared Data Extension, or -1 when core[i] is no such name. The name comes right after the FROM
+     * of a table list, a JOIN, an APPLY or a comma of a table list (isTableListComma). MCE020 reports it (round 2 org test A42,
+     * 2026-10-21: the query check answered "Order is not a known data extension or system data view." and the strict parser's MCE000
+     * read the word as the keyword, "FROM needs a table name after it", and "A name is missing after '.'" after Ent.). The words that
+     * follow FROM without being a table name are left out (RESERVED_TABLE_NAME_SKIPPED), and so is ORDER or GROUP before BY. A name of
+     * several words that starts with a reserved word and that the schema knows, as Order Items, is MCE019's (reservedWordNames).
+     * @param {Array<Object>} core - Comment-free token stream.
+     * @param {number} i - Index of the word.
+     * @returns {number} The index of the name's first token, or -1.
+     */
+    function reservedTableLead(core, i) {
+        var word = core[i];
+        if (!word || word.type !== 'keyword' || word.quote || !RESERVED_SET[word.upper] || RESERVED_TABLE_NAME_SKIPPED.indexOf(word.upper) !== -1) return -1;
+        if ((word.upper === 'ORDER' || word.upper === 'GROUP') && isKw(core[i + 1], 'BY')) return -1;
+        /* Ent.Order: the prefix of a shared Data Extension, with no dot before it. */
+        var lead = isPunctToken(core[i - 1], '.') && isBareName(core[i - 2]) && core[i - 2].upper === 'ENT' && !isPunctToken(core[i - 3], '.') ? i - 2 : i;
+        var before = core[lead - 1];
+        if (!before) return -1;
+        if (isPunctToken(before, ',')) return isTableListComma(core, lead - 1) ? lead : -1;
+        if (before.type !== 'keyword' || (before.upper !== 'FROM' && before.upper !== 'JOIN' && before.upper !== 'APPLY')) return -1;
+        return before.upper !== 'FROM' || isTableListFrom(core, lead - 1) ? lead : -1;
+    };
+
+    /**
+     * @function isReservedTableNameAt
+     * @description Tells whether core[i] is a reserved word written as a table name with no brackets, FROM Order or FROM Ent.Order
+     * (reservedTableLead): MCE020 reports it, and MCE005, MCE061 and MCE063 leave it to MCE020.
+     * @param {Array<Object>} core - Comment-free token stream.
+     * @param {number} i - Index of the word.
+     * @returns {boolean}
+     */
+    function isReservedTableNameAt(core, i) {
+        return reservedTableLead(core, i) !== -1;
+    };
+
+    /* The words that end a table source of a FROM list, for reservedTableSpans: a join or an APPLY, and a clause or set operator. LEFT
+     * and RIGHT before a ( are calls, and ORDER and GROUP end it only before BY, as Order.Id in an ON is a qualifier. ON, WITH (a table
+     * hint), PIVOT and TABLESAMPLE belong to the table source. */
+    var TABLE_SOURCE_ENDS = ['JOIN', 'INNER', 'LEFT', 'RIGHT', 'FULL', 'CROSS', 'OUTER', 'WHERE', 'GROUP', 'ORDER', 'HAVING', 'UNION', 'EXCEPT', 'INTERSECT', 'OPTION', 'FOR', 'WINDOW'];
+
+    /**
+     * @function reservedTableSpans
+     * @description The text of each table source whose name is a reserved word with no brackets (reservedTableLead), from the name to
+     * the next join, APPLY, comma, clause or closing parenthesis of its level: the parse skips the word and reads what follows it as a
+     * table, as the o of FROM Order o, the Items of FROM Order Items or the 1 of JOIN Order ON 1 = 1, and MCE061 leaves those entries
+     * to MCE020. Another table of the same FROM keeps its MCE061.
+     * @param {Array<Object>} core - Comment-free token stream.
+     * @returns {Array<Object>} One {start, end} per such table source, character offsets, end exclusive.
+     */
+    function reservedTableSpans(core) {
+        var spans = [];
+        for (var i = 0; i < core.length; i++) {
+            var lead = reservedTableLead(core, i);
+            if (lead === -1) continue;
+            var depth = 0;
+            var k = i + 1;
+            for (; k < core.length; k++) {
+                var t = core[k];
+                if (isPunctToken(t, '(')) {
+                    depth++;
+                } else if (isPunctToken(t, ')')) {
+                    if (depth === 0) break;
+                    depth--;
+                } else if (depth === 0 && (isPunctToken(t, ',') || isPunctToken(t, ';'))) {
+                    break;
+                } else if (depth === 0 && t.type === 'keyword' && TABLE_SOURCE_ENDS.indexOf(t.upper) !== -1) {
+                    var isCall = (t.upper === 'LEFT' || t.upper === 'RIGHT') && isPunctToken(core[k + 1], '(');
+                    var isClause = (t.upper !== 'ORDER' && t.upper !== 'GROUP') || isKw(core[k + 1], 'BY');
+                    if (!isCall && isClause) break;
+                };
+            };
+            spans.push({
+                start: core[lead].start,
+                end: core[k] ? core[k].start : Infinity
+            });
+        };
+        return spans;
+    };
+
+    /**
+     * @function bracketReservedEdits
+     * @description The edits of MCE020's fix: brackets round a reserved word that is an alias or a table name, and round each use of the
+     * same word as a qualifier (the same word right before a dot, which no dot comes before), the same word after a dot, and a whole item
+     * of an ORDER BY.
+     * @param {Array<Object>} core - Comment-free token stream.
+     * @param {Object} word - The word's token, the alias or the table name.
+     * @returns {Array<Object>} The {start, end, text} edits.
+     */
+    function bracketReservedEdits(core, word) {
+        var edits = [];
+        core.forEach(function (t, k) {
+            var isSameWord = t.type === 'keyword' && t.upper === word.upper;
+            var isUse = t === word || (isSameWord && (isPunctToken(core[k + 1], '.') !== isPunctToken(core[k - 1], '.') || isOrderByItemWord(core, k)));
+            if (!isUse) return;
+            edits.push({
+                start: t.start,
+                end: t.start,
+                text: '['
+            });
+            edits.push({
+                start: t.end,
+                end: t.end,
+                text: ']'
+            });
+        });
+        return edits;
     };
 
     var RULES = [
@@ -14425,7 +15000,7 @@ window.SQLStudioSQL = {
             var findings = [];
             var first = tokens.filter(function (t) { return t.type !== 'comment'; })[0];
             if (first && first.type === 'keyword' && STATEMENT_START_DISALLOWED.indexOf(first.upper) !== -1) {
-                findings.push(['MCE001', 'error', 'This statement is not a SELECT query. Use a SELECT query instead. Marketing Cloud Engagement Query Activities cannot run INSERT, UPDATE, DELETE, DECLARE, EXEC or control-flow statements.', DOCS.BASICS, first, first]);
+                findings.push(['MCE001', 'error', 'This statement is not a SELECT query. Use a SELECT query instead. Marketing Cloud Engagement Query Activities cannot run INSERT, UPDATE, DELETE, DECLARE, EXEC or control-flow statements.', DOCS.ERR_SELECT, first, first]);
             };
             return findings;
         },
@@ -14501,7 +15076,7 @@ window.SQLStudioSQL = {
                     }];
                 };
                 findings.push(['MCE002', 'error', 'Marketing Cloud Engagement\'s query check refuses a ; inside a text value too: \';\' is a reserved word and may not appear in your query. ' +
-                    (isLiteralOnly ? 'Take the ; out of this text.' : 'Write it as CHAR(59), as in \'a\' + CHAR(59) + \'b\'.'), DOCS.SFREF, first, last, fixes]);
+                    (isLiteralOnly ? 'Take the ; out of this text.' : 'Write it as CHAR(59), as in \'a\' + CHAR(59) + \'b\'.'), DOCS.ERR_RESERVED, first, last, fixes]);
             });
             return findings;
         },
@@ -14520,7 +15095,7 @@ window.SQLStudioSQL = {
             tokens.forEach(function (t) {
                 if (t.type !== 'variable') return;
                 if (SYSTEM_FUNCTIONS_RUN.indexOf(t.upper) !== -1 || SYSTEM_FUNCTIONS_REFUSED.indexOf(t.upper) !== -1) return;
-                findings.push(['MCE003', 'error', 'Variables are not supported in Marketing Cloud Engagement SQL. Replace ' + t.value + ' with a literal value or a CASE expression.', DOCS.SEL, t, t]);
+                findings.push(['MCE003', 'error', 'Variables are not supported in Marketing Cloud Engagement SQL. Replace ' + t.value + ' with a literal value or a CASE expression.', DOCS.ERR_VARIABLE, t, t]);
             });
             return findings;
         },
@@ -14553,7 +15128,7 @@ window.SQLStudioSQL = {
         // MCE005 - stored procedures / UDFs are not available.
         /**
          * @function rule005
-         * @description MCE005: flags a call to a stored procedure or user-defined function, an sp_ or xp_-prefixed name called with (, EXEC/EXECUTE with the name after it, or a dbo.-qualified call, none of which run in Marketing Cloud Engagement SQL. A column, an alias or a table whose name starts with sp_ or xp_, as SELECT sp_score FROM Orders, is no call, and neither is a name before a list in parentheses that is no call's (isNamedList): a derived table's or a CTE's column list, AS sp_d (a) or WITH sp_c (a) AS (...), and the old table hint of a table in FROM, FROM sp_Orders (NOLOCK) or FROM dbo.Orders (NOLOCK) (the verification of the lint round, 2026-10-14). A table function after FROM, FROM dbo.fn(1), is a call. EXEC written as an alias after AS, AS Exec, is no call: MCE020 reports it (isReservedAliasAt).
+         * @description MCE005: flags a call to a stored procedure or user-defined function, an sp_ or xp_-prefixed name called with (, EXEC/EXECUTE with the name after it, or a dbo.-qualified call, none of which run in Marketing Cloud Engagement SQL. A column, an alias or a table whose name starts with sp_ or xp_, as SELECT sp_score FROM Orders, is no call, and neither is a name before a list in parentheses that is no call's (isNamedList): a derived table's or a CTE's column list, AS sp_d (a) or WITH sp_c (a) AS (...), and the old table hint of a table in FROM, FROM sp_Orders (NOLOCK) or FROM dbo.Orders (NOLOCK) (the verification of the lint round, 2026-10-14). A table function after FROM, FROM dbo.fn(1), is a call. EXEC written as an alias after AS, AS Exec, or as a table name, FROM Exec, is no call: MCE020 reports it (isReservedAliasAt, isReservedTableNameAt).
          * @param {string} sql - Full SQL source text (unused directly, kept for the shared rule signature).
          * @param {Array<Object>} tokens - Full token stream (unused: the rule reads the comment-free stream).
          * @param {Object} ctx - Shared per-lint-call context; used for ctx.getCoreTokens().
@@ -14566,8 +15141,8 @@ window.SQLStudioSQL = {
                 /* Only a call: sp_score, AS sp_id and FROM sp_Customers were errors (the syntax audit, 2026-10-14). EXEC's finding covers the name after it. */
                 if (t.type === 'identifier' && !t.quote && /^(sp_|xp_)/i.test(t.value) && isPunctToken(core[i + 1], '(') && !isPunctToken(core[i - 1], '.') && !isNamedList(core, i, i)) {
                     findings.push(['MCE005', 'error', 'Stored procedures and user-defined functions do not run in Marketing Cloud Engagement SQL. Remove this call. Use a built-in function or CASE expression instead.', DOCS.SFREF, t, t]);
-                } else if (t.type === 'keyword' && (t.upper === 'EXEC' || t.upper === 'EXECUTE') && !isReservedAliasAt(core, i)) {
-                    /* AS Exec is an alias, MCE020's, and no call. */
+                } else if (t.type === 'keyword' && (t.upper === 'EXEC' || t.upper === 'EXECUTE') && !isReservedAliasAt(core, i) && !isReservedTableNameAt(core, i)) {
+                    /* AS Exec is an alias and FROM Exec a table name, MCE020's, and no call. */
                     var procedure = core[i + 1] && isName(core[i + 1]) ? core[i + 1] : t;
                     findings.push(['MCE005', 'error', 'Stored procedures and user-defined functions do not run in Marketing Cloud Engagement SQL. Remove this call. Use a built-in function or CASE expression instead.', DOCS.SFREF, t, procedure]);
                 } else if (t.type === 'identifier' && !t.quote && t.upper === 'DBO' && isPunctToken(core[i + 1], '.') && isName(core[i + 2]) && isPunctToken(core[i + 3], '(') && !isNamedList(core, i, i + 2)) {
@@ -14577,7 +15152,7 @@ window.SQLStudioSQL = {
             return findings;
         },
         // MCE006 was the "--" line comment warning. Removed 2026-09-28, when a -- comment was thought to pass Validate and run.
-        // It passes Validate, and the save of a Query Activity loses everything after it, which MCE100 reports (2026-10-15).
+        // It passes Validate, and the save of a Query Activity treats it as never closed, which MCE100 reports (2026-10-15).
         // MCE007 - a query that starts with WITH (a CTE) fails the query check.
         /**
          * @function rule007
@@ -14596,7 +15171,7 @@ window.SQLStudioSQL = {
             var first = significant[0];
             if (first && isKw(first, 'WITH')) {
                 var fix = cteSubqueryFix(sql, significant, ctx.schema);
-                findings.push(['MCE007', 'error', 'Marketing Cloud Engagement\'s query check refuses a query that starts with WITH, and reads the CTE name as an unknown Data Extension. Rewrite the CTE as a subquery in FROM.', DOCS.SFREF, first, first, fix ? [fix] : []]);
+                findings.push(['MCE007', 'error', 'Marketing Cloud Engagement\'s query check refuses a query that starts with WITH, and reads the CTE name as an unknown Data Extension. Rewrite the CTE as a subquery in FROM.', DOCS.ERR_SELECT, first, first, fix ? [fix] : []]);
             };
             return findings;
         },
@@ -14751,7 +15326,7 @@ window.SQLStudioSQL = {
                             isInFixAll: true
                         });
                     };
-                    findings.push(['MCE010', 'error', 'This column has no name, so MCE cannot map it to a Data Extension field. Add an alias with AS' + (fixes.length ? ', or use the Add alias fix.' : '.'), DOCS.SEL, item, item, fixes]);
+                    findings.push(['MCE010', 'error', 'This column has no name, so MCE cannot map it to a Data Extension field. Add an alias with AS' + (fixes.length ? ', or use the Add alias fix.' : '.'), DOCS.ERR_NO_NAME, item, item, fixes]);
                 };
             });
             /* A derived table, an APPLY query and a CTE body name the columns the query around them reads, and SQL Server refuses one with no
@@ -14779,7 +15354,7 @@ window.SQLStudioSQL = {
                         isSafe: true,
                         isInFixAll: true
                     }];
-                    findings.push(['MCE010', 'error', 'This column of ' + owner.label + ' has no name: No column name was specified for ' + where + '. Add an alias with AS' + (fixes.length ? ', or use the Add alias fix.' : '.'), DOCS.SEL, item, item, fixes]);
+                    findings.push(['MCE010', 'error', 'This column of ' + owner.label + ' has no name: No column name was specified for ' + where + '. Add an alias with AS' + (fixes.length ? ', or use the Add alias fix.' : '.'), DOCS.ERR_NO_NAME, item, item, fixes]);
                 });
             });
             return findings;
@@ -14825,7 +15400,7 @@ window.SQLStudioSQL = {
                                 isInFixAll: false
                             });
                         };
-                        findings.push(['MCE011', 'error', 'Column "' + name + '" is in ' + owner.label + ' more than once: The column \'' + name + '\' was specified multiple times for \'' + owner.label + '\'. Give one of them another alias.', DOCS.SEL, item, item, fixes]);
+                        findings.push(['MCE011', 'error', 'Column "' + name + '" is in ' + owner.label + ' more than once: The column \'' + name + '\' was specified multiple times for \'' + owner.label + '\'. Give one of them another alias.', DOCS.ERR_TWICE, item, item, fixes]);
                     });
                 });
             });
@@ -14865,7 +15440,7 @@ window.SQLStudioSQL = {
                     /* The issue's own name: an item index is no column position after a star, which named SubscriberID for the Domain of
                      * SELECT s.Domain, s.* (the verification of the lint round, 2026-10-14). */
                     /* MCE's own answer, as it runs the query inside another one named Qry (the author's org, item 50, org Test 5a). */
-                    findings.push(['MCE011', 'error', 'Output column "' + issue.name + '" is used more than once: The column \'' + issue.name + '\' was specified multiple times for \'Qry\'. Give one of them another alias, as each column becomes a field of the target Data Extension.', DOCS.SEL, issue, issue, fixes]);
+                    findings.push(['MCE011', 'error', 'Output column "' + issue.name + '" is used more than once: The column \'' + issue.name + '\' was specified multiple times for \'Qry\'. Give one of them another alias, as each column becomes a field of the target Data Extension.', DOCS.ERR_TWICE, issue, issue, fixes]);
                 };
             });
             return findings;
@@ -14940,7 +15515,7 @@ window.SQLStudioSQL = {
             };
             var TOP_MESSAGE = 'Marketing Cloud Engagement runs the query inside another one, so it refuses an ORDER BY with no TOP: The ORDER BY clause is invalid in views, inline functions, derived tables, subqueries, and common table expressions, unless TOP, OFFSET or FOR XML is also specified. A Data Extension keeps no row order: remove ORDER BY and sort the results in the grid, or add TOP to keep the first rows.';
             var pushFinding = function (orderBy, message, severity) {
-                findings.push(['MCE013', severity || 'error', message, DOCS.SEL, orderBy, orderBy, [
+                findings.push(['MCE013', severity || 'error', message, DOCS.ERR_ORDER_BY, orderBy, orderBy, [
                     { title: 'Remove ORDER BY', edits: [{ start: removalStart(sql, tokens, orderBy.start), end: orderBy.end, text: '' }], isSafe: true, isInFixAll: false }
                 ]]);
             };
@@ -15015,10 +15590,10 @@ window.SQLStudioSQL = {
         // MCE015 - an output column name MCE cannot create as a Data Extension field.
         /**
          * @function rule015
-         * @description MCE015: flags a top-level output column name MCE's runQuery endpoint would refuse as a Data Extension field name - a leading underscore, characters outside [A-Za-z0-9 _.-], an all-digit name, or a name over 128 characters - mirroring validateColumns in sql-studio-backend.html exactly, plus a SELECT * / alias.* whose resolved columns include an underscore-prefixed field, and one over a table whose field list is a sample with such a field among the known ones (underscoreFieldOfOpenStar), with no fix. Empty names stay MCE010/EMPTY and duplicates stay MCE011/DUPLICATE, so neither is reported twice. An unaliased column that MCE062 finds missing from its table is left to MCE062: its name is the column's, which changes once the column is fixed. Where that name is one MCE cannot create, the run fails whether the column exists or not, so MCE062's finding is an error (noteRefusedTypo, the second verification of the lint round, 2026-10-14).
+         * @description MCE015: flags a top-level output column name MCE's runQuery endpoint would refuse as a Data Extension field name - a leading underscore, characters outside [A-Za-z0-9 _.-], an all-digit name, or a name over 128 characters - mirroring validateColumns in sql-studio-backend.html exactly, plus a SELECT * / alias.* whose resolved columns include an underscore-prefixed field, and one over a table whose field list is a sample with such a field among the known ones (underscoreFieldOfOpenStar), with no fix. Empty names stay MCE010/EMPTY and duplicates stay MCE011/DUPLICATE, so neither is reported twice. An unaliased column that MCE062 finds missing from its table is left to MCE062: its name is the column's, which changes once the column is fixed. Where that name is one MCE cannot create, the run fails whether the column exists or not, so MCE062's finding is an error (noteRefusedTypo, the second verification of the lint round, 2026-10-14). Where the lint has a target Data Extension (ctx.targetKey or ctx.targetName: the opened Query Activity's, or the one a Save As or Save to DE saves into), and it is not the lint of a Run (options.writesToTemporary, which SQL Studio's Frontend sets with options.isRunTarget), the finding is a warning that says MCE leaves the column out of the target: _Status was saved with Append into an existing Data Extension, ran, and MCE left the column out, as for any column the target lacks (round 2 org test D20, 2026-10-21). SQL Studio's Run writes into a temporary Data Extension, and Save to DE into a new one creates the fields, so those stay errors. The rename then changes what is written, as the target may have a field of the new name, so its fix needs review and stays out of Fix all, and MCE062 for a typo of such a name stays a warning.
          * @param {string} sql - Full SQL source text (unused directly, kept for the shared rule signature).
          * @param {Array<Object>} tokens - Full token stream (unused directly, kept for the shared rule signature).
-         * @param {Object} ctx - Shared per-lint-call context; used for ctx.getParsed(), ctx.getExtracted() and ctx.getUnknownColumns().
+         * @param {Object} ctx - Shared per-lint-call context; used for ctx.getParsed(), ctx.getExtracted(), ctx.getUnknownColumns(), ctx.targetKey, ctx.targetName and ctx.options.writesToTemporary.
          * @returns {Array<Array>} Raw finding tuples, one per violation.
          */
         function rule015(sql, tokens, ctx) {
@@ -15031,11 +15606,34 @@ window.SQLStudioSQL = {
             /* An unaliased column that MCE062 finds missing takes its output name from a column that does not exist:
             once the column is fixed, the name changes, so an alias for it now would hide the mistake. */
             var unknownItems = ctx.getUnknownColumns().map(function (unknown) { return unknown.item; });
+            /* With a target, MCE leaves out a column the target lacks (round 2 org test D20): the finding is a warning, and MCE062's is not
+             * made an error. Run lints with options.writesToTemporary, as it writes into a temporary Data Extension that SQL Studio creates. */
+            var hasTarget = !!(ctx.targetKey || ctx.targetName) && !(ctx.options && ctx.options.writesToTemporary);
+            var targetText = ctx.targetName || ctx.targetKey;
+
+            /**
+             * @function nameFinding
+             * @description The finding for an output name MCE cannot create as a field: an error, or, with a target, a warning that says MCE
+             * leaves the column out of it, whose fixes then need review as they change what is written.
+             * @param {string} lead - What is wrong with the name.
+             * @param {Array<string>} advice - What to do, as a sentence for the error ("Rename it ...") and, for the warning, as the way to
+             * get the column into a field ("rename it ...", after "To write the column into a field, ").
+             * @param {Object} item - The select-list item.
+             * @param {?Array<Object>} fixes - The fixes, or null.
+             * @returns {Array} The raw finding tuple.
+             */
+            function nameFinding(lead, advice, item, fixes) {
+                if (!hasTarget) return ['MCE015', 'error', lead + ' ' + advice[0], DOCS.SEL, item, item, fixes || undefined];
+                return ['MCE015', 'warning', lead + ' If the target Data Extension, ' + targetText + ', has no field of that name, MCE leaves the column out of it and writes the other columns. SQL Studio\'s Run, which writes into a temporary Data Extension, still refuses it. To write the column into a field, ' + advice[1], DOCS.SEL, item, item, (fixes || []).map(function (fix) {
+                    return Object.assign({}, fix, { isSafe: false, isInFixAll: false });
+                })];
+            };
 
             parsed.selectList.items.forEach(function (item) {
                 if (item.kind === 'column' && unknownItems.indexOf(item) !== -1) {
-                    /* A name MCE cannot create fails the run even if the column exists, so MCE062's finding is an error (noteRefusedTypo). */
-                    if (item.name != null && classifyBadColumnName(String(item.name))) noteRefusedTypo(ctx, item.start, 'MCE015', 'NAME');
+                    /* A name MCE cannot create fails the run even if the column exists, so MCE062's finding is an error (noteRefusedTypo).
+                     * With a target it does not, as MCE leaves such a column out of the target. */
+                    if (!hasTarget && item.name != null && classifyBadColumnName(String(item.name))) noteRefusedTypo(ctx, item.start, 'MCE015', 'NAME');
                     return;
                 };
                 if (item.kind === 'star') {
@@ -15043,7 +15641,7 @@ window.SQLStudioSQL = {
                      * the known fields, _SubscriberID among them (the rules audit, 2026-10-14). The other columns are not known, so no fix. */
                     var openField = item._certainColumns ? null : underscoreFieldOfOpenStar(item, parsed.from, ctx.schema);
                     if (openField) {
-                        findings.push(['MCE015', 'error', 'This would output a field MCE cannot create on a Data Extension, because one of the table\'s fields, ' + openField + ', starts with an underscore. List the columns and alias that field instead.', DOCS.SEL, item, item]);
+                        findings.push(nameFinding('This would output a field MCE cannot create on a Data Extension, because one of the table\'s fields, ' + openField + ', starts with an underscore.', ['List the columns and alias that field instead.', 'list the columns and alias that field.'], item, null));
                         return;
                     };
                     if (!starHasUnderscoreField(item)) return;
@@ -15065,7 +15663,7 @@ window.SQLStudioSQL = {
                             isInFixAll: false
                         });
                     };
-                    findings.push(['MCE015', 'error', 'This would output a field MCE cannot create on a Data Extension, because one of the table\'s fields starts with an underscore. List the columns and alias that field instead.', DOCS.SEL, item, item, starFixes]);
+                    findings.push(nameFinding('This would output a field MCE cannot create on a Data Extension, because one of the table\'s fields starts with an underscore.', ['List the columns and alias that field instead.', 'list the columns and alias that field.'], item, starFixes));
                     return;
                 };
                 if (item.kind !== 'column' && item.kind !== 'alias') return;
@@ -15076,11 +15674,11 @@ window.SQLStudioSQL = {
                 if (!reason) return;
 
                 if (reason === 'toolong') {
-                    findings.push(['MCE015', 'error', 'This output column name is ' + nameStr.length + ' characters long, and MCE cannot create a Data Extension field name longer than 128 characters. Rename it to something shorter.', DOCS.SEL, item, item]);
+                    findings.push(nameFinding('This output column name is ' + nameStr.length + ' characters long, and MCE cannot create a Data Extension field name longer than 128 characters.', ['Rename it to something shorter.', 'rename it to something shorter.'], item, null));
                     return;
                 };
                 if (reason === 'digits') {
-                    findings.push(['MCE015', 'error', 'MCE cannot create a Data Extension field named ' + nameStr + ', because a field name cannot be only digits. Rename it to include at least one letter.', DOCS.SEL, item, item]);
+                    findings.push(nameFinding('MCE cannot create a Data Extension field named ' + nameStr + ', because a field name cannot be only digits.', ['Rename it to include at least one letter.', 'rename it to include at least one letter.'], item, null));
                     return;
                 };
                 if (reason === 'invalid') {
@@ -15103,25 +15701,25 @@ window.SQLStudioSQL = {
                             isInFixAll: !isLetterChanged
                         });
                     };
-                    findings.push(['MCE015', 'error', 'MCE cannot create a Data Extension field named ' + nameStr + ', because field names can only contain the letters A to Z, digits, spaces, underscores, periods and hyphens. Rename it to remove the other characters.', DOCS.SEL, item, item, invalidFixes]);
+                    findings.push(nameFinding('MCE cannot create a Data Extension field named ' + nameStr + ', because field names can only contain the letters A to Z, digits, spaces, underscores, periods and hyphens.', ['Rename it to remove the other characters.', 'rename it to remove the other characters.'], item, invalidFixes));
                     return;
                 };
                 // reason === 'underscore'
                 var newName = uniqueOutputName(nameStr.replace(/^_+/, ''), usedLower);
                 var aliasText = formatIdentifier(newName);
-                var underscoreEdits, message, fixTitle;
+                var underscoreEdits, advice, fixTitle;
                 if (item.kind === 'alias') {
                     underscoreEdits = [{ start: item.nameStart, end: item.nameEnd, text: aliasText }].concat(orderByAliasEdits(ctx.getCoreTokens(), nameStr, newName));
                     fixTitle = 'Rename to ' + newName;
-                    message = 'MCE cannot create a Data Extension field named ' + nameStr + ', because field names cannot start with an underscore. Rename the alias to ' + newName + '.';
+                    advice = ['Rename the alias to ' + newName + '.', 'rename the alias to ' + newName + '.'];
                 } else {
                     underscoreEdits = [{ start: item.end, end: item.end, text: ' AS ' + aliasText }];
                     fixTitle = 'Add alias ' + newName;
-                    message = 'MCE cannot create a Data Extension field named ' + nameStr + ', because field names cannot start with an underscore. Add an alias such as AS ' + newName + '.';
+                    advice = ['Add an alias such as AS ' + newName + '.', 'add an alias such as AS ' + newName + '.'];
                 };
-                findings.push(['MCE015', 'error', message, DOCS.SEL, item, item, [
+                findings.push(nameFinding('MCE cannot create a Data Extension field named ' + nameStr + ', because field names cannot start with an underscore.', advice, item, [
                     { title: fixTitle, edits: underscoreEdits, isSafe: true, isInFixAll: true }
-                ]]);
+                ]));
             });
             return findings;
         },
@@ -15398,8 +15996,8 @@ window.SQLStudioSQL = {
                         if (!leftField || !rightField) return;
                         /* Email, EmailAddress and Phone are text in the database, as MCE087 reads them (the verification of the lint round,
                         2026-10-14): WHERE EmailAddress = BounceCount converts every email address to a number. */
-                        var isLeftText = addedFieldKind(leftField) === 'text';
-                        var isRightText = addedFieldKind(rightField) === 'text';
+                        var isLeftText = addedFieldKind(leftField, tableOf(cmp.left)) === 'text';
+                        var isRightText = addedFieldKind(rightField, tableOf(cmp.right)) === 'text';
                         var isLeftNumeric = leftField.type === 'Number' || leftField.type === 'Decimal';
                         var isRightNumeric = rightField.type === 'Number' || rightField.type === 'Decimal';
                         if (!((isLeftText && isRightNumeric) || (isRightText && isLeftNumeric))) return;
@@ -15436,7 +16034,7 @@ window.SQLStudioSQL = {
                             var numberTwin = fieldIn(textTable, otherSide.column);
                             var textTwin = fieldIn(otherTable, textSide.column);
                             /* The side that changes, and the field it becomes. */
-                            var swapped = numberTwin && numberTwin.type === otherField.type ? textSide : (textTwin && addedFieldKind(textTwin) === 'text' ? otherSide : null);
+                            var swapped = numberTwin && numberTwin.type === otherField.type ? textSide : (textTwin && addedFieldKind(textTwin, otherTable) === 'text' ? otherSide : null);
                             var twin = swapped === textSide ? numberTwin : textTwin;
                             if (swapped) {
                                 pair = {
@@ -15681,8 +16279,19 @@ window.SQLStudioSQL = {
          * @function rule020
          * @description MCE020: flags a reserved word used as an alias after AS without brackets, as an error: SQL Server takes one of
          * Microsoft's reserved keywords (RESERVED_WORDS) as a name only in brackets or double quotes, so SELECT SubscriberKey AS Key and FROM
-         * Orders AS order are syntax errors, "Incorrect syntax near the keyword" (error 156). It was a warning that called the problem silent
-         * (the rules audit, 2026-10-14). The word counts after AS when the alias ends there: a comma, a ;, a ), the end, or the clause, join or
+         * Orders AS order are syntax errors, "Incorrect syntax near the keyword" (error 156). AS Precision and AS Disk passed the query
+         * check (round 2 org test B21 and round 5 org test B03, 2026-10-21), and rounds 7 and 8 showed both to be no keyword at all, so
+         * neither is in RESERVED_WORDS, and RESERVED_ALIAS_ACCEPTED, the words this rule would leave alone as an alias, is empty. AS Index
+         * got a text of its own, which the message quotes (RESERVED_ALIAS_OWN_TEXT). It was a warning that called the problem silent
+         * (the rules audit, 2026-10-14). A reserved word written as a table name right after FROM, JOIN, APPLY or a comma of a table list,
+         * FROM Order, or after Ent., FROM Ent.Order, is MCE020's too (reservedTableLead): the strict parser's MCE000 read it as "FROM needs
+         * a table name after it", and the query check answered "Order is not a known data extension or system data view." (round 2 org test
+         * A42, 2026-10-21, where no Data Extension of that name existed, so whether the check takes an existing one's name with no brackets
+         * was not tried). Its message quotes no text of SQL Server's, which A42 did not show, and asks for brackets if a Data Extension has
+         * the name, else for the spelling. One finding, with the same fix: MCE000 gives way to it (STRICT_ERROR_OWNERS), the o of FROM
+         * Order o is no unknown table (MCE061, reservedTableSpans), EXEC is no procedure call (MCE005) and SYSTEM_USER no MCE063, and a
+         * name of several words that the schema knows, as Order Items, stays MCE019's. The fix needs review where a word follows that could
+         * continue the name, FROM Order Items with no such table known. The word counts after AS when the alias ends there: a comma, a ;, a ), the end, or the clause, join or
          * set operator that comes next. A type after the AS of CAST, as DOUBLE PRECISION, is followed by more of the type and is not read.
          * The fix brackets the word, and every use of it as a qualifier in the statement, order.Total, which is never valid without them, so a
          * reserved table alias is bracketed wherever it is used: safe and in Fix all. It brackets the same word after a dot too, x.Key for a
@@ -15700,38 +16309,50 @@ window.SQLStudioSQL = {
         function rule020(sql, tokens, ctx) {
             var findings = [];
             var core = ctx.getCoreTokens();
+            /* A name of several words that starts with a reserved word and that the schema knows is MCE019's. */
+            var knownNames = ctx.schema && ctx.schema.byName ? reservedWordNames(sql, core, ctx.schema.byName) : [];
             for (var i = 0; i < core.length; i++) {
                 if (isKw(core[i], 'AS') && core[i + 1] && core[i + 1].type === 'keyword') {
                     var word = core[i + 1];
                     if (isReservedAliasAt(core, i + 1)) {
-                        var edits = [];
-                        core.forEach(function (t, k) {
-                            /* The alias itself, each use as a qualifier (the same word right before a dot, which no dot comes before), the
-                             * same word after a dot, and a whole item of an ORDER BY. */
-                            var isSameWord = t.type === 'keyword' && t.upper === word.upper;
-                            var isUse = t === word || (isSameWord && (isPunctToken(core[k + 1], '.') !== isPunctToken(core[k - 1], '.') || isOrderByItemWord(core, k)));
-                            if (!isUse) return;
-                            edits.push({
-                                start: t.start,
-                                end: t.start,
-                                text: '['
-                            });
-                            edits.push({
-                                start: t.end,
-                                end: t.end,
-                                text: ']'
-                            });
-                        });
+                        var edits = bracketReservedEdits(core, word);
                         /* EXEC, SYSTEM_USER and CURRENT_USER in brackets are MCE063's: the query check refuses them there too (the
                          * author's org, items 50 and 57), so brackets fix nothing, and the message asks for another name. */
                         if (RESERVED_IN_BRACKETS.indexOf(word.upper) !== -1) {
-                            findings.push(['MCE020', 'error', '"' + word.value + '" is a reserved word, and SQL Server refuses it as a name without brackets: Incorrect syntax near the keyword \'' + word.value + '\'. Pick another name, as the query check refuses it in brackets too.', DOCS.SEL, word, word]);
+                            findings.push(['MCE020', 'error', '"' + word.value + '" is a reserved word, and SQL Server refuses it as a name without brackets: Incorrect syntax near the keyword \'' + word.value + '\'. Pick another name, as the query check refuses it in brackets too.', DOCS.ERR_SYNTAX, word, word]);
                             continue;
                         };
-                        findings.push(['MCE020', 'error', '"' + word.value + '" is a reserved word, and SQL Server refuses it as a name without brackets: Incorrect syntax near the keyword \'' + word.value + '\'. Wrap it in brackets, or pick another name.', DOCS.SEL, word, word, [
+                        /* Index: MCE's own text, which the generic one does not hold (round 5 org test B03). */
+                        if (RESERVED_ALIAS_OWN_TEXT[word.upper]) {
+                            findings.push(['MCE020', 'error', 'MCE refuses ' + word.value + ' as a name without brackets: "' + RESERVED_ALIAS_OWN_TEXT[word.upper].replace('{word}', word.value) + '" Wrap it in brackets, or pick another name.', DOCS.ERR_SYNTAX, word, word, [
+                                { title: 'Wrap in brackets', edits: edits, isSafe: true, isInFixAll: true }
+                            ]]);
+                            continue;
+                        };
+                        findings.push(['MCE020', 'error', '"' + word.value + '" is a reserved word, and SQL Server refuses it as a name without brackets: Incorrect syntax near the keyword \'' + word.value + '\'. Wrap it in brackets, or pick another name.', DOCS.ERR_SYNTAX, word, word, [
                             { title: 'Wrap in brackets', edits: edits, isSafe: true, isInFixAll: true }
                         ]]);
                     };
+                };
+                /* A reserved word as a table name, FROM Order: the strict parser's MCE000 read it as "FROM needs a table name after it",
+                 * where it is the name (round 2 org test A42). The fix is safe where nothing can continue the name, or the schema has the
+                 * table: FROM Order Items with no such table known could be the table Order with the alias Items or the name Order Items.
+                 * The message quotes no text of SQL Server's: the query check answered A42 with its own "is not a known data extension",
+                 * as no Data Extension had the name, so SQL Server's answer to a name that exists was not seen. */
+                var lead = reservedTableLead(core, i);
+                if (lead !== -1 && !knownNames.some(function (run) { return run.first === i; })) {
+                    var table = core[i];
+                    var prefix = lead === i ? '' : sql.slice(core[lead].start, table.start);
+                    var tableMessage = '"' + table.value + '" is a reserved word, and SQL Server refuses it as a table name without brackets. ';
+                    if (RESERVED_IN_BRACKETS.indexOf(table.upper) !== -1) {
+                        findings.push(['MCE020', 'error', tableMessage + 'Pick another name, as the query check refuses it in brackets too.', DOCS.FROM, table, table]);
+                        continue;
+                    };
+                    var isKnown = !!(ctx.schema && ctx.schema.byName && lookupTable(ctx.schema.byName, prefix + table.value));
+                    var isContinued = isBareName(core[i + 1]) && !isKnown;
+                    findings.push(['MCE020', 'error', tableMessage + 'If a Data Extension has this name, wrap it in brackets, as ' + prefix + '[' + table.value + ']. If no Data Extension has it, check the spelling.', DOCS.FROM, table, table, [
+                        { title: 'Wrap in brackets', edits: bracketReservedEdits(core, table), isSafe: !isContinued, isInFixAll: !isContinued }
+                    ]]);
                 };
             };
             return findings;
@@ -16309,7 +16930,7 @@ window.SQLStudioSQL = {
                             'SQL Server refuses this column: ' + quote + ' Add it to GROUP BY, or wrap it in MAX().' :
                             'With no GROUP BY, ' + maker + ' makes one group: ' + quote + ' Add GROUP BY ' + text + ', or wrap it in MAX().';
                     };
-                    findings.push(['MCE043', severity, message, DOCS.AGG, span, span, groupByFixes(sql, core, reading, text)]);
+                    findings.push(['MCE043', severity, message, DOCS.ERR_NOT_GROUPED, span, span, groupByFixes(sql, core, reading, text)]);
                 });
             });
             return findings;
@@ -16423,16 +17044,9 @@ window.SQLStudioSQL = {
             var parsed = ctx.getParsed();
             if (!parsed) return findings;
             var byName = ensureIndex(ctx.schema);
-            var tables = ctx.schema && Array.isArray(ctx.schema.tables) ? ctx.schema.tables : [];
             var lower = function (text) { return String(text).toLowerCase(); };
-            /* A key names one Data Extension of a Business Unit. One of its own comes before a parent's of the same key. */
-            var byKey = ctx.targetKey ? tables.filter(function (t) { return !!t && t.kind !== 'dataview' && !!t.key && lower(t.key) === lower(ctx.targetKey); }) : [];
-            byKey.sort(function (a, b) { return (a.isShared ? 1 : 0) - (b.isShared ? 1 : 0); });
-            var target = byKey[0] || null;
-            if (!target) {
-                var named = byName[lower(ctx.targetName || ctx.targetKey)];
-                target = named && named.kind !== 'dataview' ? named : null;
-            };
+            /* A key names one Data Extension of a Business Unit. One of its own comes before a parent's of the same key (resolveTargetTable). */
+            var target = resolveTargetTable(ctx);
             var cteNames = {};
             (parsed.ctes || []).forEach(function (c) { if (c && c.name) cteNames[String(c.name).replace(/^\[|\]$/g, '').toUpperCase()] = true; });
             var isTargetEntry = function (f) {
@@ -16449,13 +17063,13 @@ window.SQLStudioSQL = {
             var seen = {};
             parsed.from.forEach(function (f) {
                 seen[f.start] = true;
-                if (isTargetEntry(f)) findings.push(['MCE050', isRefused ? 'error' : 'warning', topMessage, DOCS.SFBUILD, f, f]);
+                if (isTargetEntry(f)) findings.push(['MCE050', isRefused ? 'error' : 'warning', topMessage, DOCS.ERR_UPDATE_TYPE, f, f]);
             });
             ctx.getSelectScopes().forEach(function (scope) {
                 scope.from.forEach(function (f) {
                     if (seen[f.start]) return;
                     seen[f.start] = true;
-                    if (isTargetEntry(f)) findings.push(['MCE050', isRefused ? 'error' : 'warning', topMessage, DOCS.SFBUILD, f, f]);
+                    if (isTargetEntry(f)) findings.push(['MCE050', isRefused ? 'error' : 'warning', topMessage, DOCS.ERR_UPDATE_TYPE, f, f]);
                 });
             });
             return findings;
@@ -16485,7 +17099,7 @@ window.SQLStudioSQL = {
             var core = ctx.getCoreTokens();
             var readings = ctx.getScopeReadings();
             var push = function (span, count, firstCount) {
-                findings.push(['MCE053', 'error', 'This branch has ' + count + (count === 1 ? ' column' : ' columns') + ' and the first has ' + firstCount + ': All queries combined using a UNION, INTERSECT or EXCEPT operator must have an equal number of expressions in their target lists. Match the columns on every branch.', DOCS.JOIN, span, span]);
+                findings.push(['MCE053', 'error', 'This branch has ' + count + (count === 1 ? ' column' : ' columns') + ' and the first has ' + firstCount + ': All queries combined using a UNION, INTERSECT or EXCEPT operator must have an equal number of expressions in their target lists. Match the columns on every branch.', DOCS.ERR_AGGREGATE, span, span]);
             };
             /* A branch being typed, with no column yet or a syntax error in it, is MCE000's: SELECT 1 AS a UNION SELECT said "This branch
              * has 0 columns", and UNION ALL SELECT SubscriberKey, counted one (the interactions audit, 2026-10-14: 1,624 typing prefixes). */
@@ -16577,10 +17191,10 @@ window.SQLStudioSQL = {
         // MCE061 - table/view name not found in the loaded schema.
         /**
          * @function rule061
-         * @description MCE061: flags a FROM table or view name that isn't a CTE, doesn't start with an underscore (a system Data View), isn't Ent.-prefixed, and can't be found in the loaded schema index.
+         * @description MCE061: flags a FROM table or view name that isn't a CTE, doesn't start with an underscore (a system Data View), isn't Ent.-prefixed, and can't be found in the loaded schema index. An entry inside the table source of a reserved word written as a table name (reservedTableSpans) is left out: the parse skips that word and reads the rest of the name or the alias as a table, as the o of FROM Order o, and MCE020 reports the word (round 2 org test A42, 2026-10-21). A table of another join of the same FROM is still read: until the review of round 2 (2026-10-21) every entry after the word was left out, so a misspelt table joined after FROM Order went unreported.
          * @param {string} sql - Full SQL source text (unused directly, kept for the shared rule signature).
          * @param {Array<Object>} tokens - Full token stream.
-         * @param {Object} ctx - Shared per-lint-call context; used for ctx.schema and ctx.getParsed().
+         * @param {Object} ctx - Shared per-lint-call context; used for ctx.schema, ctx.getParsed() and ctx.getCoreTokens().
          * @returns {Array<Array>} Raw finding tuples, one per violation.
          */
         function rule061(sql, tokens, ctx) {
@@ -16588,8 +17202,11 @@ window.SQLStudioSQL = {
             if (!ctx.schema || !ctx.schema.byName) return findings;
             var parsed = ctx.getParsed();
             if (!parsed) return findings;
+            var reservedSpans = reservedTableSpans(ctx.getCoreTokens());
             parsed.from.forEach(function (f) {
                 if (f.kind !== 'table' || !f.name || f.isFunction) return; // STRING_SPLIT(...), OPENJSON(...): built-in functions, not tables
+                /* The parse skipped a reserved word written as a table name and read what follows it as a table: MCE020's. */
+                if (reservedSpans.some(function (span) { return f.start >= span.start && f.start < span.end; })) return;
                 if (/^ENT\./i.test(f.name)) return;
                 var clean = f.name.replace(/^\[|\]$/g, '');
                 // System data views start with an underscore and Data Extension names cannot, so they are never "unknown".
@@ -16598,7 +17215,7 @@ window.SQLStudioSQL = {
                 var cteNames = (parsed.ctes || []).map(function (c) { return c.name.toUpperCase(); });
                 if (cteNames.indexOf(clean.toUpperCase()) !== -1) return;
                 if (!lookupTable(ctx.schema.byName, clean)) {
-                    findings.push(['MCE061', 'error', 'Data Extension or Data View "' + clean + '" was not found in this Business Unit. Check the spelling, or add the Ent. prefix for a shared object.', DOCS.FROM, f, f]);
+                    findings.push(['MCE061', 'error', 'Data Extension or Data View "' + clean + '" was not found in this Business Unit. Check the spelling, or add the Ent. prefix for a shared object.', DOCS.ERR_UNKNOWN_TABLE, f, f]);
                 };
             });
             return findings;
@@ -16615,7 +17232,7 @@ window.SQLStudioSQL = {
         function rule062(sql, tokens, ctx) {
             return ctx.getUnknownColumns().map(function (unknown) {
                 var item = unknown.item;
-                return ['MCE062', 'warning', 'Column "' + unknown.column + '" does not exist on "' + unknown.table.name + '". Check the spelling or remove the column.', DOCS.DV, item, item, unknown.fixes];
+                return ['MCE062', 'warning', 'Column "' + unknown.column + '" does not exist on "' + unknown.table.name + '". Check the spelling or remove the column.', DOCS.ERR_COLUMN, item, item, unknown.fixes];
             });
         },
         // MCE063 - a SQL Server function Marketing Cloud Engagement's query check refuses.
@@ -16632,7 +17249,8 @@ window.SQLStudioSQL = {
          * Test 31), while sp_key, xp_mail, Executive, sysdate, SystemUserCount, CurrentUserName and [sys] passed. It reads OPENJSON (2026-09-28) and VALUES ("VALUES is not a known data extension or system data view.", the
          * author's org, 2026-10-11) as Data Extension names, and refuses a system view, sys.name or INFORMATION_SCHEMA.name
          * (systemViewFindings, item 50). A VALUES constructor gets a fix (valuesConstructorFindings). SYSTEM_USER or CURRENT_USER
-         * written as an alias after AS is MCE020's alone (isReservedAliasAt), whose message asks for another name.
+         * written as an alias after AS, or as a table name after FROM, is MCE020's alone (isReservedAliasAt, isReservedTableNameAt), whose
+         * message asks for another name.
          * @param {string} sql - Full SQL source text (unused directly, kept for the shared rule signature).
          * @param {Array<Object>} tokens - Full token stream.
          * @param {Object} ctx - Shared per-lint-call context; used for ctx.getCoreTokens().
@@ -16651,12 +17269,13 @@ window.SQLStudioSQL = {
              * @returns {Array} The finding tuple.
              */
             var reservedWord = function (t, written, word, advice) {
-                return ['MCE063', 'error', 'Marketing Cloud Engagement\'s query check refuses ' + written + ': \'' + word + '\' is a reserved word and may not appear in your query. ' + advice, DOCS.SFREF, t, t];
+                return ['MCE063', 'error', 'Marketing Cloud Engagement\'s query check refuses ' + written + ': \'' + word + '\' is a reserved word and may not appear in your query. ' + advice, DOCS.ERR_RESERVED, t, t];
             };
-            /* AS System_User and AS Current_User are MCE020's, whose message asks for another name: one finding for one mistake. */
+            /* AS System_User and AS Current_User, and FROM System_User, are MCE020's, whose message asks for another name: one finding for
+             * one mistake. */
             var aliasStarts = {};
             core.forEach(function (t, k) {
-                if (isReservedAliasAt(core, k)) aliasStarts[t.start] = true;
+                if (isReservedAliasAt(core, k) || isReservedTableNameAt(core, k)) aliasStarts[t.start] = true;
             });
             tokens.forEach(function (t, i) {
                 /* A name that starts with fn_, after a dot too, as the fn_ of sys.fn_helpcollations was named (item 50 and item 53, org
@@ -16679,7 +17298,7 @@ window.SQLStudioSQL = {
                 } else if (t.type === 'identifier' && isCall && RESERVED_CALLS.indexOf(t.upper) !== -1) {
                     findings.push(reservedWord(t, t.upper + '()', t.upper, 'Remove it.'));
                 } else if (t.type === 'identifier' && isCall && t.upper === 'OPENJSON') {
-                    findings.push(['MCE063', 'error', 'Marketing Cloud Engagement does not allow OPENJSON in a query. Its query check reads it as a Data Extension name. Remove it.', DOCS.JSON, t, t]);
+                    findings.push(['MCE063', 'error', 'Marketing Cloud Engagement does not allow OPENJSON in a query. Its query check reads it as a Data Extension name. Remove it.', DOCS.OPENJSON, t, t]);
                 };
             });
             return findings;
@@ -16707,7 +17326,7 @@ window.SQLStudioSQL = {
                 if (!dot || dot.value !== '.' || !name || !isName(name)) return;
                 /* Only in a table position, so an alias named Ent (Ent.Column) is left alone. */
                 if (!previous || !(isKw(previous, 'FROM') || isKw(previous, 'JOIN') || isKw(previous, 'APPLY'))) return;
-                findings.push(['MCE064', 'error', 'The parent Business Unit refuses the Ent. prefix, which works only from a child Business Unit. Remove it. The parent reads its shared Data Extensions and _EnterpriseAttribute without it.', DOCS.FROM, t, name, [
+                findings.push(['MCE064', 'error', 'The parent Business Unit refuses the Ent. prefix, which works only from a child Business Unit. Remove it. The parent reads its shared Data Extensions and _EnterpriseAttribute without it.', DOCS.ERR_ENT, t, name, [
                     { title: 'Remove Ent.', edits: [{ start: t.start, end: dot.end, text: '' }], isSafe: true, isInFixAll: true }
                 ]]);
             });
@@ -16737,7 +17356,7 @@ window.SQLStudioSQL = {
             var significant = tokens.filter(function (t) { return t.type !== 'comment'; });
             significant.forEach(function (t, i) {
                 if (t.type === 'keyword' && t.upper === 'FROM' && t.isDistinctFrom) {
-                    findings.push(['MCE066', 'error', 'The query check reads the FROM in IS DISTINCT FROM as a table and refuses the query. Compare with = or !=, and test NULL with IS NULL.', DOCS.WHERE, t, t]);
+                    findings.push(['MCE066', 'error', 'The query check reads the FROM in IS DISTINCT FROM as a table and refuses the query. Compare with = or !=, and test NULL with IS NULL.', DOCS.ERR_UNKNOWN_TABLE, t, t]);
                     return;
                 };
                 if (t.upper !== 'TRIM' || t.quote || !significant[i + 1] || significant[i + 1].value !== '(') return;
@@ -16778,7 +17397,7 @@ window.SQLStudioSQL = {
                                 isInFixAll: !isChangingTwice
                             }];
                         };
-                        findings.push(['MCE066', 'error', 'The query check reads the FROM inside TRIM as a table and refuses the query. Use ' + (side === 'LEADING' ? 'LTRIM(y, c)' : (side === 'TRAILING' ? 'RTRIM(y, c)' : 'LTRIM(RTRIM(y, c), c)')) + ' instead, which cuts the characters c from y, or spaces where there is no c.', DOCS.STR, inner, inner, fixes]);
+                        findings.push(['MCE066', 'error', 'The query check reads the FROM inside TRIM as a table and refuses the query. Use ' + (side === 'LEADING' ? 'LTRIM(y, c)' : (side === 'TRAILING' ? 'RTRIM(y, c)' : 'LTRIM(RTRIM(y, c), c)')) + ' instead, which cuts the characters c from y, or spaces where there is no c.', DOCS.ERR_UNKNOWN_TABLE, inner, inner, fixes]);
                     };
                 };
             });
@@ -16832,7 +17451,7 @@ window.SQLStudioSQL = {
                     'Use a subquery: SELECT TOP 10 ROW_NUMBER() OVER (ORDER BY SubscriberID) AS n FROM _Subscribers ORDER BY n.' :
                     'Use a subquery, or split text with CHARINDEX and SUBSTRING.';
                 var subject = isSeries ? name.value + ' with more than one argument' : 'a table function with more than one argument, such as ' + name.value + ',';
-                findings.push(['MCE067', 'error', 'The query check reads ' + subject + ' as a table name and refuses the query. ' + advice, DOCS.FROM, name, name]);
+                findings.push(['MCE067', 'error', 'The query check reads ' + subject + ' as a table name and refuses the query. ' + advice, name.upper === 'STRING_SPLIT' ? DOCS.STRING_SPLIT : DOCS.ERR_UNKNOWN_TABLE, name, name]);
             });
             return findings;
         },
@@ -16853,7 +17472,7 @@ window.SQLStudioSQL = {
                 if (t.type !== 'string') return;
                 var first = t.value.charAt(0);
                 if (first !== 'N' && first !== 'n') return;
-                findings.push(['MCE068', 'error', 'The query check adds N to every text value itself, so an N before the quote fails with Incorrect syntax. Remove the N. Plain quotes keep Polish and other letters.', DOCS.STR, t, t, [
+                findings.push(['MCE068', 'error', 'The query check adds N to every text value itself, so an N before the quote fails with Incorrect syntax. Remove the N. Plain quotes keep Polish and other letters.', DOCS.ERR_SYNTAX, t, t, [
                     { title: 'Remove the N', edits: [{ start: t.start, end: t.start + 1, text: '' }], isSafe: true, isInFixAll: true }
                 ]]);
             });
@@ -16886,7 +17505,7 @@ window.SQLStudioSQL = {
                         text: ''
                     });
                 };
-                findings.push(['MCE069', 'error', 'Marketing Cloud Engagement reads an unpaired apostrophe in a comment as the start of a text value, after Validate passed it. Alone, it fails the run with Error while processing square brackets. With one in another comment, it changes the query: \'a\' came back as aN. Remove the apostrophe, or pair it with another in the same comment.', DOCS.BASICS, t, t, [
+                findings.push(['MCE069', 'error', 'Marketing Cloud Engagement reads an unpaired apostrophe in a comment as the start of a text value, after Validate passed it. Alone, it fails the run with Error while processing square brackets. With one in another comment, it changes the query: \'a\' came back as aN. Remove the apostrophe, or pair it with another in the same comment.', DOCS.ERR_BRACKETS, t, t, [
                     { title: 'Remove the apostrophes', edits: edits, isSafe: true, isInFixAll: true }
                 ]]);
             });
@@ -17112,17 +17731,17 @@ window.SQLStudioSQL = {
                     if (isEntPrefixed) {
                         /* In the parent MCE064 refuses Ent.; a child's session is judged only with the parent's list. The child's own table of that name does not count: Ent.X is the parent's X. */
                         if (!hasParentList || schema.byName['ent.' + lower]) return;
-                        findings.push(['MCE073', 'warning', 'ENT.' + bare + ' is not in the parent Business Unit\'s list of shared and synchronized Data Extensions' + loaded + '. Check the spelling, or reload the list if it was shared since.', DOCS.FROM, parts[0], nameTok, null, reloadListAction()]);
+                        findings.push(['MCE073', 'warning', 'ENT.' + bare + ' is not in the parent Business Unit\'s list of shared and synchronized Data Extensions' + loaded + '. Check the spelling, or reload the list if it was shared since.', DOCS.ERR_UNKNOWN_TABLE, parts[0], nameTok, null, reloadListAction()]);
                         return;
                     };
                     if (defined[bare.toUpperCase()] || schema.byName[lower] || SQLSTUDIO_TEMP_NAME.test(bare) || isUnbracketedWordName(sql, core, first, schema)) return;
                     if (hasParentList && schema.byName['ent.' + lower]) {
-                        findings.push(['MCE073', 'warning', bare + ' is a Data Extension of the parent Business Unit. A child Business Unit reads a shared Data Extension only as ENT.' + formatIdentifier(bare) + '.', DOCS.FROM, nameTok, nameTok, [
+                        findings.push(['MCE073', 'warning', bare + ' is a Data Extension of the parent Business Unit. A child Business Unit reads a shared Data Extension only as ENT.' + formatIdentifier(bare) + '.', DOCS.ERR_UNKNOWN_TABLE, nameTok, nameTok, [
                             { title: 'Add ENT.', edits: [{ start: nameTok.start, end: nameTok.start, text: 'ENT.' }], isSafe: true, isInFixAll: false }
                         ]]);
                         return;
                     };
-                    findings.push(['MCE073', 'warning', bare + ' is not in this Business Unit\'s Data Extension list' + loaded + '. Check the spelling, or reload the list if you created it since.', DOCS.FROM, nameTok, nameTok, null, reloadListAction()]);
+                    findings.push(['MCE073', 'warning', bare + ' is not in this Business Unit\'s Data Extension list' + loaded + '. Check the spelling, or reload the list if you created it since.', DOCS.ERR_UNKNOWN_TABLE, nameTok, nameTok, null, reloadListAction()]);
                 });
             });
             return findings;
@@ -17574,14 +18193,14 @@ window.SQLStudioSQL = {
                     if (!WINDOW_ONLY.hasOwnProperty(name)) continue;
                     findings.push(['MCE076', 'error', WINDOW_ONLY[name]
                         ? name + ' needs OVER (ORDER BY ...) after it: The function \'' + name + '\' must have an OVER clause. Add OVER (ORDER BY ...) with the columns that set the order, and PARTITION BY to start again in each group.'
-                        : name + ' needs OVER after its WITHIN GROUP ( ... ): The function \'' + name + '\' must have an OVER clause. Write OVER () for one value over all rows, or OVER (PARTITION BY ...) for one in each group, and SELECT DISTINCT to keep one row of each.', DOCS.WINDOW, core[i], core[i]]);
+                        : name + ' needs OVER after its WITHIN GROUP ( ... ): The function \'' + name + '\' must have an OVER clause. Write OVER () for one value over all rows, or OVER (PARTITION BY ...) for one in each group, and SELECT DISTINCT to keep one row of each.', DOCS.ERR_WINDOW, core[i], core[i]]);
                     continue;
                 };
                 var window = overBody(over);
                 var isNamedWindow = !!window && window.body.length > 0 && isName(core[window.body[0]]);
                 var hasOrder = !!window && window.body.some(function (k) { return isKw(core[k], 'ORDER') && isKw(core[k + 1], 'BY'); });
                 if (WINDOW_ONLY[name] && window && !isNamedWindow && !hasOrder) {
-                    findings.push(['MCE076', 'error', name + ' needs ORDER BY in its OVER ( ... ): The function \'' + name + '\' must have an OVER clause with ORDER BY. Add ORDER BY with the columns that set the order.', DOCS.WINDOW, core[i], core[over]]);
+                    findings.push(['MCE076', 'error', name + ' needs ORDER BY in its OVER ( ... ): The function \'' + name + '\' must have an OVER clause with ORDER BY. Add ORDER BY with the columns that set the order.', DOCS.ERR_WINDOW, core[i], core[over]]);
                 };
                 /* The frame and the ORDER BY each function takes (the syntax audit, 2026-10-14). A frame is ROWS or RANGE before BETWEEN,
                  * UNBOUNDED, CURRENT or a number: a column named Range or Rows, PARTITION BY Range or o.Rows, is none, and Remove the frame
@@ -17600,7 +18219,7 @@ window.SQLStudioSQL = {
                     if (FRAMELESS_WINDOW_FUNCTIONS[name]) {
                         var frameFrom = window.body.indexOf(frame) > 0 ? core[window.body[window.body.indexOf(frame) - 1]].end : core[over + 1].end;
                         /* In Format's layout an OVER left with one clause goes back on one line (formatLaidOutEdits). */
-                        findings.push(['MCE076', 'error', name + ' takes no ROWS or RANGE in its OVER ( ... ): The function \'' + name + '\' may not have a window frame. Remove the frame, and keep PARTITION BY and ORDER BY.', DOCS.WINDOW, core[frame], core[frameLast], isClosed ? [{
+                        findings.push(['MCE076', 'error', name + ' takes no ROWS or RANGE in its OVER ( ... ): The function \'' + name + '\' may not have a window frame. Remove the frame, and keep PARTITION BY and ORDER BY.', DOCS.ERR_WINDOW, core[frame], core[frameLast], isClosed ? [{
                             title: 'Remove the frame',
                             edits: formatLaidOutEdits(sql, [{
                                 start: frameFrom,
@@ -17611,25 +18230,25 @@ window.SQLStudioSQL = {
                             isInFixAll: true
                         }] : []]);
                     } else if (!hasOrder && !WINDOW_ONLY.hasOwnProperty(name)) {
-                        findings.push(['MCE076', 'error', name + ' has ROWS or RANGE but no ORDER BY in its OVER ( ... ): Window frame with ROWS or RANGE must have an ORDER BY clause. Add ORDER BY before the frame, or remove the frame.', DOCS.WINDOW, core[frame], core[frame]]);
+                        findings.push(['MCE076', 'error', name + ' has ROWS or RANGE but no ORDER BY in its OVER ( ... ): Window frame with ROWS or RANGE must have an ORDER BY clause. Add ORDER BY before the frame, or remove the frame.', DOCS.ERR_WINDOW, core[frame], core[frame]]);
                     };
                     var isRangeOffset = isKw(core[frame], 'RANGE') && window.body.some(function (k) {
                         return (isKw(core[k], 'PRECEDING') || isKw(core[k], 'FOLLOWING')) && k > frame && !isKw(core[k - 1], 'UNBOUNDED');
                     });
-                    if (isRangeOffset) findings.push(['MCE076', 'error', 'RANGE takes no number of rows: RANGE is only supported with UNBOUNDED and CURRENT ROW window frame delimiters. Write ROWS for a number of rows, as ROWS BETWEEN 1 PRECEDING AND CURRENT ROW.', DOCS.WINDOW, core[frame], core[frame]]);
+                    if (isRangeOffset) findings.push(['MCE076', 'error', 'RANGE takes no number of rows: RANGE is only supported with UNBOUNDED and CURRENT ROW window frame delimiters. Write ROWS for a number of rows, as ROWS BETWEEN 1 PRECEDING AND CURRENT ROW.', DOCS.ERR_WINDOW, core[frame], core[frame]]);
                 };
                 if (window && !isNamedWindow && hasOrder && (name === 'PERCENTILE_CONT' || name === 'PERCENTILE_DISC')) {
-                    findings.push(['MCE076', 'error', name + ' takes PARTITION BY alone in its OVER ( ... ): The function \'' + name + '\' may not have ORDER BY in OVER clause. Its WITHIN GROUP ( ORDER BY ... ) sets the order: remove ORDER BY from OVER.', DOCS.WINDOW, core[i], core[over]]);
+                    findings.push(['MCE076', 'error', name + ' takes PARTITION BY alone in its OVER ( ... ): The function \'' + name + '\' may not have ORDER BY in OVER clause. Its WITHIN GROUP ( ORDER BY ... ) sets the order: remove ORDER BY from OVER.', DOCS.ERR_WINDOW, core[i], core[over]]);
                 };
                 if (name === 'STRING_AGG') {
-                    findings.push(['MCE076', 'error', 'STRING_AGG takes no OVER: The function \'STRING_AGG\' is not a valid windowing function, and cannot be used with the OVER clause. Join the texts with GROUP BY in a subquery, then join it back.', DOCS.WINDOW, core[i], core[over]]);
+                    findings.push(['MCE076', 'error', 'STRING_AGG takes no OVER: The function \'STRING_AGG\' is not a valid windowing function, and cannot be used with the OVER clause. Join the texts with GROUP BY in a subquery, then join it back.', DOCS.ERR_WINDOW, core[i], core[over]]);
                 };
                 if (isKw(core[i + 2], 'DISTINCT')) {
-                    findings.push(['MCE076', 'error', 'DISTINCT cannot sit in ' + name + ' with OVER: Use of DISTINCT is not allowed with the OVER clause. Work out ' + name + '(DISTINCT ...) in a subquery with GROUP BY, then join it back.', DOCS.WINDOW, core[i + 2], core[i + 2], distinctCountFix(i, close, over)]);
+                    findings.push(['MCE076', 'error', 'DISTINCT cannot sit in ' + name + ' with OVER: Use of DISTINCT is not allowed with the OVER clause. Work out ' + name + '(DISTINCT ...) in a subquery with GROUP BY, then join it back.', DOCS.ERR_WINDOW, core[i + 2], core[i + 2], distinctCountFix(i, close, over)]);
                 };
                 var owner = enclosingCall(i);
                 if (owner) {
-                    findings.push(['MCE076', 'error', 'A window function cannot sit inside ' + owner + ' ( ... ): Windowed functions cannot be used in the context of another windowed function or aggregate. Work it out in a subquery\'s SELECT, then use that column in ' + owner + ' outside it.', DOCS.WINDOW, core[i], core[over]]);
+                    findings.push(['MCE076', 'error', 'A window function cannot sit inside ' + owner + ' ( ... ): Windowed functions cannot be used in the context of another windowed function or aggregate. Work it out in a subquery\'s SELECT, then use that column in ' + owner + ' outside it.', DOCS.ERR_WINDOW, core[i], core[over]]);
                     continue;
                 };
                 /* The clause the call sits in at its own depth, outward through an expression's ( up to a subquery's (. */
@@ -17646,7 +18265,7 @@ window.SQLStudioSQL = {
                     if (t.type === 'keyword' && CLAUSES[t.upper] && !(t.upper === 'GROUP' && !isKw(core[k + 1], 'BY'))) clause = t.upper;
                 };
                 if (!clause || !REFUSED[clause]) continue;
-                findings.push(['MCE076', 'error', 'A window function cannot sit in ' + REFUSED[clause] + ': Windowed functions can only appear in the SELECT or ORDER BY clauses. Number the rows in a subquery\'s SELECT, then filter on that number outside it.', DOCS.WINDOW, core[i], core[over]]);
+                findings.push(['MCE076', 'error', 'A window function cannot sit in ' + REFUSED[clause] + ': Windowed functions can only appear in the SELECT or ORDER BY clauses. Number the rows in a subquery\'s SELECT, then filter on that number outside it.', DOCS.ERR_WINDOW, core[i], core[over]]);
             };
             return findings;
         },
@@ -17751,7 +18370,7 @@ window.SQLStudioSQL = {
                 var advice = list.isGrouped ?
                     'A RIGHT or FULL JOIN follows a comma, so put the joins after it in parentheses as you write CROSS JOIN: A CROSS JOIN (B RIGHT JOIN C ON ...).' :
                     'Write CROSS JOIN for the comma, or JOIN ... ON with the condition that matches the rows.';
-                return ['MCE078', 'error', 'Marketing Cloud Engagement\'s query check refuses tables separated by commas in FROM: Old style JOIN (ANSI JOINs) syntax is not allowed. ' + advice, DOCS.JOIN, core[list.commas[0]], core[list.commas[0]], fixes];
+                return ['MCE078', 'error', 'Marketing Cloud Engagement\'s query check refuses tables separated by commas in FROM: Old style JOIN (ANSI JOINs) syntax is not allowed. ' + advice, DOCS.ERR_COMMA_JOIN, core[list.commas[0]], core[list.commas[0]], fixes];
             });
         },
         // MCE079 - an aggregate where SQL Server refuses it: in WHERE, in the ON of a join, in GROUP BY, or inside another aggregate.
@@ -17800,7 +18419,7 @@ window.SQLStudioSQL = {
                             end: core[close].end
                         };
                         if (!place) {
-                            if (agg.isNested) findings.push(['MCE079', 'error', core[agg.idx].upper + (clause === reading.having ? MESSAGES['NESTED HAVING'] : MESSAGES.NESTED), DOCS.AGG, span, span]);
+                            if (agg.isNested) findings.push(['MCE079', 'error', core[agg.idx].upper + (clause === reading.having ? MESSAGES['NESTED HAVING'] : MESSAGES.NESTED), DOCS.ERR_AGGREGATE, span, span]);
                             return;
                         };
                         if (place !== 'GROUP BY' && isCorrelatable) {
@@ -17808,7 +18427,7 @@ window.SQLStudioSQL = {
                             var refs = refsWithin(clause.refs, agg.idx + 1, close);
                             if (refs.length && !refs.some(function (ref) { return localBinding(core, reading, ref, known) === 'local'; })) return;
                         };
-                        findings.push(['MCE079', 'error', core[agg.idx].upper + MESSAGES[place], DOCS.AGG, span, span]);
+                        findings.push(['MCE079', 'error', core[agg.idx].upper + MESSAGES[place], DOCS.ERR_AGGREGATE, span, span]);
                     });
                 });
             });
@@ -17857,7 +18476,7 @@ window.SQLStudioSQL = {
                 var push = function (ref, clauseName, tail) {
                     var span = refSpan(core, ref);
                     var text = sql.slice(span.start, span.end);
-                    findings.push(['MCE080', 'error', 'SQL Server refuses this column: Column \'' + text + '\' is invalid in the ' + clauseName + ' clause because it is not contained in ' + tail, DOCS.AGG, span, span]);
+                    findings.push(['MCE080', 'error', 'SQL Server refuses this column: Column \'' + text + '\' is invalid in the ' + clauseName + ' clause because it is not contained in ' + tail, DOCS.ERR_NOT_GROUPED, span, span]);
                 };
                 if (reading.having) {
                     reading.having.refs.forEach(function (ref) {
@@ -17970,7 +18589,7 @@ window.SQLStudioSQL = {
                         };
                         /* A text is no position, so its advice names none (the docs review, 2026-10-14). */
                         var advice = tok.type === 'number' ? 'Write the column: a number in GROUP BY is no position in the select list.' : 'Write the column to group by.';
-                        findings.push(['MCE081', 'error', 'GROUP BY ' + tok.raw + ' groups by a constant: Each GROUP BY expression must contain at least one column that is not an outer reference. ' + advice, DOCS.AGG, span, span, fixes]);
+                        findings.push(['MCE081', 'error', 'GROUP BY ' + tok.raw + ' groups by a constant: Each GROUP BY expression must contain at least one column that is not an outer reference. ' + advice, DOCS.ERR_AGGREGATE, span, span, fixes]);
                     });
                 };
                 if (!reading.orderBy) return;
@@ -17999,12 +18618,12 @@ window.SQLStudioSQL = {
                     if (to - item.from === 1 && tok.type === 'number') {
                         var position = /^\d+$/.test(tok.value) ? Number(tok.value) : -1;
                         if (width !== null && position !== -1 && (position < 1 || position > width)) {
-                            findings.push(['MCE081', 'error', 'ORDER BY ' + tok.value + ' names no column: The ORDER BY position number ' + tok.value + ' is out of range of the number of items in the select list. The list has ' + width + (width === 1 ? ' column.' : ' columns.'), DOCS.SEL, span, span]);
+                            findings.push(['MCE081', 'error', 'ORDER BY ' + tok.value + ' names no column: The ORDER BY position number ' + tok.value + ' is out of range of the number of items in the select list. The list has ' + width + (width === 1 ? ' column.' : ' columns.'), DOCS.ERR_AGGREGATE, span, span]);
                         };
                         return;
                     };
                     if (to - item.from === 1 && tok.type === 'string') {
-                        findings.push(['MCE081', 'error', 'This ORDER BY item is a text, the same on every row: A constant expression was encountered in the ORDER BY list, position ' + (k + 1) + '. Sort by a column, or remove the item.', DOCS.SEL, span, span]);
+                        findings.push(['MCE081', 'error', 'This ORDER BY item is a text, the same on every row: A constant expression was encountered in the ORDER BY list, position ' + (k + 1) + '. Sort by a column, or remove the item.', DOCS.ERR_AGGREGATE, span, span]);
                         return;
                     };
                     if (!listNames) return;
@@ -18091,7 +18710,7 @@ window.SQLStudioSQL = {
                     } else if (!!f.alias !== !!before.alias && !/^ENT\./i.test(String((f.alias ? before : f).name))) {
                         message = 'The alias ' + name + ' is also the name of a table of this FROM: The correlation name \'' + name + '\' has the same exposed name as table \'' + name + '\'. Give one of them another alias.';
                     };
-                    if (message) findings.push(['MCE082', 'error', message, DOCS.FROM, f, f]);
+                    if (message) findings.push(['MCE082', 'error', message, DOCS.ERR_AGGREGATE, f, f]);
                 });
                 /* A subquery the nesting takes for a derived table sees tables it does not list (placeKindOf). */
                 if (reading.place && placeKindOf(reading.place) !== reading.place.kind) return;
@@ -18122,7 +18741,7 @@ window.SQLStudioSQL = {
                     var unmatched = ': The column prefix \'' + prefix + '\' does not match with a table name or alias name used in the query.';
                     var named = (hasOwn(binder.named, lower) ? binder.named[lower] : []).map(function (k) { return entries[k]; });
                     if (named.length !== 1) {
-                        findings.push(['MCE082', 'error', 'No table of this query is called ' + prefix + unmatched + ' Write the alias of a table of its FROM.', DOCS.FROM, item, item]);
+                        findings.push(['MCE082', 'error', 'No table of this query is called ' + prefix + unmatched + ' Write the alias of a table of its FROM.', DOCS.ERR_BOUND, item, item]);
                         return;
                     };
                     var alias = formatIdentifier(named[0].alias);
@@ -18139,7 +18758,7 @@ window.SQLStudioSQL = {
                         isSafe: true,
                         isInFixAll: true
                     }] : [];
-                    findings.push(['MCE082', 'error', prefix + ' has the alias ' + alias + ' here' + unmatched + ' Write ' + alias + '.*.', DOCS.FROM, item, item, fixes]);
+                    findings.push(['MCE082', 'error', prefix + ' has the alias ' + alias + ' here' + unmatched + ' Write ' + alias + '.*.', DOCS.ERR_BOUND, item, item, fixes]);
                 });
                 var isSetBranch = !!reading.place && reading.place.head !== scope.selectIdx;
                 [reading.select, reading.where, reading.groupBy, reading.having, reading.orderBy].concat(reading.ons).forEach(function (clause) {
@@ -18181,14 +18800,14 @@ window.SQLStudioSQL = {
                             } else if (!aliases.length && isOuterLater) {
                                 findings.push(['MCE082', 'error', qualifier + ' is joined after the APPLY that reads it' + bound + ' Join ' + qualifier + ' before the APPLY.', DOCS.JOIN, span, span]);
                             } else if (!aliases.length) {
-                                findings.push(['MCE082', 'error', 'No table of this query is called ' + qualifier + bound + ' Write the alias of a table of its FROM.', DOCS.FROM, span, span]);
+                                findings.push(['MCE082', 'error', 'No table of this query is called ' + qualifier + bound + ' Write the alias of a table of its FROM.', DOCS.ERR_BOUND, span, span]);
                             } else if (aliases.length === 1) {
                                 /* One table has the name. Writing its alias names the same table, so the fix keeps the query's meaning, unless
                                  * it would compare the column with itself, as o.Key = Orders.Key, where the author likely meant another table. */
                                 var isLocal = named.length === 1;
                                 var isSelf = isLocal && isSelfComparison(core, clause.refs, ref, clean(named[0].alias).toLowerCase(), lower);
                                 var written = aliases[0] + '.' + column;
-                                findings.push(['MCE082', 'error', qualifier + ' has the alias ' + aliases[0] + (isLocal ? ' here' : ' in the query around it') + bound + (isSelf ? ' Write the alias of the table you mean: ' + written + ' would compare the column with itself.' : ' Write ' + written + '.'), DOCS.FROM, span, span, [{
+                                findings.push(['MCE082', 'error', qualifier + ' has the alias ' + aliases[0] + (isLocal ? ' here' : ' in the query around it') + bound + (isSelf ? ' Write the alias of the table you mean: ' + written + ' would compare the column with itself.' : ' Write ' + written + '.'), DOCS.ERR_BOUND, span, span, [{
                                     title: 'Use the alias ' + aliases[0],
                                     edits: [{
                                         start: core[ref.first].start,
@@ -18204,7 +18823,7 @@ window.SQLStudioSQL = {
                                 var around = aliases.slice(named.length);
                                 var here = local.length ? (local.length === 1 ? 'the alias ' : 'the aliases ') + list(local) + ' here' : '';
                                 var there = around.length ? list(around) + (around.length === 1 ? ' in the query around it' : ' in the queries around it') : '';
-                                findings.push(['MCE082', 'error', qualifier + ' has ' + (here && there ? here + ' and ' + there : here || 'the aliases ' + there) + bound + ' Write the alias of the table you mean.', DOCS.FROM, span, span]);
+                                findings.push(['MCE082', 'error', qualifier + ' has ' + (here && there ? here + ' and ' + there : here || 'the aliases ' + there) + bound + ' Write the alias of the table you mean.', DOCS.ERR_BOUND, span, span]);
                             };
                             return;
                         };
@@ -18280,7 +18899,7 @@ window.SQLStudioSQL = {
                     start: items[0].start,
                     end: items[items.length - 1].end
                 };
-                findings.push(['MCE083', 'error', 'This subquery gives ' + width + ' columns where one value is read: Only one expression can be specified in the select list when the subquery is not introduced with EXISTS. Keep one column.', DOCS.WHERE, span, span]);
+                findings.push(['MCE083', 'error', 'This subquery gives ' + width + ' columns where one value is read: Only one expression can be specified in the select list when the subquery is not introduced with EXISTS. Keep one column.', DOCS.ERR_AGGREGATE, span, span]);
             });
             return findings;
         }
@@ -18294,7 +18913,9 @@ window.SQLStudioSQL = {
     // ==================================================================
 
     /* Field types of the schema, as the Data Views and the SOAP field retrieve give them, by the kind of value a field holds.
-    Locale is left out: the SQL data's deFieldTypes gives it the SQL type int, so it is no text to judge. */
+    Locale is not here, as its kind depends on its table (addedFieldKind): a Data Extension's Locale field is a varchar of 5
+    characters, with codes such as en-US (the article session's org test C09, 2026-10-20), so it is text, and the SQL type of a Data
+    View's Locale, _Subscribers.Locale, was never read, so it has no kind, as before that test. */
     var ADDED_FIELD_KINDS = {
         Text: 'text',
         Email: 'text',
@@ -18449,20 +19070,6 @@ window.SQLStudioSQL = {
     };
 
     /**
-     * @function addedFieldAt
-     * @description The schema field a column reference names, from addedColumnAt, without its table.
-     * @param {Object} facts - From addedRuleFacts.
-     * @param {number} idx - Index of a token of the reference, for its SELECT.
-     * @param {?string} qualifier - The alias or table, as written, or null.
-     * @param {string} column - The column, as written.
-     * @returns {Object|null} The field, or null.
-     */
-    function addedFieldAt(facts, idx, qualifier, column) {
-        var found = addedColumnAt(facts, idx, qualifier, column);
-        return found ? found.field : null;
-    };
-
-    /**
      * @function plainColumnRef
      * @description Reads core[start, end) as one plain column reference, Col, t.Col or [t].[Col], and nothing else.
      * @param {Array<Object>} core - Comment-free token stream.
@@ -18486,12 +19093,32 @@ window.SQLStudioSQL = {
 
     /**
      * @function addedFieldKind
-     * @description Tells what kind of value a schema field holds, from ADDED_FIELD_KINDS.
+     * @description Tells what kind of value a schema field holds, from ADDED_FIELD_KINDS. A Locale field is text where its table is a
+     * Data Extension (isDataExtensionLocale), and of no known kind in a Data View or where the table is not given: org test C09
+     * (2026-10-20) read a Data Extension's Locale only.
      * @param {Object} field - A schema field, or null.
+     * @param {?Object} [table] - Its schema table, for a Locale field.
      * @returns {string|null} 'text', 'number', 'decimal', 'date' or 'boolean', or null when the type is not known.
      */
-    function addedFieldKind(field) {
-        return field && field.type ? ADDED_FIELD_KINDS[field.type] || null : null;
+    function addedFieldKind(field, table) {
+        if (!field || !field.type) return null;
+        if (isDataExtensionLocale(field, table)) return 'text';
+        return ADDED_FIELD_KINDS[field.type] || null;
+    };
+
+    /**
+     * @function addedKindAt
+     * @description The kind of value of the schema field a column reference names (addedColumnAt), with its table, so a Data
+     * Extension's Locale field is text and a Data View's is not (addedFieldKind).
+     * @param {Object} facts - From addedRuleFacts.
+     * @param {number} idx - Index of a token of the reference, for its SELECT.
+     * @param {?string} qualifier - The alias or table, as written, or null.
+     * @param {string} column - The column, as written.
+     * @returns {string|null} The kind, or null.
+     */
+    function addedKindAt(facts, idx, qualifier, column) {
+        var found = addedColumnAt(facts, idx, qualifier, column);
+        return found ? addedFieldKind(found.field, found.table) : null;
     };
 
     /**
@@ -19613,6 +20240,29 @@ window.SQLStudioSQL = {
         NS: { plural: 'nanoseconds', lasts: '2 seconds' }
     };
 
+    /* The date parts of DATEDIFF that MCE102's (d) reads against a date constant, with how many of them make a second. DATEDIFF returns an
+     * int, which passes after 2147483647 of them: about 68 years in seconds (round 2 org test C12, 2026-10-21: DATEDIFF(SECOND,
+     * '1900-01-01', DateJoined) passed Validate and failed the run with no reason), and, from Microsoft's DATEDIFF page, 24.8 days in
+     * milliseconds, 35.8 minutes in microseconds and 2.1 seconds in nanoseconds. Round 3 org test G06 (2026-10-21) read the run failure
+     * again with only the system-error line in the Action Log. lasts is how long the int lasts in the smaller parts, for their message. */
+    var DATEDIFF_INT_PARTS = {
+        SECOND: { plural: 'seconds', perSecond: 1 },
+        SS: { plural: 'seconds', perSecond: 1 },
+        S: { plural: 'seconds', perSecond: 1 },
+        MILLISECOND: { plural: 'milliseconds', perSecond: 1000, lasts: '24.8 days' },
+        MS: { plural: 'milliseconds', perSecond: 1000, lasts: '24.8 days' },
+        MICROSECOND: { plural: 'microseconds', perSecond: 1000000, lasts: '35.8 minutes' },
+        MCS: { plural: 'microseconds', perSecond: 1000000, lasts: '35.8 minutes' },
+        NANOSECOND: { plural: 'nanoseconds', perSecond: 1000000000, lasts: '2.1 seconds' },
+        NS: { plural: 'nanoseconds', perSecond: 1000000000, lasts: '2.1 seconds' }
+    };
+    var INT_MAX_UNITS = 2147483647;
+
+    /* The calls that give the moment of the run, the other side of a constant date in MCE102's (d). */
+    var NOW_CALLS = {
+        GETDATE: 1, GETUTCDATE: 1, SYSDATETIME: 1, SYSUTCDATETIME: 1, SYSDATETIMEOFFSET: 1
+    };
+
     /* The integer types a CAST or CONVERT of MCE102's number may name. */
     var INTEGER_TYPE_NAMES = {
         BIGINT: 1, INT: 1, INTEGER: 1, SMALLINT: 1, TINYINT: 1
@@ -19726,6 +20376,172 @@ window.SQLStudioSQL = {
     };
 
     /**
+     * @function isoDateMs
+     * @description Reads a text as a date in the forms SQL Server reads the same way in every language and in MCE's month-first session:
+     * 2026-10-21 and 20261021, with a time after a space or a T (hh:mm, hh:mm:ss, hh:mm:ss.fff). A text of any other form, or with a month
+     * or a day that does not exist, gives null.
+     * @param {string} text - The text, without its quotes.
+     * @returns {number|null} The milliseconds since 1970-01-01 in UTC, or null.
+     */
+    function isoDateMs(text) {
+        var m = /^(\d{4})(-?)(\d{2})\2(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,7}))?)?)?$/.exec(String(text).trim());
+        if (!m) return null;
+        var d = new Date(0);
+        d.setUTCFullYear(Number(m[1]), Number(m[3]) - 1, Number(m[4]));
+        if (d.getUTCMonth() !== Number(m[3]) - 1 || d.getUTCDate() !== Number(m[4]) || Number(m[5] || 0) > 23 || Number(m[6] || 0) > 59 || Number(m[7] || 0) > 59) return null;
+        d.setUTCHours(Number(m[5] || 0), Number(m[6] || 0), Number(m[7] || 0), Math.floor(Number('0.' + (m[8] || '0')) * 1000));
+        return d.getTime();
+    };
+
+    /* The whole numbers SQL Server reads as a date where a datetime goes: 0 is 1900-01-01 and n is n days after it, from 1 January 1753 to
+     * 31 December 9999. A number outside it is an arithmetic overflow of its own. */
+    var DATE_NUMBER_FIRST_DAY = -53690;
+    var DATE_NUMBER_LAST_DAY = 2958463;
+
+    /**
+     * @function constantDate
+     * @description Reads core[span] as a date constant: a text literal in a form isoDateMs reads, or a CAST or CONVERT of one, or a
+     * whole number, which SQL Server reads as that many days after 1900-01-01 (round 5 org test B07: DATEDIFF(SECOND, 0, GETDATE())
+     * passed Validate and failed the run).
+     * @param {Array<Object>} core - Comment-free token stream.
+     * @param {Object} span - {start, end}, token indexes, end exclusive.
+     * @returns {Object|null} {ms, text}: the moment in UTC milliseconds and the text as written, or for a number the date it reads as (yyyy-mm-dd), or null for anything else.
+     */
+    function constantDate(core, span) {
+        var wholeNumber = function (s) {
+            if (numberLiteralEnd(core, s.start) !== s.end) return null;
+            var digits = core[s.end - 1];
+            if (!/^\d+$/.test(digits.value)) return null;
+            var days = Number(digits.value) * (s.end - s.start === 2 && core[s.start].value === '-' ? -1 : 1);
+            if (days < DATE_NUMBER_FIRST_DAY || days > DATE_NUMBER_LAST_DAY) return null;
+            var ms = Date.UTC(1900, 0, 1) + days * 86400000;
+            return {
+                ms: ms,
+                text: new Date(ms).toISOString().slice(0, 10)
+            };
+        };
+        var number = wholeNumber(span);
+        if (number) return number;
+        var literal = function (s) {
+            if (s.end !== s.start + 1 || core[s.start].type !== 'string') return null;
+            var text = stringLiteralContent(core[s.start]).trim();
+            var ms = isoDateMs(text);
+            return ms === null ? null : { ms: ms, text: text };
+        };
+        var direct = literal(span);
+        if (direct) return direct;
+        var parts = castParts(core, span);
+        return parts ? literal(parts.value) : null;
+    };
+
+    /**
+     * @function isNowCall
+     * @description Tells whether core[span] is the moment of the run: GETDATE(), GETUTCDATE(), SYSDATETIME(), SYSUTCDATETIME(),
+     * SYSDATETIMEOFFSET() or CURRENT_TIMESTAMP, or a CAST or CONVERT of one, but not to TIME: CAST(GETDATE() AS TIME) is the time of
+     * day, which DATEDIFF reads on 1900-01-01, so DATEDIFF(SECOND, 0, CAST(GETDATE() AS TIME)) is the seconds since midnight and fits
+     * an int (the review of round 5, 2026-10-21).
+     * @param {Array<Object>} core - Comment-free token stream.
+     * @param {Object} span - {start, end}, token indexes, end exclusive.
+     * @returns {boolean}
+     */
+    function isNowCall(core, span) {
+        var isNow = function (s) {
+            var t = core[s.start];
+            if (!t || t.quote) return false;
+            if (s.end === s.start + 1) return t.upper === 'CURRENT_TIMESTAMP';
+            return s.end === s.start + 3 && !!NOW_CALLS[t.upper] && isPunctToken(core[s.start + 1], '(') && isPunctToken(core[s.start + 2], ')');
+        };
+        if (isNow(span)) return true;
+        var parts = castParts(core, span);
+        if (!parts || (core[parts.type.start] && !core[parts.type.start].quote && core[parts.type.start].upper === 'TIME')) return false;
+        return isNow(parts.value);
+    };
+
+    /**
+     * @function overflowCutoffText
+     * @description The moment from which a DATEDIFF in one date part passes an int, for the message that names the date a column's values,
+     * or the runs against now, fail from: the date alone where the int lasts a day or more (seconds and milliseconds), else the date with
+     * the time, to the second, and for nanoseconds to the millisecond.
+     * @param {number} ms - The moment, in UTC milliseconds.
+     * @param {number} perSecond - How many of the date part make a second.
+     * @returns {string} yyyy-mm-dd, or yyyy-mm-dd hh:mm:ss, or with .fff
+     */
+    function overflowCutoffText(ms, perSecond) {
+        var iso = new Date(ms).toISOString();
+        if (INT_MAX_UNITS / perSecond >= 86400) return iso.slice(0, 10);
+        return iso.slice(0, perSecond > 1000000 ? 23 : 19).replace('T', ' ');
+    };
+
+    /**
+     * @function intOverflowFinding
+     * @description MCE102's (d): DATEDIFF in SECOND, MILLISECOND, MICROSECOND or NANOSECOND (DATEDIFF_INT_PARTS), whose result is an int,
+     * over a span past 2147483647 of them: about 68 years in seconds (round 2 org test C12, 2026-10-21: DATEDIFF(SECOND, '1900-01-01',
+     * DateJoined) passed Validate and failed the run with no reason; the check does not evaluate a constant), 24.8 days in milliseconds,
+     * 35.8 minutes in microseconds and 2.1 seconds in nanoseconds (round 3 asked for them, 2026-10-21). A date constant against the
+     * moment of the run (isNowCall) is an error when the span is past the int, as it fails every run. In seconds, against a plain column,
+     * it is a warning when the constant is more than 68 years from today, as any value that far from the constant fails the run and a row
+     * with such a value is all it takes, and values near today are the usual ones, so a constant within 68 years of today is left alone, and
+     * so is one within 68 years of now. The smaller parts last 24.8 days at most, which no constant date stays within for long, so they
+     * are read whatever the span (the review of round 3, 2026-10-21): against now a constant within the int is a warning that names the
+     * moment from which every run fails, and against a column a warning that a date further from the constant than the int lasts, either
+     * way, fails the run, as a date column's values span more than that. Two date constants further apart than the int lasts are an
+     * error, as they fail every run, and the check passes them, as it evaluates no constant but a JSON one (1.10 of the MCE SQL engine
+     * facts, B55 to B58). The fix renames the call to DATEDIFF_BIG. The Unix epoch in the smaller parts is rule102's (c), which does not
+     * depend on the other side. A whole number is a date constant too (constantDate): DATEDIFF(SECOND, 0, GETDATE()) is the seconds from
+     * 1900-01-01, which passed the query check and failed the run (round 5 org test B07).
+     * @param {string} sql - Full SQL source text, for the layout of the fix.
+     * @param {Object} ctx - Shared per-lint-call context, for formatLaidOutEdits.
+     * @param {Array<Object>} core - Comment-free token stream.
+     * @param {number} i - Index of the DATEDIFF.
+     * @param {Array<Object>} args - Its three arguments.
+     * @param {Object} part - The date part's entry of DATEDIFF_INT_PARTS.
+     * @returns {Array|null} A raw finding tuple, or null.
+     */
+    function intOverflowFinding(sql, ctx, core, i, args, part) {
+        var first = constantDate(core, args[1]);
+        var second = constantDate(core, args[2]);
+        var message = null;
+        var isError = true;
+        /* How many seconds apart the int reaches: 68 years for seconds, 24.8 days for milliseconds. */
+        var limitSeconds = INT_MAX_UNITS / part.perSecond;
+        if (first && second) {
+            /* Two constants fail every run once they are further apart than the int lasts: the check evaluates no constant but JSON's (1.10). */
+            if (Math.abs(second.ms - first.ms) / 1000 <= limitSeconds) return null;
+            message = 'DATEDIFF returns an int, and the ' + part.plural + ' from ' + first.text + ' to ' + second.text + ' pass 2147483647: ' + DATEDIFF_OVERFLOW_ERROR + ' DATEDIFF_BIG returns a bigint, and an MCE Number field holds an int, so use a Text or Decimal field.';
+        } else {
+            var constant = first || second;
+            var other = first ? args[2] : args[1];
+            if (!constant) return null;
+            var isNow = isNowCall(core, other);
+            var isColumn = !isNow && !!plainColumnRef(core, other.start, other.end);
+            if (!isNow && !isColumn) return null;
+            var isPastInt = Math.abs(Date.now() - constant.ms) / 1000 > limitSeconds;
+            /* In seconds the int lasts 68 years, so only a constant that far from today is read. A smaller part's int lasts 24.8 days at most. */
+            var isSmall = part.perSecond > 1;
+            if (!isPastInt && !isSmall) return null;
+            var isPast = constant.ms < Date.now();
+            isError = isNow && isPastInt;
+            if (isNow && isPastInt) {
+                message = 'DATEDIFF returns an int, and the ' + part.plural + ' from ' + constant.text + ' to now pass 2147483647: ' + DATEDIFF_OVERFLOW_ERROR + ' DATEDIFF_BIG returns a bigint, and an MCE Number field holds an int, so use a Text or Decimal field.';
+            } else if (isNow) {
+                /* The span to now grows past the constant, so the runs fail from the constant plus the int, whichever side of today it is. */
+                message = 'DATEDIFF returns an int, and the ' + part.plural + ' from ' + constant.text + ' to now pass 2147483647 on ' + overflowCutoffText(constant.ms + limitSeconds * 1000, part.perSecond) + ', so every run from then fails: ' + DATEDIFF_OVERFLOW_ERROR + ' Use DATEDIFF_BIG, a bigint, which needs a Text or Decimal field.';
+            } else if (isSmall) {
+                message = 'DATEDIFF returns an int, and ' + part.plural + ' pass 2147483647 in ' + part.lasts + ', so a date more than that from ' + constant.text + ' fails the run: ' + DATEDIFF_OVERFLOW_ERROR + ' Use DATEDIFF_BIG, a bigint, which needs a Text or Decimal field.';
+            } else {
+                var cutoff = overflowCutoffText(constant.ms + (isPast ? 1 : -1) * limitSeconds * 1000, part.perSecond);
+                message = 'DATEDIFF returns an int, and ' + part.plural + ' ' + (isPast ? 'from ' : 'up to ') + constant.text + ' pass 2147483647 on ' + cutoff + ', so ' + (isPast ? 'a later' : 'an earlier') + ' date fails the whole run: ' + DATEDIFF_OVERFLOW_ERROR + ' Use DATEDIFF_BIG, a bigint, which needs a Text or Decimal field.';
+            };
+        };
+        return ['MCE102', isError ? 'error' : 'warning', message, DOCS.DATEDIFF, core[i], core[i], [{
+            title: 'Use DATEDIFF_BIG',
+            edits: formatLaidOutEdits(sql, [{ start: core[i].start, end: core[i].end, text: 'DATEDIFF_BIG' }], ctx),
+            isSafe: true,
+            isInFixAll: false
+        }]];
+    };
+
+    /**
      * @function unixNumberColumn
      * @description Reads the number of a DATEADD as a plain column reference, or a CAST or CONVERT of one to an integer type.
      * @param {Array<Object>} core - Comment-free token stream.
@@ -19779,6 +20595,225 @@ window.SQLStudioSQL = {
         };
     };
 
+    /* MCE102's (e): the seconds in one of each date part whose DATEDIFF a product reads, as DATEDIFF counts them. */
+    var PRODUCT_DATEDIFF_UNITS = {
+        MILLISECOND: 0.001, MS: 0.001,
+        SECOND: 1, SS: 1, S: 1,
+        MINUTE: 60, MI: 60, N: 60,
+        HOUR: 3600, HH: 3600,
+        DAY: 86400, DD: 86400, D: 86400
+    };
+
+    /* MCE102's (e): the least whole-number literal, without its sign, whose product with an int column is a warning. A millisecond or a
+     * microsecond conversion multiplies by 1000 or more, and Quantity * 2 or * 100 overflows only for a value past 21 million. */
+    var PRODUCT_WARNING_FACTOR = 1000;
+
+    /* MCE102's (e): how far ahead a DATEDIFF to now times a literal is read for the day its runs start to fail, 10 years, as a Query
+     * Activity in an automation can run for years, and a day further out is no warning anyone acts on. */
+    var PRODUCT_HORIZON_MS = 10 * 365.25 * 86400000;
+
+    /* The integer types a CAST or CONVERT makes an int of, for MCE102's (e): a product of a BIGINT is a BIGINT. */
+    var PRODUCT_INT_TYPES = {
+        INT: 1, INTEGER: 1, SMALLINT: 1, TINYINT: 1
+    };
+
+    /**
+     * @function productFactor
+     * @description Reads one factor of a * for MCE102's (e), as the int SQL Server works the product out in. 'literal': a whole-number
+     * literal within the int, as a literal past it is a decimal constant (Microsoft's Constants page), whose product is no int. 'datediff':
+     * a DATEDIFF, not DATEDIFF_BIG, in a part of PRODUCT_DATEDIFF_UNITS, with a date constant (constantDate) on one side and the moment of
+     * the run (isNowCall), another constant or a plain column on the other. 'column': a plain reference to a field the schema knows as
+     * a Number field, an int, unless its SQL type is wider, or a CAST or CONVERT to INT, SMALLINT or TINYINT. 'reported': a DATEDIFF that
+     * MCE102 reports itself, (c) or (d), so the product gets no second finding. Anything else is none.
+     * @param {string} sql - Full SQL source text.
+     * @param {Object} ctx - Shared per-lint-call context.
+     * @param {Object} facts - From addedRuleFacts.
+     * @param {Object} span - {start, end}, the factor.
+     * @returns {?Object} {kind, ...}, or null.
+     */
+    function productFactor(sql, ctx, facts, span) {
+        var core = facts.core;
+        var literal = wholeNumberLiteral(core, span);
+        if (literal) return isOutsideInt(literal.isNegative, literal.digits) ? null : {
+            kind: 'literal',
+            value: Number(literal.digits) * (literal.isNegative ? -1 : 1)
+        };
+        var inner = unwrapParens(core, span.start, span.end);
+        var t = core[inner.start];
+        if (!t || t.quote) return null;
+        if (t.upper === 'DATEDIFF' && isPunctToken(core[inner.start + 1], '(') && matchParen(core, inner.start + 1) === inner.end - 1) {
+            var args = addedArguments(core, inner.start, inner.end - 1);
+            if (args.length !== 3 || args[0].end !== args[0].start + 1 || core[args[0].start].quote) return null;
+            var unitName = core[args[0].start].upper;
+            var smallPart = INT_OVERFLOW_DATE_PARTS[unitName];
+            var diffPart = DATEDIFF_INT_PARTS[unitName];
+            if ((smallPart && (isUnixEpochDate(core, args[1]) || isUnixEpochDate(core, args[2]))) || (diffPart && intOverflowFinding(sql, ctx, core, inner.start, args, diffPart))) return { kind: 'reported' };
+            var unitSeconds = PRODUCT_DATEDIFF_UNITS[unitName];
+            if (!unitSeconds) return null;
+            var first = constantDate(core, args[1]);
+            var second = constantDate(core, args[2]);
+            var constant = first || second;
+            if (!constant) return null;
+            var otherSpan = first ? args[2] : args[1];
+            var other = first && second ? 'constant' : (isNowCall(core, otherSpan) ? 'now' : (plainColumnRef(core, otherSpan.start, otherSpan.end) ? 'column' : null));
+            if (!other) return null;
+            return {
+                kind: 'datediff',
+                at: inner.start,
+                plural: { 0.001: 'milliseconds', 1: 'seconds', 60: 'minutes', 3600: 'hours', 86400: 'days' }[unitSeconds],
+                unitSeconds: unitSeconds,
+                constant: constant,
+                second: first && second ? second : null,
+                other: other,
+                isEpoch: isUnixEpochDate(core, first ? args[1] : args[2])
+            };
+        };
+        var parts = castParts(core, inner);
+        if (parts) {
+            var type = core[parts.type.start];
+            return parts.type.end === parts.type.start + 1 && !type.quote && PRODUCT_INT_TYPES[type.upper] ? { kind: 'column', span: inner } : null;
+        };
+        var ref = plainColumnRef(core, inner.start, inner.end);
+        var found = ref ? addedColumnAt(facts, ref.start, ref.qualifier, ref.column) : null;
+        if (!found || addedFieldKind(found.field, found.table) !== 'number') return null;
+        if (/^(bigint|decimal|numeric|float|real|money|smallmoney)/i.test(String(found.field.sqlType || ''))) return null;
+        return {
+            kind: 'column',
+            span: inner
+        };
+    };
+
+    /**
+     * @function productOverflowFindings
+     * @description MCE102's (e): a * whose product passes an int, which fails the run with no reason: SubscriberID * 1000000000 over
+     * _Subscribers passed Validate and failed the run, and CONVERT(BIGINT, SubscriberID) * 1000000000 ran (round 2 org tests C06 and C07,
+     * 2026-10-21, E10 and round 5 A13 again). Only the first * of a chain of *, / and % is read, with one factor a whole-number literal
+     * (productFactor). (1) Two literals whose product passes the int, and a DATEDIFF from a date constant to another or to now whose value
+     * times the literal passes it today, are errors, as every run fails: DATEDIFF(SECOND, '1970-01-01', GETDATE()) * 1000, Unix
+     * milliseconds, a common MCE pattern. A DATEDIFF to now that passes it within PRODUCT_HORIZON_MS is a warning that names the day
+     * every run starts to fail. (2) A DATEDIFF from a date constant to a plain column, where a date of today already passes the int: an error from the Unix
+     * epoch, whose real dates all do, and a warning from any other constant, as the data may stay near it. (3) An int column, a Number
+     * field or a CAST to INT, times a literal of PRODUCT_WARNING_FACTOR or more is a warning, as a plausible value overflows, and the
+     * message names the value from which it does. A smaller literal, and a product of two columns, are left alone. The fix makes the
+     * product a bigint: Use DATEDIFF_BIG for a DATEDIFF, and Cast to BIGINT around the column or the first literal otherwise, safe, and
+     * out of Fix all as the column's type widens, as for (c). The copies of one product in a SELECT are one finding.
+     * @param {string} sql - Full SQL source text, for the layout of the fixes.
+     * @param {Object} ctx - Shared per-lint-call context.
+     * @param {Array<Object>} core - Comment-free token stream.
+     * @returns {Array<Array>} Raw finding tuples.
+     */
+    function productOverflowFindings(sql, ctx, core) {
+        var facts = null;
+        /* The copies of one product in a SELECT, as in its select list and its GROUP BY, are one finding whose fix changes every copy, or
+         * SQL Server would refuse a GROUP BY that no longer matches the select list. */
+        var groups = {};
+        var order = [];
+        for (var s = 1; s < core.length; s++) {
+            var op = core[s];
+            if (op.type !== 'operator' || op.value !== '*') continue;
+            var leftStart = factorStartBefore(core, s);
+            if (leftStart === -1) continue;
+            var before = core[leftStart - 1];
+            if (before && before.type === 'operator' && ['*', '/', '%'].indexOf(before.value) !== -1) continue;
+            var rightEnd = factorEndAfter(core, s + 1);
+            if (rightEnd === -1) continue;
+            var left = {
+                start: leftStart,
+                end: s
+            };
+            var right = {
+                start: s + 1,
+                end: rightEnd
+            };
+            facts = facts || addedRuleFacts(ctx);
+            var lf = productFactor(sql, ctx, facts, left);
+            var rf = lf && lf.kind !== 'reported' ? productFactor(sql, ctx, facts, right) : null;
+            if (!lf || !rf || rf.kind === 'reported') continue;
+            var key = facts.ownSelect[s] + ' ' + divisionTokensKey(core, left.start, right.end);
+            var found = null;
+            if (lf.kind === 'literal' && rf.kind === 'literal') {
+                if (Math.abs(lf.value * rf.value) <= INT_MAX_UNITS) continue;
+                found = {
+                    isError: true,
+                    docs: DOCS.ERR_SYSTEM,
+                    message: 'The product of two ints is an int, and ' + spanText(sql, core, left) + ' * ' + spanText(sql, core, right) + ' passes 2147483647, so every run fails. CAST one side AS BIGINT, and as an MCE Number field holds an int, use a Text or Decimal field.',
+                    wrap: left
+                };
+            } else if (lf.kind === 'literal' || rf.kind === 'literal') {
+                var factor = Math.abs(lf.kind === 'literal' ? lf.value : rf.value);
+                var o = lf.kind === 'literal' ? rf : lf;
+                var oSpan = lf.kind === 'literal' ? right : left;
+                if (factor < 2) continue;
+                if (o.kind === 'datediff') {
+                    /* How far from the constant the product passes the int, in seconds. */
+                    var limitSeconds = INT_MAX_UNITS / factor * o.unitSeconds;
+                    var cut = function (ms) { return new Date(ms).toISOString().slice(0, 10); };
+                    var head = 'DATEDIFF returns an int, and ';
+                    var bigTail = ' DATEDIFF_BIG returns a bigint, and an MCE Number field holds an int, so use a Text or Decimal field.';
+                    var shortTail = ' Use DATEDIFF_BIG, a bigint, which needs a Text or Decimal field.';
+                    if (o.other === 'constant' || o.other === 'now') {
+                        var end = o.other === 'constant' ? o.second.ms : Date.now();
+                        var spanSeconds = Math.abs(end - o.constant.ms) / 1000;
+                        var to = o.other === 'constant' ? o.second.text : 'now';
+                        if (spanSeconds > limitSeconds) {
+                            found = {
+                                isError: true,
+                                message: head + 'the ' + o.plural + ' from ' + o.constant.text + ' to ' + to + ' times ' + factor + ' pass 2147483647, so every run fails.' + bigTail
+                            };
+                        } else if (o.other === 'now' && o.constant.ms < Date.now() && o.constant.ms + limitSeconds * 1000 < Date.now() + PRODUCT_HORIZON_MS) {
+                            found = {
+                                isError: false,
+                                message: head + 'the ' + o.plural + ' from ' + o.constant.text + ' to now times ' + factor + ' pass 2147483647 on ' + cut(o.constant.ms + limitSeconds * 1000) + ', so every run from then fails.' + shortTail
+                            };
+                        };
+                    } else if (Math.abs(Date.now() - o.constant.ms) / 1000 > limitSeconds) {
+                        var isPast = o.constant.ms < Date.now();
+                        found = {
+                            isError: o.isEpoch,
+                            message: head + 'its ' + o.plural + ' from ' + o.constant.text + ' times ' + factor + ' pass 2147483647 ' + (isPast ? 'after ' : 'before ') + cut(o.constant.ms + (isPast ? 1 : -1) * limitSeconds * 1000) + ', so one ' + (isPast ? 'later' : 'earlier') + ' date fails the whole run.' + shortTail
+                        };
+                    };
+                    if (found) {
+                        found.docs = DOCS.DATEDIFF;
+                        found.rename = o.at;
+                    };
+                } else if (o.kind === 'column' && factor >= PRODUCT_WARNING_FACTOR) {
+                    found = {
+                        isError: false,
+                        docs: DOCS.ERR_SYSTEM,
+                        message: 'The product is an int, which stops at 2147483647, so one value above ' + Math.floor(INT_MAX_UNITS / factor) + ' fails the whole run. CAST the column AS BIGINT, and as an MCE Number field holds an int, use a Text or Decimal field.',
+                        wrap: oSpan
+                    };
+                };
+            };
+            if (!found) continue;
+            var edits = found.rename !== undefined ? [{ start: core[found.rename].start, end: core[found.rename].end, text: 'DATEDIFF_BIG' }] : [
+                { start: core[found.wrap.start].start, end: core[found.wrap.start].start, text: 'CAST(' },
+                { start: core[found.wrap.end - 1].end, end: core[found.wrap.end - 1].end, text: ' AS BIGINT)' }
+            ];
+            if (groups[key]) {
+                groups[key].edits = groups[key].edits.concat(edits);
+                continue;
+            };
+            groups[key] = {
+                found: found,
+                first: core[left.start],
+                last: core[right.end - 1],
+                edits: edits
+            };
+            order.push(key);
+        };
+        return order.map(function (k) {
+            var group = groups[k];
+            return ['MCE102', group.found.isError ? 'error' : 'warning', group.found.message, group.found.docs, group.first, group.last, [{
+                title: group.found.rename !== undefined ? 'Use DATEDIFF_BIG' : 'Cast to BIGINT',
+                edits: formatLaidOutEdits(sql, group.edits, ctx),
+                isSafe: true,
+                isInFixAll: false
+            }]];
+        });
+    };
+
     /**
      * @function rule102
      * @description MCE102: reports, as an error, a number or a date difference that overflows an int, which SQL Server answers with
@@ -19793,7 +20828,16 @@ window.SQLStudioSQL = {
      * safe, and out of Fix all as the column's type widens, as MCE091's cast does. (a) and (b) in MILLISECOND split the number into
      * seconds and milliseconds, safe and in Fix all, as the answer is the same wherever the call ran before: (b) writes n as CONVERT(BIGINT, x)
      * unless it is a BIGINT already, and (a) works the two numbers out, the seconds alone when the milliseconds are 0, and only when the
-     * seconds fit an int. A comment inside the number leaves the fix out. A call with a syntax error is left to MCE000.
+     * seconds fit an int. A comment inside the number leaves the fix out. (d) DATEDIFF in SECOND, SS or S, and in MILLISECOND, MICROSECOND
+     * or NANOSECOND (or MS, MCS, NS) with a date constant that is no Unix epoch (that is (c)), against GETDATE() or another call of the
+     * moment of the run, is an error when the span passes 2147483647 of the part (about 68 years, 24.8 days, 35.8 minutes and 2.1
+     * seconds), and against a plain column a warning when, in seconds, the constant is further than 68 years from today. In the smaller
+     * parts a constant within the int of now is a warning too, as the runs fail once it passes, and against a column always a warning,
+     * as a date column's values span more than 24.8 days. Two date constants further apart than the int lasts are an error
+     * (intOverflowFinding, round 2 org test C12 for seconds, 2026-10-21, and round 3 for the others), with the same fix as (c). (e) A *
+     * of ints, one a whole-number literal, whose product passes an int (productOverflowFindings, round 2 org test C06): an error where it
+     * does for every row, a warning where a plausible value or a later day does, with Cast to BIGINT or Use DATEDIFF_BIG. A call
+     * with a syntax error is left to MCE000.
      * @param {string} sql - Full SQL source text, for the comment check and the layout of the fixes.
      * @param {Array<Object>} tokens - Full token stream (unused: the rule reads the comment-free stream).
      * @param {Object} ctx - Shared per-lint-call context, used for ctx.getCoreTokens(), ctx.getStrict(), ctx.isFormatLaidOut() and, for a column, the schema.
@@ -19812,9 +20856,17 @@ window.SQLStudioSQL = {
             var unit = core[args[0].start];
             var part = unit.quote ? null : INT_OVERFLOW_DATE_PARTS[unit.upper];
             if (name === 'DATEDIFF') {
-                if (!part || !(isUnixEpochDate(core, args[1]) || isUnixEpochDate(core, args[2]))) continue;
+                var diffPart = unit.quote ? null : DATEDIFF_INT_PARTS[unit.upper];
+                /* The Unix epoch in the smaller parts is (c), and its other side may be anything. Every other date constant is (d). */
+                var isEpoch = !!part && (isUnixEpochDate(core, args[1]) || isUnixEpochDate(core, args[2]));
+                if (diffPart && !isEpoch) {
+                    var diffFinding = intOverflowFinding(sql, ctx, core, i, args, diffPart);
+                    if (diffFinding) findings.push(diffFinding);
+                    continue;
+                };
+                if (!isEpoch) continue;
                 findings.push(['MCE102', 'error', 'DATEDIFF returns an int, and ' + part.plural + ' from 1970 pass 2147483647 within ' + part.lasts + ': ' + DATEDIFF_OVERFLOW_ERROR +
-                    ' DATEDIFF_BIG returns a bigint, and an MCE Number field holds an int, so use a Text or Decimal field.', DOCS.DATE, core[i], core[i], [{
+                    ' DATEDIFF_BIG returns a bigint, and an MCE Number field holds an int, so use a Text or Decimal field.', DOCS.DATEDIFF, core[i], core[i], [{
                     title: 'Use DATEDIFF_BIG',
                     edits: formatLaidOutEdits(sql, [{ start: core[i].start, end: core[i].end, text: 'DATEDIFF_BIG' }], ctx),
                     isSafe: true,
@@ -19857,7 +20909,7 @@ window.SQLStudioSQL = {
                 var column = unixNumberColumn(core, numberSpan);
                 if (!column) continue;
                 /* A column the schema knows as a Number field holds an int, and a Date or Boolean one is no count of anything: no overflow. */
-                var kind = addedFieldKind(addedFieldAt(addedRuleFacts(ctx), column.ref.start, column.ref.qualifier, column.ref.column));
+                var kind = addedKindAt(addedRuleFacts(ctx), column.ref.start, column.ref.qualifier, column.ref.column);
                 if (kind === 'number' || kind === 'date' || kind === 'boolean') continue;
                 message = 'DATEADD takes an int, and Unix ' + part.plural + ' are past 2147483647: ' + DATEADD_OVERFLOW_ERROR + ' ' + NUMBER_FIELD_NOTE;
                 if (isMillisecond && !hasComment) {
@@ -19865,8 +20917,2014 @@ window.SQLStudioSQL = {
                     fixes = [splitMillisecondFix(sql, ctx, core, numberSpan, dateSpan, big + ' % 1000', big + ' / 1000')];
                 };
             };
-            findings.push(['MCE102', 'error', message, DOCS.DATE, first, last, fixes]);
+            findings.push(['MCE102', 'error', message, DOCS.UNIX, first, last, fixes]);
         };
+        return findings.concat(productOverflowFindings(sql, ctx, core));
+    };
+
+    // ------------------------------------------------------------------
+    // MCE103: a negative length in LEFT, RIGHT or SUBSTRING.
+    // ------------------------------------------------------------------
+
+    /* The calls whose length MCE103 reads: at is the place of the length among the arguments, and count the number of arguments, as in
+     * LEFT(text, length), RIGHT(text, length) and SUBSTRING(text, start, length). RIGHT(c.Note, CHARINDEX('@', c.Note) - 1) failed the run
+     * with status FatalError as LEFT did (round 5 org test B05). */
+    var NEGATIVE_LENGTH_CALLS = {
+        LEFT: { at: 1, count: 2 },
+        RIGHT: { at: 1, count: 2 },
+        SUBSTRING: { at: 2, count: 3 }
+    };
+
+    /* What a comparison of CHARINDEX or PATINDEX with a whole number proves about the position it gives, by the operator: the least
+     * position when the comparison is true (whenTrue) and when it is false (whenFalse), 0 for nothing. The position is 0 for no match and
+     * 1 or more otherwise, so > 0 proves 1 when it is true, and = 0 proves 1 when it is false. */
+    var POSITION_TESTS = {
+        '>': function (v) { return positionProof(v + 1, 0); },
+        '>=': function (v) { return positionProof(v, 0); },
+        '=': function (v) { return positionProof(v, v === 0 ? 1 : 0); },
+        '<>': function (v) { return positionProof(v === 0 ? 1 : 0, v); },
+        '!=': function (v) { return positionProof(v === 0 ? 1 : 0, v); },
+        '<': function (v) { return positionProof(0, v); },
+        '<=': function (v) { return positionProof(0, v + 1); }
+    };
+
+    /**
+     * @function positionProof
+     * @description What a test proves about the position of a search, for POSITION_TESTS.
+     * @param {number} whenTrue - The least position when the test is true, 0 for nothing.
+     * @param {number} whenFalse - The least position when it is false, 0 for nothing.
+     * @returns {Object} {whenTrue, whenFalse}
+     */
+    function positionProof(whenTrue, whenFalse) {
+        return {
+            whenTrue: whenTrue,
+            whenFalse: whenFalse
+        };
+    };
+
+    /**
+     * @function unwrapParens
+     * @description Narrows a token span past the parentheses around all of it, ((x)) to x.
+     * @param {Array<Object>} core - Comment-free token stream.
+     * @param {number} start - Index of the first token.
+     * @param {number} end - Index just past the last token.
+     * @returns {Object} {start, end}, the span inside them.
+     */
+    function unwrapParens(core, start, end) {
+        while (end - start > 2 && isPunctToken(core[start], '(') && matchParen(core, start) === end - 1) {
+            start++;
+            end--;
+        };
+        return {
+            start: start,
+            end: end
+        };
+    };
+
+    /**
+     * @function positionMinusNumber
+     * @description Reads core[span] as CHARINDEX(...) - n or PATINDEX(...) - n, n a whole number from 1, with parentheses around it, or
+     * around the call, or not: the length MCE103 looks for. A decimal, a sum and any other expression is no such length.
+     * @param {Array<Object>} core - Comment-free token stream.
+     * @param {Object} span - {start, end}, token indexes, end exclusive.
+     * @returns {?Object} {nameIdx, close, n}: the index of the CHARINDEX or PATINDEX, of the ) that closes its call, and n as a number,
+     *   or null for anything else.
+     */
+    function positionMinusNumber(core, span) {
+        var whole = unwrapParens(core, span.start, span.end);
+        var minus = core[whole.end - 2];
+        var number = core[whole.end - 1];
+        if (whole.end - whole.start < 6 || !minus || minus.type !== 'operator' || minus.value !== '-') return null;
+        if (!number || number.type !== 'number' || !/^\d+$/.test(number.value) || Number(number.value) < 1) return null;
+        var call = unwrapParens(core, whole.start, whole.end - 2);
+        var name = core[call.start];
+        if (!name || name.quote || (name.upper !== 'CHARINDEX' && name.upper !== 'PATINDEX') || !isPunctToken(core[call.start + 1], '(')) return null;
+        var close = matchParen(core, call.start + 1);
+        if (close !== call.end - 1 || !isPunctToken(core[close], ')')) return null;
+        return {
+            nameIdx: call.start,
+            close: close,
+            n: Number(number.value)
+        };
+    };
+
+    /**
+     * @function sameSearchedText
+     * @description Tells whether two token spans name the same text to search: the same tokens, or two references to one column, which
+     * agree on the table's alias where both write one (CHARINDEX('@', Email) beside s.Email LIKE '%@%' is not told apart).
+     * @param {Array<Object>} core - Comment-free token stream.
+     * @param {Object} a - {start, end}.
+     * @param {Object} b - {start, end}.
+     * @returns {boolean}
+     */
+    function sameSearchedText(core, a, b) {
+        if (divisionTokensKey(core, a.start, a.end) === divisionTokensKey(core, b.start, b.end)) return true;
+        var refA = plainColumnRef(core, a.start, a.end);
+        var refB = plainColumnRef(core, b.start, b.end);
+        if (!refA || !refB) return false;
+        var bare = function (name) { return String(name).replace(/^\[|\]$/g, '').toUpperCase(); };
+        return bare(refA.column) === bare(refB.column) && (!refA.qualifier || !refB.qualifier || bare(refA.qualifier) === bare(refB.qualifier));
+    };
+
+    /**
+     * @function searchTest
+     * @description Reads core[span] as one test of whether the text that a CHARINDEX or PATINDEX searches holds what it looks for, and
+     * says what the test proves about the position the call gives. Two forms count. (a) The same call (the same tokens) compared with a
+     * whole number: CHARINDEX('@', x) > 0, >= 1, <> 0, != 0 or = 0, and the other comparisons of POSITION_TESTS. (b) A LIKE or NOT LIKE
+     * of the same text with '%c%' for a CHARINDEX of the text c, or with the PATINDEX's own pattern: x LIKE '%@%'. A text that holds a
+     * LIKE wildcard (%, _ or [) is no match for a CHARINDEX, as LIKE reads it as a pattern. Anything else proves nothing.
+     * @param {Array<Object>} core - Comment-free token stream.
+     * @param {Object} span - {start, end}, the test.
+     * @param {Object} target - The call the length reads: {name, key, text, argCount, find}, the name CHARINDEX or PATINDEX, key its
+     *   tokens as divisionTokensKey gives them, text the {start, end} of the text it searches, argCount the number of its arguments, find
+     *   the content of its first argument when that is a text value, else null.
+     * @returns {?Object} {whenTrue, whenFalse}, or null when core[span] is no such test.
+     */
+    function searchTest(core, span, target) {
+        var first = core[span.start];
+        if (!first) return null;
+        if (!first.quote && first.upper === target.name && isPunctToken(core[span.start + 1], '(')) {
+            var close = matchParen(core, span.start + 1);
+            var op = core[close + 1];
+            var number = core[close + 2];
+            if (!isPunctToken(core[close], ')') || close + 3 !== span.end || !op || op.type !== 'operator' || !POSITION_TESTS[op.value]) return null;
+            if (!number || number.type !== 'number' || !/^\d+$/.test(number.value)) return null;
+            return divisionTokensKey(core, span.start, close + 1) === target.key ? POSITION_TESTS[op.value](Number(number.value)) : null;
+        };
+        var likeAt = -1;
+        for (var k = span.start; k < span.end && likeAt === -1; k++) {
+            if (core[k].depth === first.depth && isKw(core[k], 'LIKE')) likeAt = k;
+        };
+        if (likeAt <= span.start || likeAt + 2 !== span.end || core[likeAt + 1].type !== 'string' || target.find === null) return null;
+        var isNot = isKw(core[likeAt - 1], 'NOT');
+        var subject = {
+            start: span.start,
+            end: isNot ? likeAt - 1 : likeAt
+        };
+        if (subject.end <= subject.start || !sameSearchedText(core, subject, target.text)) return null;
+        var pattern = stringLiteralContent(core[likeAt + 1]);
+        var isMatch = target.name === 'PATINDEX' ? pattern === target.find : (target.find !== '' && !/[%_[]/.test(target.find) && pattern === '%' + target.find + '%');
+        if (!isMatch) return null;
+        return isNot ? { whenTrue: 0, whenFalse: 1 } : { whenTrue: 1, whenFalse: 0 };
+    };
+
+    /**
+     * @function searchCondition
+     * @description What a condition proves about the position of a search, from the tests (searchTest) joined by AND at its own level,
+     * and a test in parentheses on its own. When true, every test is true, so the least position is the largest one any proves. When
+     * false, one test is false at least, so it is the smallest. A condition with an OR at its own level proves nothing, and neither does
+     * one that holds no test, which keeps the detection simple: when unsure, MCE103 reports.
+     * @param {Array<Object>} core - Comment-free token stream.
+     * @param {number} start - Index of the condition's first token.
+     * @param {number} end - Index just past its last token.
+     * @param {number} depth - Paren depth of the condition's own tokens.
+     * @param {Object} target - The call, as searchTest has it.
+     * @returns {Object} {whenTrue, whenFalse}, 0 for nothing.
+     */
+    function searchCondition(core, start, end, depth, target) {
+        var none = {
+            whenTrue: 0,
+            whenFalse: 0
+        };
+        if (end <= start) return none;
+        var segs = conditionSegments(core, start, end, depth);
+        if (segs.some(function (seg) { return seg.connector === 'OR'; })) return none;
+        var proofs = segs.map(function (seg) {
+            if (seg.end - seg.start > 2 && isPunctToken(core[seg.start], '(') && matchParen(core, seg.start) === seg.end - 1) {
+                return searchCondition(core, seg.start + 1, seg.end - 1, depth + 1, target);
+            };
+            return searchTest(core, seg, target) || none;
+        });
+        return {
+            whenTrue: Math.max.apply(null, proofs.map(function (p) { return p.whenTrue; })),
+            whenFalse: Math.min.apply(null, proofs.map(function (p) { return p.whenFalse; }))
+        };
+    };
+
+    /**
+     * @function conditionalShapes
+     * @description Lists the searched CASEs that end and the IIF calls of a token stream, once, so MCE103 finds those around each call
+     * without a walk of the stream for each, and the innermost aggregate or window call around each token. SQL Server works out an
+     * aggregate before the CASE that holds it gets its value, as MAX(1/x) in a CASE that tests x = 0 still divides by zero (Microsoft's
+     * CASE page: the order of the WHEN conditions holds for scalar expressions, not for aggregates), so a CASE or an IIF guards no call
+     * inside an aggregate inside it. The argument of a window call is worked out for each row before the window too.
+     * @param {Array<Object>} core - Comment-free token stream.
+     * @returns {Object} {cases, iifs, aggregateOf}: the indexes of the CASE keywords, {at, close} for each IIF, its name and its ), and
+     *   for each token the index of the name of the innermost aggregate or window call whose parentheses hold it, or -1.
+     */
+    function conditionalShapes(core) {
+        var shapes = caseShapesOf(core);
+        var cases = [];
+        var iifs = [];
+        var aggregateOf = new Array(core.length);
+        var frames = [];
+        var around = -1;
+        for (var k = 0; k < core.length; k++) {
+            var t = core[k];
+            if (isPunctToken(t, ')') && frames.length) around = frames.pop();
+            aggregateOf[k] = around;
+            if (isPunctToken(t, '(')) {
+                frames.push(around);
+                var caller = core[k - 1];
+                if (caller && !caller.quote && (caller.type === 'identifier' || caller.type === 'keyword') && (GROUP_AGGREGATES[caller.upper] || isKw(core[matchParen(core, k) + 1], 'OVER'))) around = k - 1;
+            };
+            if (shapes[k] && shapes[k].end !== -1 && isKw(core[k + 1], 'WHEN')) {
+                cases.push(k);
+            } else if ((t.type === 'identifier' || t.type === 'keyword') && !t.quote && t.upper === 'IIF' && isPunctToken(core[k + 1], '(')) {
+                var close = matchParen(core, k + 1);
+                if (isPunctToken(core[close], ')')) {
+                    iifs.push({
+                        at: k,
+                        close: close
+                    });
+                };
+            };
+        };
+        return {
+            cases: cases,
+            iifs: iifs,
+            aggregateOf: aggregateOf
+        };
+    };
+
+    /**
+     * @function provenPosition
+     * @description The least position that the query proves for a CHARINDEX or PATINDEX at the call that reads it: the largest of what
+     * the WHERE of the call's own SELECT proves (it holds for every row the SELECT keeps), and what the condition of each CASE or IIF
+     * around the call proves for the branch the call sits in. A THEN or the true value of an IIF has its condition true. An ELSE, the false
+     * value of an IIF, a later WHEN and its THEN have the conditions before them false. The WHERE is read as a condition
+     * (searchCondition), not as the HAVING, a join's ON or a derived table's own WHERE. It guards no call inside itself or inside an ON,
+     * as SQL Server promises no order for the conditions of a WHERE and its joins (Microsoft's SELECT page, "Logical processing order of
+     * the SELECT statement", says the order it runs them in may differ), so x LIKE '%@%' AND LEFT(x, CHARINDEX('@', x) - 1) = 'a' can
+     * fail. Only a CASE promises its order. A CASE or an IIF guards no call inside an aggregate or a window call inside it
+     * (conditionalShapes).
+     * @param {Object} facts - From addedRuleFacts.
+     * @param {Object} shapes - From conditionalShapes.
+     * @param {number} callIdx - Index of the LEFT or SUBSTRING.
+     * @param {Object} target - The call, as searchTest has it.
+     * @returns {number} The position, 0 when the query proves none.
+     */
+    function provenPosition(facts, shapes, callIdx, target) {
+        var core = facts.core;
+        var proven = 0;
+        var isAround = function (span) { return !!span && callIdx >= span.start && callIdx < span.end; };
+        var scope = facts.scopeBySelect[facts.ownSelect[callIdx]];
+        if (scope && scope.where && !isAround(scope.where) && !scope.ons.some(isAround)) {
+            proven = searchCondition(core, scope.where.start, scope.where.end, scope.depth, target).whenTrue;
+        };
+        var aggregate = shapes.aggregateOf[callIdx];
+        var caseShapes = caseShapesOf(core);
+        shapes.cases.forEach(function (k) {
+            var shape = caseShapes[k];
+            if (k > callIdx || shape.end < callIdx || aggregate > k) return;
+            var conditions = [];
+            var results = [];
+            var elseSpan = null;
+            shape.marks.forEach(function (mark, m) {
+                var next = m + 1 < shape.marks.length ? shape.marks[m + 1] : shape.end;
+                var word = core[mark].upper;
+                var span = {
+                    start: mark + 1,
+                    end: word === 'ELSE' ? shape.end : next
+                };
+                if (word === 'WHEN') conditions.push(span);
+                else if (word === 'THEN') results.push(span);
+                else if (word === 'ELSE') elseSpan = span;
+            });
+            var falseBefore = 0;
+            for (var j = 0; j < conditions.length && j < results.length; j++) {
+                /* A WHEN is tested only once the ones before it are false, as its THEN is. */
+                if (isAround(conditions[j])) proven = Math.max(proven, falseBefore);
+                var proof = searchCondition(core, conditions[j].start, conditions[j].end, shape.depth, target);
+                if (isAround(results[j])) proven = Math.max(proven, proof.whenTrue, falseBefore);
+                falseBefore = Math.max(falseBefore, proof.whenFalse);
+            };
+            if (isAround(elseSpan)) proven = Math.max(proven, falseBefore);
+        });
+        shapes.iifs.forEach(function (iif) {
+            if (iif.at > callIdx || iif.close < callIdx || aggregate > iif.at) return;
+            var args = addedArguments(core, iif.at, iif.close);
+            if (args.length !== 3) return;
+            var proof = searchCondition(core, args[0].start, args[0].end, core[iif.at + 1].depth + 1, target);
+            if (isAround(args[1])) proven = Math.max(proven, proof.whenTrue);
+            if (isAround(args[2])) proven = Math.max(proven, proof.whenFalse);
+        });
+        return proven;
+    };
+
+    /**
+     * @function isPaddedSearch
+     * @description Tells whether a CHARINDEX searches a text that has its own search text added to its end, CHARINDEX('@', x + '@'),
+     * the usual way to find the end of a text that may lack the character: the call gives a position from 1, never 0. A third
+     * argument, where the search starts, is no such call: past the end of the text it gives 0.
+     * @param {Array<Object>} core - Comment-free token stream.
+     * @param {Object} target - The call, as searchTest has it.
+     * @returns {boolean}
+     */
+    function isPaddedSearch(core, target) {
+        if (target.name !== 'CHARINDEX' || target.argCount !== 2 || target.find === null || target.find === '') return false;
+        var end = target.text.end;
+        var last = core[end - 1];
+        var plus = core[end - 2];
+        return end - target.text.start >= 3 && last.type === 'string' && stringLiteralContent(last).toLowerCase() === target.find.toLowerCase() &&
+            plus.type === 'operator' && plus.value === '+' && plus.depth === core[target.text.start].depth;
+    };
+
+    /**
+     * @function rule103
+     * @description MCE103: reports, as a warning, a LEFT or RIGHT length (its second argument) or a SUBSTRING length (its third) that is
+     * CHARINDEX(...) - n or PATINDEX(...) - n, n a whole number from 1. A value without the character gives 0 there, so the length is
+     * negative, and SQL Server refuses it with "Invalid length parameter passed to the LEFT or SUBSTRING function", which MCE does not
+     * show: LEFT(SubscriberKey, CHARINDEX('@', SubscriberKey) - 1) on keys without an @ passed Validate and the save, and the run failed
+     * with status FatalError and no reason (the article session's org test S03, 2026-10-20). It is a warning, as it fails only when a row
+     * lacks the character. The message says what the run does and the fix, and leaves SQL Server's text, which MCE never shows, to the
+     * docs. No finding where the query guards the call, in three ways: (1) the call sits in the THEN of a CASE WHEN, or the true value
+     * of an IIF, whose condition tests the same CHARINDEX or PATINDEX (> 0, >= 1, <> 0) or a LIKE '%c%' of the same text, or in the ELSE
+     * (or the false value), or a later WHEN, of one whose condition says the character is missing (= 0, < 1, NOT LIKE); (2) the WHERE of
+     * the call's own SELECT has such a test among the conditions joined by AND, for a call outside that WHERE and the joins' ON; (3) the
+     * text searched has the search text added to its end, CHARINDEX('@', x + '@'). A test counts when it proves a position of n or more
+     * (provenPosition), so for - 2 a test of > 0 does not guard a character in the first place. A condition with an OR, a test in another
+     * SELECT or a derived table, a CASE around an aggregate that holds the call, or a test of another shape is not read, and the call is
+     * reported. The fix wraps the CHARINDEX in NULLIF(..., 0), which gives LEFT and SUBSTRING a NULL length and so a NULL for that row:
+     * safe, as it changes no result the query could produce (a row without the character failed the run), and in Fix all. For n above 1
+     * a character before position n still gives a negative length, which the message says.
+     * @param {string} sql - Full SQL source text, for the layout of the fix.
+     * @param {Array<Object>} tokens - Full token stream (unused: the rule reads the comment-free stream).
+     * @param {Object} ctx - Shared per-lint-call context, used for ctx.getCoreTokens(), ctx.getStrict(), ctx.isFormatLaidOut() and
+     *   addedRuleFacts.
+     * @returns {Array<Array>} Raw finding tuples, one per call.
+     */
+    function rule103(sql, tokens, ctx) {
+        var findings = [];
+        var core = ctx.getCoreTokens();
+        var facts = null;
+        var shapes = null;
+        for (var i = 0; i < core.length; i++) {
+            var spec = core[i].quote ? null : NEGATIVE_LENGTH_CALLS[core[i].upper];
+            if (!spec) continue;
+            var close = addedCallClose(core, i, CALL_CHECK_KEYWORDS);
+            if (close === -1 || isCallUnread(ctx, core, close)) continue;
+            var args = addedArguments(core, i, close);
+            if (args.length !== spec.count) continue;
+            var lengthSpan = args[spec.at];
+            var read = positionMinusNumber(core, lengthSpan);
+            if (!read) continue;
+            var searchArgs = addedArguments(core, read.nameIdx, read.close);
+            if (searchArgs.length < 2) continue;
+            var target = {
+                name: core[read.nameIdx].upper,
+                key: divisionTokensKey(core, read.nameIdx, read.close + 1),
+                text: searchArgs[1],
+                argCount: searchArgs.length,
+                find: searchArgs[0].end === searchArgs[0].start + 1 && core[searchArgs[0].start].type === 'string' ? stringLiteralContent(core[searchArgs[0].start]) : null
+            };
+            if (read.n === 1 && isPaddedSearch(core, target)) continue;
+            facts = facts || addedRuleFacts(ctx);
+            shapes = shapes || conditionalShapes(core);
+            if (provenPosition(facts, shapes, i, target) >= read.n) continue;
+            var isIndex = target.name === 'CHARINDEX';
+            var lacks = isIndex ? 'the character' : 'a match';
+            var message = 'A value without ' + lacks + ' makes this length -' + read.n + ', which fails the whole run with no reason given. NULLIF(' +
+                target.name + '(...), 0) - ' + read.n + ' returns NULL for that row instead.' +
+                (read.n > 1 ? ' A match before position ' + read.n + ' still fails, as NULLIF only handles 0.' : '');
+            var callStart = core[read.nameIdx].start;
+            var callEnd = core[read.close].end;
+            findings.push(['MCE103', 'warning', message, DOCS.ERR_SYSTEM, core[lengthSpan.start], core[lengthSpan.end - 1],
+                [{
+                    title: isIndex ? 'Return NULL where the character is missing' : 'Return NULL where there is no match',
+                    edits: formatLaidOutEdits(sql, [
+                        { start: callStart, end: callStart, text: 'NULLIF(' },
+                        { start: callEnd, end: callEnd, text: ', 0)' }
+                    ], ctx),
+                    isSafe: true,
+                    isInFixAll: true
+                }]]);
+        };
+        return findings;
+    };
+
+    // ------------------------------------------------------------------
+    // MCE104: a key of the target that the query can return more than once.
+    // ------------------------------------------------------------------
+
+    /* The fields of the Data Views that hold one value in each row of the view, for the proof that a table or a join does not repeat a
+     * row (isRowFixed). [Likely] from Marketing Cloud Engagement's documentation of the Data Views, and not an org test: _Subscribers has
+     * one row for each subscriber, with SubscriberKey and SubscriberID each unique, and _Job one for each send, with JobID unique. */
+    var DATA_VIEW_UNIQUE_FIELDS = {
+        _subscribers: ['subscriberkey', 'subscriberid'],
+        _job: ['jobid']
+    };
+
+    /* A comparison with the number first, 1 >= x, as it reads with the number last, x <= 1. */
+    var FLIPPED_COMPARISONS = {
+        '=': '=',
+        '>=': '<=',
+        '>': '<'
+    };
+
+    /**
+     * @function resolveTargetTable
+     * @description Finds the schema table of the Query Activity's target Data Extension, as MCE050 and MCE104 read it: by the target's key
+     * (ctx.targetKey), a Business Unit's own table before a parent's shared one of the same key, else by its name. The key is
+     * a CustomerKey, which names one Data Extension of a Business Unit. A Data View is never a target.
+     * @param {Object} ctx - Shared per-lint-call context; used for ctx.targetKey, ctx.targetName and ctx.schema.
+     * @returns {?Object} The schema table, or null when the schema holds none for the target, as before the Data Extension list loads.
+     */
+    function resolveTargetTable(ctx) {
+        var tables = ctx.schema && Array.isArray(ctx.schema.tables) ? ctx.schema.tables : [];
+        var lower = function (text) { return String(text).toLowerCase(); };
+        var byKey = ctx.targetKey ? tables.filter(function (t) { return !!t && t.kind !== 'dataview' && !!t.key && lower(t.key) === lower(ctx.targetKey); }) : [];
+        byKey.sort(function (a, b) { return (a.isShared ? 1 : 0) - (b.isShared ? 1 : 0); });
+        if (byKey[0]) return byKey[0];
+        var named = ensureIndex(ctx.schema)[lower(ctx.targetName || ctx.targetKey)];
+        return named && named.kind !== 'dataview' ? named : null;
+    };
+
+    /**
+     * @function bindTopColumn
+     * @description Binds a column of a SELECT to the one FROM entry it reads: a qualifier names an entry by its alias, or its name without
+     * Ent. or brackets, and a bare name is the one entry of a single-entry FROM, else the one entry whose fields are all known and that has
+     * the column. A column that two entries have, or that an entry of unknown fields may have, binds to none.
+     * @param {Object} ctx - Shared per-lint-call context.
+     * @param {Object} scope - A SELECT of collectSelectScopes, or {from} of one.
+     * @param {?string} qualifier - The qualifier as written, or null.
+     * @param {string} column - The column's name.
+     * @returns {?Object} The FROM entry, or null.
+     */
+    function bindTopColumn(ctx, scope, qualifier, column) {
+        var entries = tableEntriesOf(ctx.getCoreTokens(), scope.from);
+        var clean = function (text) { return String(text).replace(/^\[|\]$/g, ''); };
+        if (qualifier) {
+            var upper = clean(qualifier).toUpperCase();
+            return entries.filter(function (f) { return clean(entryReference(f)).toUpperCase() === upper; })[0] || null;
+        };
+        if (entries.length === 1) return entries[0];
+        var lower = clean(column).toLowerCase();
+        var byName = ensureIndex(ctx.schema);
+        var owners = [];
+        var isAllKnown = entries.every(function (f) {
+            var table = fieldCheckTable(byName, f);
+            if (!table || !Array.isArray(table.fields) || hasOpenFieldList(table)) return false;
+            if (table.fields.some(function (x) { return !!x && !!x.name && x.name.toLowerCase() === lower; })) owners.push(f);
+            return true;
+        });
+        return isAllKnown && owners.length === 1 ? owners[0] : null;
+    };
+
+    /**
+     * @function expressionKeyOf
+     * @description The key two expressions of one SELECT share when they are the same: a plain column by the FROM entry it binds to and
+     * its name (so s.SubscriberKey and SubscriberKey are one in a SELECT of one table, and a.Id and b.Id are two), anything else by its
+     * tokens in lower case. Two expressions with one key are one value in every row.
+     * @param {Object} ctx - Shared per-lint-call context.
+     * @param {Object} scope - A SELECT of collectSelectScopes, or {from} of one.
+     * @param {Array<Object>} tokens - The expression's tokens.
+     * @returns {string} The key.
+     */
+    function expressionKeyOf(ctx, scope, tokens) {
+        var ref = tokens.length ? plainColumnRef(tokens, 0, tokens.length) : null;
+        if (ref) {
+            var column = String(ref.column).replace(/^\[|\]$/g, '').toLowerCase();
+            var entry = bindTopColumn(ctx, scope, ref.qualifier, ref.column);
+            return entry ? 'c:' + entry.start + ':' + column : 'u:' + (ref.qualifier ? String(ref.qualifier).replace(/^\[|\]$/g, '').toLowerCase() + '.' : '') + column;
+        };
+        return 'x:' + tokens.map(function (t) { return String(t.value).toLowerCase(); }).join(' ');
+    };
+
+    /**
+     * @function outputColumnsOf
+     * @description The output columns of a SELECT, one for each name it gives, with a star over known columns written out: {name, item,
+     * entry, column}, entry and column for a star's column, which is a plain reference to that field of the entry the star reads. A star
+     * whose columns are not known is one output with no name.
+     * @param {Object} ctx - Shared per-lint-call context.
+     * @param {Object} scope - A SELECT of collectSelectScopes.
+     * @returns {Array<Object>} The outputs.
+     */
+    function outputColumnsOf(ctx, scope) {
+        var outputs = [];
+        scope.selectList.items.forEach(function (item) {
+            if (item.kind === 'empty') return;
+            if (item.kind !== 'star') {
+                outputs.push({
+                    name: item.name || null,
+                    item: item
+                });
+                return;
+            };
+            if (!item._resolvedColumns) {
+                outputs.push({
+                    name: null,
+                    item: item
+                });
+                return;
+            };
+            var entries = tableEntriesOf(ctx.getCoreTokens(), scope.from);
+            var starEntry = null;
+            if (item.starTable) {
+                var wanted = String(item.starTable).replace(/^\[|\]$/g, '').toUpperCase();
+                starEntry = entries.filter(function (f) { return String(entryReference(f)).replace(/^\[|\]$/g, '').toUpperCase() === wanted; })[0] || null;
+            } else if (entries.length === 1) {
+                starEntry = entries[0];
+            };
+            item._resolvedColumns.forEach(function (name) {
+                outputs.push({
+                    name: typeof name === 'string' ? name : null,
+                    item: item,
+                    entry: starEntry,
+                    column: name
+                });
+            });
+        });
+        return outputs;
+    };
+
+    /**
+     * @function outputKeyOf
+     * @description The key (expressionKeyOf) of the expression behind an output column, or null for one with no expression.
+     * @param {Object} ctx - Shared per-lint-call context.
+     * @param {Object} scope - A SELECT of collectSelectScopes.
+     * @param {Object} output - From outputColumnsOf.
+     * @returns {?string}
+     */
+    function outputKeyOf(ctx, scope, output) {
+        if (output.item.kind === 'star') {
+            if (typeof output.column !== 'string') return null;
+            return output.entry ? 'c:' + output.entry.start + ':' + output.column.toLowerCase() : 'u:' + output.column.toLowerCase();
+        };
+        var core = ctx.getCoreTokens();
+        var span = selectItemExpression(core, output.item);
+        return span && span.to > span.from ? expressionKeyOf(ctx, scope, core.slice(span.from, span.to)) : null;
+    };
+
+    /**
+     * @function outputFieldOf
+     * @description The FROM entry and field an output column passes through as a plain reference, as a column of a star does.
+     * @param {Object} ctx - Shared per-lint-call context.
+     * @param {Object} scope - A SELECT of collectSelectScopes.
+     * @param {Object} output - From outputColumnsOf.
+     * @returns {?{entry: Object, field: string}} The entry and the field's lower-case name, or null for an expression or an unbound column.
+     */
+    function outputFieldOf(ctx, scope, output) {
+        var item = output.item;
+        var clean = function (text) { return String(text).replace(/^\[|\]$/g, '').toLowerCase(); };
+        if (item.kind === 'star') return output.entry && typeof output.column === 'string' ? { entry: output.entry, field: clean(output.column) } : null;
+        if (!item.sourceColumn) return null;
+        var entry = bindTopColumn(ctx, scope, item.sourceTable || null, item.sourceColumn);
+        return entry ? { entry: entry, field: clean(item.sourceColumn) } : null;
+    };
+
+    /**
+     * @function isRowFixed
+     * @description Tells whether fields of a table, all matched by equality in a row, name at most one row of it: they hold every field
+     * of a Data Extension's primary key, or one field that a Data View holds once in a row (DATA_VIEW_UNIQUE_FIELDS). The Document diagram
+     * reads a key the same way for the marks on a join's line (diagramIsOne), and has none for a Data View.
+     * @param {Object} rec - A table record of analyzeQueryForDiagram.
+     * @param {Object} fields - The lower-case names of the fields, as keys.
+     * @returns {boolean}
+     */
+    function isRowFixed(rec, fields) {
+        if (diagramIsOne(rec, fields)) return true;
+        if (!rec.table || rec.table.kind !== 'dataview') return false;
+        var unique = DATA_VIEW_UNIQUE_FIELDS[String(rec.table.name).toLowerCase()] || [];
+        return unique.some(function (name) { return fields[name] === true; });
+    };
+
+    /**
+     * @function isTopOne
+     * @description Tells whether a SELECT is a TOP 1 (or TOP (1)), with no PERCENT and no WITH TIES: it returns one row at most.
+     * @param {Object} ctx - Shared per-lint-call context.
+     * @param {Object} scope - A SELECT of collectSelectScopes.
+     * @returns {boolean}
+     */
+    function isTopOne(ctx, scope) {
+        var top = scope.clauses.top;
+        if (!top || top.percent || top.withTies || top.isUnfinished) return false;
+        var core = ctx.getCoreTokens();
+        var tokens = core.slice(tokenIndexAtOrAfter(core, top.start), tokenIndexAtOrAfter(core, top.end));
+        var numbers = tokens.filter(function (t) { return t.type === 'number'; });
+        var others = tokens.filter(function (t) { return t.type !== 'number' && !isPunctToken(t, '(') && !isPunctToken(t, ')'); });
+        return others.length === 1 && isKw(others[0], 'TOP') && numbers.length === 1 && Number(numbers[0].value) === 1;
+    };
+
+    /**
+     * @function isOneRowQuery
+     * @description Tells whether a SELECT returns one row at most, whatever its tables hold: it reads no table, as SELECT 'a' AS Key, or it
+     * is one group of all its rows, with an aggregate that has no OVER in its select list or HAVING and no GROUP BY (groupingOf), as
+     * SELECT CAST(GETDATE() AS DATE) AS ReportDate, COUNT(*) AS Total FROM _Subscribers (the review of round 3, 2026-10-21: MCE104 reported
+     * both).
+     * @param {Object} ctx - Shared per-lint-call context.
+     * @param {Object} scope - The query's SELECT.
+     * @returns {boolean}
+     */
+    function isOneRowQuery(ctx, scope) {
+        var core = ctx.getCoreTokens();
+        if (!tableEntriesOf(core, scope.from).length) return true;
+        if (scope.clauses.groupBy) return false;
+        var reading = ctx.getScopeReadings().bySelect[scope.selectIdx];
+        return !!reading && groupingOf(core, reading, knownColumnsOf(ctx)).isGrouped;
+    };
+
+    /**
+     * @function groupByExpressionsOf
+     * @description The expressions of a SELECT's GROUP BY, for MCE104's proofs: null for a SELECT with no GROUP BY, and false for one
+     * that cannot be read or holds GROUPING SETS, ROLLUP or CUBE. Those add rows of NULLs beside the rows of each group, so ROLLUP (Key,
+     * Status) gives a key once with its Status and once with NULL, and no proof of MCE104 holds under them.
+     * @param {Object} ctx - Shared per-lint-call context.
+     * @param {Object} scope - A SELECT of collectSelectScopes.
+     * @returns {Array<Array<Object>>|null|boolean} The token list of each expression, null or false.
+     */
+    function groupByExpressionsOf(ctx, scope) {
+        var group = scope.clauses.groupBy;
+        if (!group) return null;
+        var core = ctx.getCoreTokens();
+        var tokens = core.slice(tokenIndexAtOrAfter(core, group.start) + 2, tokenIndexAtOrAfter(core, group.end));
+        if (!tokens.length || tokens.some(function (t) { return t.type !== 'string' && ['ROLLUP', 'CUBE', 'GROUPING'].indexOf(t.upper) !== -1; })) return false;
+        var expressions = splitTopLevelCommas(tokens);
+        return expressions.every(function (expression) { return expression.length > 0; }) ? expressions : false;
+    };
+
+    /**
+     * @function groupByProvesKey
+     * @description MCE104's GROUP BY proof: every expression of the GROUP BY is among the expressions of the key output columns, so a
+     * row is one group and the key columns, which hold every grouped expression, tell the groups apart. GROUPING SETS, ROLLUP and CUBE add
+     * rows of NULLs and prove nothing (groupByExpressionsOf).
+     * @param {Object} ctx - Shared per-lint-call context.
+     * @param {Object} scope - The query's SELECT.
+     * @param {Object<string, boolean>} keyKeys - The expression keys of the key output columns, as keys.
+     * @returns {boolean}
+     */
+    function groupByProvesKey(ctx, scope, keyKeys) {
+        var expressions = groupByExpressionsOf(ctx, scope);
+        return !!expressions && expressions.every(function (expression) { return keyKeys[expressionKeyOf(ctx, scope, expression)] === true; });
+    };
+
+    /**
+     * @function rowNumberTestsOf
+     * @description Reads the top-level conditions of a WHERE, joined by AND, for one that keeps the first row of a numbering: a column
+     * equal to 1, at most 1 or less than 2, with the number on either side. A WHERE with an OR at its top level proves nothing.
+     * @param {Object} ctx - Shared per-lint-call context.
+     * @param {Object} scope - A SELECT of collectSelectScopes.
+     * @returns {Array<Object>} The columns so limited, as {qualifier, column}.
+     */
+    function rowNumberTestsOf(ctx, scope) {
+        if (!scope.where) return [];
+        var core = ctx.getCoreTokens();
+        var tokens = core.slice(scope.where.start, scope.where.end);
+        var conditions = [[]];
+        var depth = 0;
+        for (var i = 0; i < tokens.length; i++) {
+            var t = tokens[i];
+            if (isPunctToken(t, '(')) depth++;
+            else if (isPunctToken(t, ')')) depth--;
+            if (depth === 0 && isKw(t, 'OR')) return [];
+            if (depth === 0 && isKw(t, 'AND')) {
+                conditions.push([]);
+                continue;
+            };
+            conditions[conditions.length - 1].push(t);
+        };
+        var found = [];
+        conditions.forEach(function (c) {
+            if (c.length < 3) return;
+            var isNumberFirst = c[0].type === 'number';
+            var number = isNumberFirst ? c[0] : c[c.length - 1];
+            var operator = isNumberFirst ? c[1] : c[c.length - 2];
+            var ref = isNumberFirst ? plainColumnRef(c, 2, c.length) : plainColumnRef(c, 0, c.length - 2);
+            if (number.type !== 'number' || !ref || operator.type !== 'operator') return;
+            var limit = Number(number.value);
+            var op = operator.value;
+            if (isNumberFirst) op = FLIPPED_COMPARISONS[op];
+            var isFirstOnly = (op === '=' && limit === 1) || (op === '<=' && limit === 1) || (op === '<' && limit === 2);
+            if (isFirstOnly) found.push(ref);
+        });
+        return found;
+    };
+
+    /**
+     * @function rowNumberProvesKey
+     * @description MCE104's ROW_NUMBER proof: the query reads one derived table or CTE, whose SELECT numbers its rows with ROW_NUMBER() OVER
+     * (PARTITION BY p ...), and its WHERE keeps the number 1. A partition holds one row with the number 1, so the rows are one for each
+     * value of p, and the query is safe when each p is a column of the derived table that the key output columns read as plain
+     * references. A numbering with no PARTITION BY has one row with the number 1. The derived table's SELECT must hold no UNION, EXCEPT or
+     * INTERSECT and no star, so a column is the one its position says.
+     * @param {Object} ctx - Shared per-lint-call context.
+     * @param {Object} scope - The query's SELECT.
+     * @param {Array<Object>} keyOutputs - The outputs of outputColumnsOf named as the target's key fields.
+     * @returns {boolean}
+     */
+    function rowNumberProvesKey(ctx, scope, keyOutputs) {
+        var entries = tableEntriesOf(ctx.getCoreTokens(), scope.from);
+        if (entries.length !== 1) return false;
+        var entry = entries[0];
+        var parsed = ctx.getParsed();
+        var cte = diagramCteOf({ ctes: parsed && parsed._ctx && parsed._ctx.ctes ? parsed._ctx.ctes : {} }, entry);
+        var inner = entry.kind === 'derived' ? entry.inner : (cte ? cte.inner : null);
+        if (!inner || inner.noSelect || (inner.clauses.union || []).length > 1) return false;
+        var items = inner.selectList.items;
+        if (!items.length || items.some(function (item) { return item.kind === 'star' || item.kind === 'empty'; })) return false;
+        var core = ctx.getCoreTokens();
+        var reference = String(entryReference(entry)).replace(/^\[|\]$/g, '').toUpperCase();
+        var numbered = null;
+        rowNumberTestsOf(ctx, scope).forEach(function (ref) {
+            if (numbered) return;
+            if (ref.qualifier && String(ref.qualifier).replace(/^\[|\]$/g, '').toUpperCase() !== reference) return;
+            var wanted = String(ref.column).replace(/^\[|\]$/g, '').toLowerCase();
+            numbered = items.filter(function (item) { return item.kind === 'alias' && String(item.name).toLowerCase() === wanted; })[0] || null;
+        });
+        if (!numbered) return false;
+        var over = aliasItemExpressionTokens(numbered);
+        if (over.length < 6 || over[0].upper !== 'ROW_NUMBER' || !isPunctToken(over[1], '(') || !isPunctToken(over[2], ')') || !isKw(over[3], 'OVER') ||
+            !isPunctToken(over[4], '(') || matchParen(over, 4) !== over.length - 1) return false;
+        var inside = over.slice(5, over.length - 1);
+        if (!isKw(inside[0], 'PARTITION')) return !inside.length || isKw(inside[0], 'ORDER');
+        if (!isKw(inside[1], 'BY')) return false;
+        var orderAt = inside.length;
+        var depth = 0;
+        for (var k = 2; k < inside.length; k++) {
+            if (isPunctToken(inside[k], '(')) depth++;
+            else if (isPunctToken(inside[k], ')')) depth--;
+            else if (depth === 0 && isKw(inside[k], 'ORDER')) {
+                orderAt = k;
+                break;
+            };
+        };
+        var partitions = splitTopLevelCommas(inside.slice(2, orderAt));
+        var innerScope = { from: inner.from };
+        /* The derived table's columns by the key of the expression behind each, and the key output columns that read one of them. */
+        var innerKeys = {};
+        items.forEach(function (item) {
+            if (item === numbered || !item.name) return;
+            var span = selectItemExpression(core, item);
+            if (span && span.to > span.from) innerKeys[expressionKeyOf(ctx, innerScope, core.slice(span.from, span.to))] = String(item.name).toLowerCase();
+        });
+        var readColumns = {};
+        keyOutputs.forEach(function (output) {
+            if (output.item.kind === 'star') return;
+            if (!output.item.sourceColumn) return;
+            var qualifier = output.item.sourceTable;
+            if (qualifier && String(qualifier).replace(/^\[|\]$/g, '').toUpperCase() !== reference) return;
+            readColumns[String(output.item.sourceColumn).replace(/^\[|\]$/g, '').toLowerCase()] = true;
+        });
+        return partitions.every(function (p) {
+            if (!p.length) return false;
+            var name = innerKeys[expressionKeyOf(ctx, innerScope, p)];
+            return !!name && readColumns[name] === true;
+        });
+    };
+
+    /**
+     * @function tableJoinsProveKey
+     * @description MCE104's table proof: the query reads Data Extensions and Data Views only, and one of them (the base) has all its own
+     * key fields among the key output columns as plain references (isRowFixed: a Data Extension's primary key, or a Data View's one unique
+     * field), so a row of the base is at most one row of the result and the key columns tell the base's rows apart. Every other table is
+     * joined by an inner or left join, a comma or a CROSS JOIN, and matched on its whole key by equality with columns of the base or of a
+     * table already settled (the pairs the Document diagram reads for a join's line, diagramCollectJoins, the ones a condition needs:
+     * none under an OR or a NOT), so it adds no row. The base is the first table, or, when every join is an inner one, any. A RIGHT or FULL
+     * join, a derived table, a CTE, a function and an APPLY are not read. An equality in the ON of another join counts too, as the diagram
+     * counts it, which can only leave a warning out. A table that can repeat the rows is let through where the query makes them one row
+     * again by what the base fixes (the review of round 3, 2026-10-21, as SELECT DISTINCT s.SubscriberKey, s.EmailAddress FROM
+     * _Subscribers AS s INNER JOIN _Sent AS e ON e.SubscriberKey = s.SubscriberKey got MCE104): a SELECT DISTINCT whose every other output
+     * column is a plain reference to a settled table or a constant, or a GROUP BY whose every expression is a key output column's or a
+     * plain reference to a settled table. The key columns then fix the base's row, the settled tables' rows and so every other output
+     * column, or every grouped expression.
+     * @param {Object} ctx - Shared per-lint-call context.
+     * @param {string} sql - The statement's text.
+     * @param {Object} scope - The query's SELECT.
+     * @param {Array<Object>} keyOutputs - The outputs of outputColumnsOf named as the target's key fields.
+     * @param {Object<string, boolean>} keyKeys - The expression keys of the key output columns, as keys (outputKeyOf).
+     * @returns {boolean}
+     */
+    function tableJoinsProveKey(ctx, sql, scope, keyOutputs, keyKeys) {
+        var model = analyzeQueryForDiagram(sql, ctx.schema);
+        if (model.error || !model.topScope || model.topScope.selectList.start !== scope.selectList.start) return false;
+        var top = model.topScope;
+        var entries = tableEntriesOf(model.core, top.from);
+        if (!entries.length || entries.some(function (f) { return !diagramRecordOf(model, f); })) return false;
+        var kinds = entries.map(function (f, i) { return i === 0 ? 'inner' : joinKindOf(model.core, f); });
+        if (kinds.some(function (k) { return k !== 'inner' && k !== 'left'; })) return false;
+        var candidates = kinds.every(function (k) { return k === 'inner'; }) ? entries : [entries[0]];
+        var prefix = top.selectIdx + ':';
+        var groups = Object.keys(model.joinGroups).filter(function (key) { return key.indexOf(prefix) === 0; }).map(function (key) { return model.joinGroups[key]; });
+        var keyFields = {};
+        keyOutputs.forEach(function (output) {
+            var read = outputFieldOf(ctx, scope, output);
+            if (!read) return;
+            var slot = 'e' + read.entry.start;
+            (keyFields[slot] = keyFields[slot] || {})[read.field] = true;
+        });
+        var core = ctx.getCoreTokens();
+        var keyNames = {};
+        keyOutputs.forEach(function (output) { keyNames[output.name.toLowerCase()] = true; });
+        var otherOutputs = outputColumnsOf(ctx, scope).filter(function (output) { return output.name === null || keyNames[output.name.toLowerCase()] !== true; });
+        var groupBy = groupByExpressionsOf(ctx, scope);
+        /* A constant output column is one value in every row, as 'yes' AS Flag. */
+        var isConstantOutput = function (output) {
+            if (output.item.kind === 'star') return false;
+            var span = selectItemExpression(core, output.item);
+            var tokens = span ? core.slice(span.from, span.to) : [];
+            return tokens.length === 1 && (tokens[0].type === 'string' || tokens[0].type === 'number' || isKw(tokens[0], 'NULL'));
+        };
+        return candidates.some(function (base) {
+            var settled = {};
+            settled['e' + base.start] = true;
+            if (!isRowFixed(diagramRecordOf(model, base), keyFields['e' + base.start] || {})) return false;
+            var isChanged = true;
+            while (isChanged) {
+                isChanged = false;
+                entries.forEach(function (f) {
+                    var slot = 'e' + f.start;
+                    if (settled[slot]) return;
+                    var fields = {};
+                    groups.forEach(function (group) {
+                        var slots = Object.keys(group.fields);
+                        if (slots.indexOf(slot) === -1) return;
+                        var other = slots[0] === slot ? slots[1] : slots[0];
+                        if (!settled[other]) return;
+                        Object.keys(group.fields[slot]).forEach(function (name) { fields[name] = true; });
+                    });
+                    if (isRowFixed(diagramRecordOf(model, f), fields)) {
+                        settled[slot] = true;
+                        isChanged = true;
+                    };
+                });
+            };
+            if (entries.every(function (f) { return settled['e' + f.start] === true; })) return true;
+            var isSettledRead = function (read) { return !!read && settled['e' + read.entry.start] === true; };
+            if (scope.clauses.distinct === true) {
+                return otherOutputs.every(function (output) { return output.name !== null && (isSettledRead(outputFieldOf(ctx, scope, output)) || isConstantOutput(output)); });
+            };
+            if (!groupBy) return false;
+            return groupBy.every(function (expression) {
+                if (keyKeys[expressionKeyOf(ctx, scope, expression)] === true) return true;
+                var ref = plainColumnRef(expression, 0, expression.length);
+                var entry = ref ? bindTopColumn(ctx, scope, ref.qualifier, ref.column) : null;
+                return !!entry && settled['e' + entry.start] === true;
+            });
+        });
+    };
+
+    /**
+     * @function repeatedKeyMessage
+     * @description MCE104's message for the target's data action: what the run does with a key that the result holds twice (round 3 org
+     * tests G08 to G10, 2026-10-21, fact 6.21). Append fails the whole run on it, even into an empty target, and writes nothing. Update fails
+     * on a repeated key the target lacks, and of a repeated key the target holds it keeps the first row. Overwrite keeps one row for the
+     * key, the last in the source's read order, and gives no error, and nothing in the query picks that row. With no action known, all
+     * three are said, shorter.
+     * @param {?string} action - The lower-case data action, or '' when it is not known.
+     * @param {string} name - The target's name.
+     * @returns {string}
+     */
+    function repeatedKeyMessage(action, name) {
+        var head = 'The query can return a key of ' + name + ' more than once. ';
+        var keep = 'Keep one row per key, for example with ROW_NUMBER() OVER (PARTITION BY key ORDER BY ...) = 1 in a subquery.';
+        if (action === 'append') return head + 'Append fails the whole run on a repeated key, even into an empty target, and writes nothing. ' + keep;
+        if (action === 'update') return head + 'Update fails on a repeated key the target lacks, and keeps the first row of one it holds. ' + keep;
+        if (action === 'overwrite') return head + 'Overwrite keeps the last row it reads of each key, and nothing in the query picks it. ' + keep;
+        return head + 'Append fails the whole run on a repeated key, even into an empty target, and so does Update on one the target lacks. Overwrite keeps the last row it reads of each key. ' + keep;
+    };
+
+    /**
+     * @function rule104
+     * @description MCE104: reports a key of the target Data Extension that the query can return more than once, where the Query Activity
+     * has a target with a primary key and the output gives every key field by name, without regard to case. Marketing Cloud Engagement
+     * (the author's org, round 3 org tests G08 to G10, 2026-10-21): an Append whose result held one key twice failed the run even into an
+     * empty target and wrote nothing ("Violation of PRIMARY KEY constraint ..."), an Update failed the same way on a repeated key the
+     * target lacks and on keys it held completed with the first row of each, and an Overwrite kept one row for each key, the last in the
+     * source's read order, with no error. It is a warning for Append and Update, as the run fails, and an info for Overwrite and for an
+     * action that is not known, as an Overwrite runs. No finding where the query returns each key once, provably: (1) a TOP 1; (2) a
+     * SELECT DISTINCT whose every output column is a key column; (3) a query of one row, which reads no table or aggregates all its rows
+     * with no GROUP BY (isOneRowQuery); (4) a GROUP BY whose every expression is among the key output columns; (5) one derived table or
+     * CTE that numbers its rows with ROW_NUMBER() OVER (PARTITION BY p ...), a WHERE that keeps the number 1, and each p read as a key
+     * output column (rowNumberProvesKey); (6) one table whose own key fields are all key output columns as plain references, with only
+     * joins that cannot repeat its rows, or a DISTINCT or GROUP BY that makes them one again (tableJoinsProveKey). Under GROUPING SETS,
+     * ROLLUP or CUBE only (1) and (2) hold. Anything else is reported: a UNION, an unproven join, a table whose key is not known. Run
+     * writes into a temporary Data Extension with no key, so the lint of a Run (options.writesToTemporary)
+     * reports nothing. There is no fix: the lint cannot pick the row. The message is a warning or an info, so it never stops a Run or a
+     * save (saveBlockingFindings keeps errors).
+     * @param {string} sql - Full SQL source text.
+     * @param {Array<Object>} tokens - Full token stream (unused: the rule reads the comment-free stream).
+     * @param {Object} ctx - Shared per-lint-call context; used for ctx.targetKey, ctx.targetName, ctx.targetAction, ctx.schema, ctx.options, ctx.getParsed(), ctx.getStrict(), ctx.getSelectScopes() and ctx.getCoreTokens().
+     * @returns {Array<Array>} Raw finding tuples, one per query.
+     */
+    function rule104(sql, tokens, ctx) {
+        var findings = [];
+        if (!ctx.targetKey && !ctx.targetName) return findings;
+        if (ctx.options && ctx.options.writesToTemporary) return findings;
+        var target = resolveTargetTable(ctx);
+        var keyFields = target && Array.isArray(target.fields) ? target.fields.filter(function (f) { return !!f && f.isPrimaryKey === true && typeof f.name === 'string'; }) : [];
+        if (!keyFields.length) return findings;
+        var parsed = ctx.getParsed();
+        if (!parsed || parsed._noSelect || ctx.getStrict().errors.length) return findings;
+        var scope = ctx.getSelectScopes().filter(function (sc) { return sc.selectList.start === parsed.selectList.start; })[0];
+        if (!scope) return findings;
+        var keyNames = {};
+        keyFields.forEach(function (f) { keyNames[f.name.toLowerCase()] = true; });
+        var outputs = outputColumnsOf(ctx, scope);
+        var keyOutputs = outputs.filter(function (o) { return o.name !== null && keyNames[o.name.toLowerCase()] === true; });
+        var given = {};
+        keyOutputs.forEach(function (o) { given[o.name.toLowerCase()] = true; });
+        if (Object.keys(keyNames).some(function (name) { return given[name] !== true; })) return findings;
+        /* The scope of the first SELECT ends before its UNION, so the set operation is read from the parse of the whole statement. */
+        var isSetOperation = (parsed.clauses.union || []).length > 1;
+        var keyKeys = {};
+        keyOutputs.forEach(function (o) {
+            var key = outputKeyOf(ctx, scope, o);
+            if (key) keyKeys[key] = true;
+        });
+        /* GROUPING SETS, ROLLUP and CUBE add rows beside the groups', so only a TOP 1 and a DISTINCT of key columns hold under them. */
+        var isRolledUp = groupByExpressionsOf(ctx, scope) === false;
+        var isSafe = !isSetOperation && (
+            isTopOne(ctx, scope) ||
+            (scope.clauses.distinct === true && outputs.length === Object.keys(keyNames).length && outputs.every(function (o) { return o.name !== null && keyNames[o.name.toLowerCase()] === true; })) ||
+            (!isRolledUp && (
+                isOneRowQuery(ctx, scope) ||
+                groupByProvesKey(ctx, scope, keyKeys) ||
+                rowNumberProvesKey(ctx, scope, keyOutputs) ||
+                tableJoinsProveKey(ctx, sql, scope, keyOutputs, keyKeys))));
+        if (isSafe) return findings;
+        var action = String(ctx.targetAction || '').toLowerCase();
+        if (action !== 'append' && action !== 'update' && action !== 'overwrite') action = '';
+        var first = keyOutputs.map(function (o) { return o.item; }).sort(function (a, b) { return a.start - b.start; })[0];
+        findings.push(['MCE104', action === 'append' || action === 'update' ? 'warning' : 'info', repeatedKeyMessage(action, ctx.targetName || target.name || ctx.targetKey), DOCS.ERR_KEY, first, first]);
+        return findings;
+    };
+
+    // ------------------------------------------------------------------
+    // MCE105: an email address converted to a number.
+    // ------------------------------------------------------------------
+
+    /* The number types a CAST or CONVERT of an email address fails for, each with whether Automation Studio's Action Log is known to quote
+     * the value that failed. The log named the cause of a text into INT with the value quoted, and gave only the system-error line for a
+     * conversion to DECIMAL (items 72 and 81). A text converted to SMALLINT, TINYINT and BIT quoted the value as INT does, and one to
+     * BIGINT gave only the system-error line, as DECIMAL does (round 6 org test B02). [Likely] SQL Server raises others for FLOAT, REAL
+     * and MONEY (8114 and 235), which do not name the value, and no test tried them. So the message says the log quotes the address for
+     * the first group only. */
+    var NUMBER_CAST_TYPES = {
+        INT: true,
+        INTEGER: true,
+        SMALLINT: true,
+        TINYINT: true,
+        BIT: true,
+        BIGINT: false,
+        DECIMAL: false,
+        DEC: false,
+        NUMERIC: false,
+        FLOAT: false,
+        REAL: false,
+        'DOUBLE PRECISION': false,
+        MONEY: false,
+        SMALLMONEY: false
+    };
+
+    /* The types of NUMBER_CAST_TYPES whose failed conversion an org test saw give only "Automation failed due to system error.". */
+    var MCE105_SYSTEM_ERROR_TYPES = {
+        BIGINT: true,
+        DECIMAL: true,
+        DEC: true,
+        NUMERIC: true
+    };
+
+    /* The functions that give back the address they are given, in another letter case or without blanks around it, so a value wrapped in
+     * only these is still an email address. Only the call with one argument counts: LTRIM(x, chars) and TRIM(chars FROM x) can cut
+     * characters out of it. */
+    var ADDRESS_KEEPING_CALLS = {
+        LOWER: 1,
+        UPPER: 1,
+        TRIM: 1,
+        LTRIM: 1,
+        RTRIM: 1
+    };
+
+    /* The schema types of a field that holds an email address, for MCE105. */
+    var EMAIL_FIELD_TYPES = {
+        Email: true,
+        EmailAddress: true
+    };
+
+    /**
+     * @function castTypeOf
+     * @description Reads the type of a CAST or CONVERT as one of the types of a table, with or without a size in parentheses, as
+     * DECIMAL(18, 2) or DATETIME2(3). A type in brackets, a type that is not in the table and a type of anything more is none.
+     * @param {Array<Object>} core - Comment-free token stream.
+     * @param {Object} span - {start, end}, the type's tokens, from castParts.
+     * @param {Object} types - The types to read, by name in upper case (NUMBER_CAST_TYPES or DATE_CAST_TYPES).
+     * @returns {?Object} {name, value}: the type's name in upper case and what the table holds for it, or null.
+     */
+    function castTypeOf(core, span, types) {
+        var first = core[span.start];
+        if (!first || first.quote) return null;
+        var name = first.upper;
+        var next = span.start + 1;
+        if (name === 'DOUBLE' && core[next] && !core[next].quote && core[next].upper === 'PRECISION') {
+            name = 'DOUBLE PRECISION';
+            next++;
+        };
+        if (!Object.prototype.hasOwnProperty.call(types, name)) return null;
+        var hasSize = next < span.end && isPunctToken(core[next], '(') && matchParen(core, next) === span.end - 1;
+        if (next !== span.end && !hasSize) return null;
+        return {
+            name: name,
+            value: types[name]
+        };
+    };
+
+    /**
+     * @function numberTypeOfCast
+     * @description Reads the type of a CAST or CONVERT as one of the number types of NUMBER_CAST_TYPES, with or without a size in
+     * parentheses, as DECIMAL(18, 2) or FLOAT(53). A type in brackets, a type of another kind and a type of anything more is none.
+     * @param {Array<Object>} core - Comment-free token stream.
+     * @param {Object} span - {start, end}, the type's tokens, from castParts.
+     * @returns {?Object} {name, isQuoted}: the type's name in upper case and whether the Action Log quotes the value for it, or null.
+     */
+    function numberTypeOfCast(core, span) {
+        var type = castTypeOf(core, span, NUMBER_CAST_TYPES);
+        return type ? {
+            name: type.name,
+            isQuoted: type.value
+        } : null;
+    };
+
+    /**
+     * @function keptColumnOfValue
+     * @description Reads core[span] as a plain column reference, with parentheses around it or not, and inside only LOWER, UPPER, TRIM,
+     * LTRIM and RTRIM of one argument (ADDRESS_KEEPING_CALLS), which leave a text the text it was. Any other expression is none.
+     * @param {Array<Object>} core - Comment-free token stream.
+     * @param {Object} span - {start, end}, token indexes, end exclusive.
+     * @returns {?Object} The column, from plainColumnRef, or null.
+     */
+    function keptColumnOfValue(core, span) {
+        var inner = unwrapParens(core, span.start, span.end);
+        for (var guard = 0; guard < 50; guard++) {
+            var name = core[inner.start];
+            if (!name || name.quote || !ADDRESS_KEEPING_CALLS[name.upper] || !isPunctToken(core[inner.start + 1], '(')) break;
+            var close = addedCallClose(core, inner.start, {});
+            if (close !== inner.end - 1) break;
+            var args = addedArguments(core, inner.start, close);
+            if (args.length !== 1) break;
+            inner = unwrapParens(core, args[0].start, args[0].end);
+        };
+        return plainColumnRef(core, inner.start, inner.end);
+    };
+
+    /**
+     * @function fieldColumnOfValue
+     * @description Reads core[span] as a plain reference (keptColumnOfValue) to a field the schema types as one of the given types.
+     * A field of a derived table or a CTE, whose type the schema does not hold, and any other expression is none.
+     * @param {Object} facts - From addedRuleFacts.
+     * @param {Array<Object>} core - Comment-free token stream.
+     * @param {Object} span - {start, end}, token indexes, end exclusive.
+     * @param {Object} fieldTypes - The schema types to accept, as keys: {Email: true, EmailAddress: true}.
+     * @returns {?Object} {ref, field}: the column, from plainColumnRef, and its schema field, or null.
+     */
+    function fieldColumnOfValue(facts, core, span, fieldTypes) {
+        var ref = keptColumnOfValue(core, span);
+        var found = ref ? addedColumnAt(facts, ref.start, ref.qualifier, ref.column) : null;
+        return found && found.field && fieldTypes[found.field.type] === true ? {
+            ref: ref,
+            field: found.field
+        } : null;
+    };
+
+    /**
+     * @function emailColumnOfValue
+     * @description Reads core[span] as a plain reference to a field the schema types as Email or EmailAddress, a Data Extension's
+     * EmailAddress field and a Data View's Email fields such as _Subscribers.EmailAddress and _Job.FromEmail, with parentheses around it or
+     * not, and inside only LOWER, UPPER, TRIM, LTRIM and RTRIM of one argument (ADDRESS_KEEPING_CALLS), which leave it an address. A Text
+     * field, a field of a derived table or a CTE, whose type the schema does not hold, and any other expression is none.
+     * @param {Object} facts - From addedRuleFacts.
+     * @param {Array<Object>} core - Comment-free token stream.
+     * @param {Object} span - {start, end}, token indexes, end exclusive.
+     * @returns {?Object} The column, from plainColumnRef, or null.
+     */
+    function emailColumnOfValue(facts, core, span) {
+        var found = fieldColumnOfValue(facts, core, span, EMAIL_FIELD_TYPES);
+        return found ? found.ref : null;
+    };
+
+    /**
+     * @function isInColumnCondition
+     * @description Tells whether a call sits in a CASE whose input or a WHEN condition names its column, or in an IIF whose condition
+     * does, outside the call itself, as in CASE WHEN ISNUMERIC(EmailAddress) = 1 THEN CAST(EmailAddress AS INT) END, whose CAST never
+     * meets an address and runs (the review of MCE105, 2026-10-21). The reading is loose, so a condition that guards nothing, as WHEN
+     * EmailAddress IS NOT NULL, counts too: a query that may be guarded gets no error. A WHERE is not read. The column inside a call
+     * of skipCalls does not count, so MCE107 can tell a condition that tests ISNUMERIC alone.
+     * @param {Array<Object>} core - Comment-free token stream.
+     * @param {number} start - Index of the call's name.
+     * @param {number} close - Index of its ).
+     * @param {string} column - The column's name, as written.
+     * @param {Object} [skipCalls] - The names of calls, in upper case, as keys, whose arguments are not read.
+     * @returns {boolean}
+     */
+    function isInColumnCondition(core, start, close, column, skipCalls) {
+        var name = String(column).toUpperCase();
+        var shapes = caseShapesOf(core);
+        var namesColumn = function (from, to) {
+            for (var k = from; k < to; k++) {
+                if (k === start) {
+                    k = close;
+                    continue;
+                };
+                if (skipCalls && isName(core[k]) && !core[k].quote && skipCalls[core[k].upper] && isPunctToken(core[k + 1], '(')) {
+                    var skipEnd = matchParen(core, k + 1);
+                    if (skipEnd > k) {
+                        k = skipEnd;
+                        continue;
+                    };
+                };
+                if (isName(core[k]) && !isPunctToken(core[k + 1], '(') && String(core[k].value).toUpperCase() === name) return true;
+            };
+            return false;
+        };
+        for (var k = start - 1; k >= 0; k--) {
+            var shape = shapes[k];
+            if (shape && shape.end > close) {
+                var marks = shape.marks.concat([shape.end]);
+                if (namesColumn(k + 1, marks[0])) return true;
+                for (var m = 0; m < marks.length - 1; m++) {
+                    if (core[marks[m]].upper === 'WHEN' && namesColumn(marks[m] + 1, marks[m + 1])) return true;
+                };
+            };
+            var caller = core[k - 1];
+            if (isPunctToken(core[k], '(') && !!caller && caller.type === 'identifier' && !caller.quote && caller.upper === 'IIF') {
+                var end = matchParen(core, k);
+                var args = end > close ? addedArguments(core, k - 1, end) : [];
+                if (args.length === 3 && namesColumn(args[0].start, args[0].end)) return true;
+            };
+        };
+        return false;
+    };
+
+    /**
+     * @function rule105
+     * @description MCE105: reports, as an error, a CAST or CONVERT (not TRY_CAST, TRY_CONVERT or TRY_PARSE) to a number type
+     * (NUMBER_CAST_TYPES) of a plain reference to a field the schema types as Email or EmailAddress, also inside LOWER, UPPER, TRIM,
+     * LTRIM and RTRIM (emailColumnOfValue). `CAST(sub.EmailAddress AS INT)` passed Validate and the save, and the run failed with status
+     * FatalError and no reason (item 28). Automation Studio's Action Log of that run quoted the address: "Conversion failed when
+     * converting the nvarchar value '<value>' to data type int." (items 66 and 72). Deleting the Query Activity does not delete
+     * its log (item 85). An email address holds an @, so it is never a number, and the conversion fails the run for every row that has
+     * one: an error, though a field that is NULL or '' in every row would run. A call in a CASE or an IIF whose condition names the column
+     * gets nothing, as the condition may keep every address from it (isInColumnCondition). The message says that the log quotes the
+     * address only for the types it is known to (NUMBER_CAST_TYPES). The fix renames the call to TRY_CAST or TRY_CONVERT, which gives NULL
+     * instead, as TRY_CAST(EmailAddress AS INT) over _Subscribers ran with empty rows (item 70, C02): safe, and in Fix all, as it changes
+     * no result the query could produce (a row with an address failed the run). It keeps Format's layout in a query laid out by Format
+     * (formatLaidOutEdits), as the longer name moves the AS of a select list.
+     * @param {string} sql - Full SQL source text, for the layout of the fix.
+     * @param {Array<Object>} tokens - Full token stream (unused: the rule reads the comment-free stream).
+     * @param {Object} ctx - Shared per-lint-call context, used for ctx.schema, ctx.getCoreTokens(), ctx.getStrict(), ctx.isFormatLaidOut() and
+     *   addedRuleFacts.
+     * @returns {Array<Array>} Raw finding tuples, one per call.
+     */
+    function rule105(sql, tokens, ctx) {
+        var findings = [];
+        if (!Object.keys(ensureIndex(ctx.schema)).length) return findings;
+        var core = ctx.getCoreTokens();
+        var facts = null;
+        for (var i = 0; i < core.length; i++) {
+            var t = core[i];
+            if (t.quote || (t.upper !== 'CAST' && t.upper !== 'CONVERT')) continue;
+            var close = addedCallClose(core, i, CALL_CHECK_KEYWORDS);
+            if (close === -1 || isCallUnread(ctx, core, close)) continue;
+            var parts = castParts(core, {
+                start: i,
+                end: close + 1
+            });
+            var type = parts ? numberTypeOfCast(core, parts.type) : null;
+            if (!type) continue;
+            facts = facts || addedRuleFacts(ctx);
+            var ref = emailColumnOfValue(facts, core, parts.value);
+            if (!ref || isInColumnCondition(core, i, close, ref.column)) continue;
+            var tryName = t.upper === 'CAST' ? 'TRY_CAST' : 'TRY_CONVERT';
+            var message = 'An email address is never a number, so every row with an address fails the run. ' +
+                (type.isQuoted ? 'Automation Studio\'s Action Log of the run quotes the address, which stays there after the activity is deleted. ' : '') +
+                'Use ' + tryName + ', which returns NULL instead.';
+            /* The section of the Action Log's answer: the quoted conversion error for the quoting types, the system error for BIGINT and the
+             * decimals (round 6 org test B02, items 72 and 81), and the conversion functions for the types no test tried. */
+            var docs = type.isQuoted ? DOCS.ERR_CONVERSION : (MCE105_SYSTEM_ERROR_TYPES[type.name] ? DOCS.ERR_SYSTEM : DOCS.CONV);
+            findings.push(['MCE105', 'error', message, docs, t, core[close],
+                [{
+                    title: 'Use ' + tryName,
+                    edits: formatLaidOutEdits(sql, [{ start: t.start, end: t.end, text: tryName }], ctx),
+                    isSafe: true,
+                    isInFixAll: true
+                }]]);
+        };
+        return findings;
+    };
+
+    // ------------------------------------------------------------------
+    // MCE106: constant JSON that the query check evaluates.
+    // ------------------------------------------------------------------
+
+    /* The calls whose constant JSON text the query check evaluates. Marketing Cloud Engagement's check refused JSON_VALUE('not json', ...)
+     * and a strict path the constant lacks at Validate (round 2 org tests B53 and B54, items 28 and 69), and JSON_QUERY('not json', '$')
+     * (round 5 org test B06). JSON_MODIFY was not tried on a constant that is no JSON, so it is not here. OPENJSON is read as a Data
+     * Extension name after FROM or APPLY (item 18), which is MCE074's and MCE000's. Only JSON_VALUE is told of a strict path the text lacks. */
+    var JSON_CONSTANT_CALLS = {
+        JSON_VALUE: 1,
+        JSON_QUERY: 1
+    };
+
+    /* The blanks of a JSON text. Any other blank or control character is not told apart from SQL Server's own reading, so the text gets no finding. */
+    var JSON_BLANKS = ' \t\n\r';
+
+    /**
+     * @function jsonStringEnd
+     * @description Finds the end of a string of a JSON text that starts at text[i], a double quote: the index just past the closing one.
+     * A backslash escape other than the simple ones, a control character and an end of the text before the closing quote give none.
+     * @param {string} text - The JSON text.
+     * @param {number} i - Index of the opening quote.
+     * @returns {number} Index just past the closing quote, or -1.
+     */
+    function jsonStringEnd(text, i) {
+        for (var k = i + 1; k < text.length; k++) {
+            var c = text.charAt(k);
+            if (c === '"') return k + 1;
+            if (c < ' ') return -1;
+            if (c === '\\') {
+                var escape = text.charAt(k + 1);
+                if (escape === 'u' && /^[0-9a-fA-F]{4}$/.test(text.slice(k + 2, k + 6))) {
+                    k += 5;
+                } else if (escape !== '' && '"\\/bfnrt'.indexOf(escape) !== -1) {
+                    k++;
+                } else {
+                    return -1;
+                };
+            };
+        };
+        return -1;
+    };
+
+    /**
+     * @function jsonScalarEnd
+     * @description Finds the end of a string, a number, true, false or null of a JSON text that starts at text[i], the way a strict parser
+     * reads it. A value that is not well formed in any way gives none, as MCE's parser may read it otherwise: a number with a leading 0,
+     * a bare minus, a fraction or an exponent with no digit, and a literal that goes on with a digit or an underscore.
+     * @param {string} text - The JSON text.
+     * @param {number} i - Index of the value's first character.
+     * @returns {number} Index just past the value, or -1.
+     */
+    function jsonScalarEnd(text, i) {
+        var c = text.charAt(i);
+        if (c === '"') return jsonStringEnd(text, i);
+        var word = /^(true|false|null)(?![A-Za-z0-9_])/.exec(text.slice(i, i + 6));
+        if (word) return i + word[1].length;
+        var k = i;
+        if (text.charAt(k) === '-') k++;
+        if (text.charAt(k) === '0') {
+            k++;
+        } else if (text.charAt(k) >= '1' && text.charAt(k) <= '9') {
+            while (text.charAt(k) >= '0' && text.charAt(k) <= '9') k++;
+        } else {
+            return -1;
+        };
+        if (text.charAt(k) === '.') {
+            var fraction = k + 1;
+            while (text.charAt(fraction) >= '0' && text.charAt(fraction) <= '9') fraction++;
+            if (fraction === k + 1) return -1;
+            k = fraction;
+        };
+        if (text.charAt(k) === 'e' || text.charAt(k) === 'E') {
+            var exponent = k + 1;
+            if (text.charAt(exponent) === '+' || text.charAt(exponent) === '-') exponent++;
+            var digits = exponent;
+            while (text.charAt(digits) >= '0' && text.charAt(digits) <= '9') digits++;
+            if (digits === exponent) return -1;
+            k = digits;
+        };
+        return /[A-Za-z0-9_.+-]/.test(text.charAt(k)) ? -1 : k;
+    };
+
+    /**
+     * @function readJsonValue
+     * @description Reads a whole value of a JSON text that starts at text[i], the way a strict parser reads it, an array or an object
+     * member by member and a nested one too, with blanks only from JSON_BLANKS. The start of every value in it is checked (jsonValueStart),
+     * so a character that cannot start a value is an error with its place, wherever it stands in the value (round 6 org test B04: the
+     * query check refused '{"b":x, "a":1}' with $.a at the x of a member before the path's value). A value that is not well formed in a
+     * way the starts do not tell, a missing colon, a trailing comma, an unterminated string, gives none, as MCE's parser may read it
+     * otherwise, and so does one nested past 100 levels.
+     * @param {string} text - The JSON text.
+     * @param {number} i - Index of the value's first character.
+     * @param {number} depth - How deep the value is nested.
+     * @returns {Object} {kind: 'end', end} with the index just past the value, {kind: 'error', char, position} or {kind: 'unsure'}.
+     */
+    function readJsonValue(text, i, depth) {
+        var unsure = { kind: 'unsure' };
+        if (depth > 100) return unsure;
+        var start = jsonValueStart(text, i);
+        if (start.kind === 'error' || start.kind === 'unsure') return start;
+        if (start.kind === 'scalar') {
+            var scalarEnd = jsonScalarEnd(text, i);
+            return scalarEnd === -1 ? unsure : { kind: 'end', end: scalarEnd };
+        };
+        var skip = function (k) {
+            while (k < text.length && JSON_BLANKS.indexOf(text.charAt(k)) !== -1) k++;
+            return k;
+        };
+        var isObject = text.charAt(i) === '{';
+        var close = isObject ? '}' : ']';
+        var p = skip(i + 1);
+        if (text.charAt(p) === close) return {
+            kind: 'end',
+            end: p + 1
+        };
+        for (var guard = 0; guard < 1000000; guard++) {
+            if (isObject) {
+                if (text.charAt(p) !== '"') return unsure;
+                p = jsonStringEnd(text, p);
+                if (p === -1) return unsure;
+                p = skip(p);
+                if (text.charAt(p) !== ':') return unsure;
+                p = skip(p + 1);
+            };
+            var member = readJsonValue(text, p, depth + 1);
+            if (member.kind !== 'end') return member;
+            p = skip(member.end);
+            if (text.charAt(p) === close) return {
+                kind: 'end',
+                end: p + 1
+            };
+            if (text.charAt(p) !== ',') return unsure;
+            p = skip(p + 1);
+        };
+        return unsure;
+    };
+
+    /**
+     * @function jsonValueStart
+     * @description Reads the first character of a value on the way a path takes through a JSON text, where a parser meets it before it
+     * reads the value. Marketing Cloud Engagement's check refused '{"a":.5}' at the point, "Unexpected character '.' is found at position
+     * 5", '{"a":01}' at the 0 of 01, "Unexpected character '0' is found at position 5", 'not json' at its n, "position 0" (round 5
+     * org test B06 and round 2 org test B53), '{"a":x}' at the x and '{"a":tru}' at the t, both "position 5" (round 6 org test B04),
+     * and '{"a":True}' at the T and '{"a":nullx}' at the n, both "position 5" (round 7 org test B03): the place of an error is the first
+     * character of the token, and the check reads a word as one token. '{"a":null1}' and '{"a":true_}' were refused at the n and the t,
+     * "position 5" (round 8 org test B02), so [Likely] the token is the whole run of ASCII letters, digits and underscores from a letter.
+     * So three kinds of start are errors that name their character and place: a character that starts no value (a printable ASCII
+     * character other than a quote, a semicolon, a bracket, a brace, a comma or a colon), a word of letters, digits and underscores that
+     * is not exactly true, false or null (tru, nul, nope, True, nullx, null1, true_, x1), and a number that starts with 0 and a digit.
+     * Such a word is an error whatever follows it (a.b): the token that starts at its first character is no value wherever the check
+     * ends it, and '.5' was refused at the point with a digit after it (the review of RC4). A word that is exactly true, false or null
+     * and goes on with another character that cannot follow a value (null., null-) is not told: [Guessing] the check may read the
+     * literal and then that character on its own. A character that is a blank or a control character of another kind, a character
+     * outside ASCII, a bracket, a brace, a comma or a colon where a value is due, and the end of the text where a value is due, are not
+     * told either: the answer was not seen, so the call gets no finding.
+     * @param {string} text - The JSON text.
+     * @param {number} i - Index of the first character, past the blanks.
+     * @returns {Object} {kind: 'container'|'scalar'}, or {kind: 'error', char, position}, or {kind: 'unsure'}.
+     */
+    function jsonValueStart(text, i) {
+        var c = text.charAt(i);
+        var failure = function () {
+            return {
+                kind: 'error',
+                char: c,
+                position: i
+            };
+        };
+        if (i >= text.length) return { kind: 'unsure' };
+        if (c === '{' || c === '[') return { kind: 'container' };
+        if (c === '"' || c === '-') return { kind: 'scalar' };
+        if (c >= '0' && c <= '9') return c === '0' && text.charAt(i + 1) >= '0' && text.charAt(i + 1) <= '9' ? failure() : { kind: 'scalar' };
+        if (/[A-Za-z]/.test(c)) {
+            var end = i + 1;
+            while (/[A-Za-z0-9_]/.test(text.charAt(end))) end++;
+            var word = text.slice(i, end);
+            return word === 'true' || word === 'false' || word === 'null' ? { kind: 'scalar' } : failure();
+        };
+        if (c < '!' || c > '~' || '\'";,:]}'.indexOf(c) !== -1) return { kind: 'unsure' };
+        return failure();
+    };
+
+    /**
+     * @function readJsonRoute
+     * @description Reads a JSON text as far as a path takes a parser through it, and says what the parser meets, as Marketing Cloud
+     * Engagement's query check does for JSON_VALUE and JSON_QUERY of a constant. It parses only as far as the path needs (round 5 org
+     * test B06): '{"a":1}}' and '[1,2,]' passed with '$.a' and '$[0]', as the stray brace and the trailing comma come after the value the
+     * path reads, and '{"a":01}' was refused. [Likely] The reading goes as far as the path's value, the value included (round 6 org test
+     * B04): '{"b":x, "a":1}' with '$.a' was refused at the x, so every member and element before the path's value is read in full
+     * (readJsonValue), nested ones too, and so is the value itself, where '{"a":"b" x}' passed as the text after the value is not read.
+     * The value at the path is read whole when it is an object or an array too, for JSON_VALUE as for JSON_QUERY (round 7 org test B03):
+     * '{"a":[1,x]}' with '$.a' was refused at the x by both, and '{"a":{"k":x}}' by JSON_VALUE. Where the path names a key the object
+     * lacks, or an element the array lacks, the whole object or array is read [Likely]. No test met a value of the other kind than a
+     * step needs, so what is inside one is not told: [Guessing] the check may stop there. The first start of a value in what is read that
+     * is an error (jsonValueStart) is the answer. A text, or a value read, that is not well formed in a way readJsonValue cannot tell,
+     * gives none. A path that leaves a well formed value, no such property in an object, no such element in an array, or a step into a
+     * value of another kind, is missing, except at the root value when it is no object or array, which SQL Server may refuse as a text.
+     * @param {string} text - The JSON text.
+     * @param {Array<Object>} steps - From jsonPathSteps.
+     * @returns {Object} {kind: 'found'}, {kind: 'missing', step}, {kind: 'error', char, position} or {kind: 'unsure'}.
+     */
+    function readJsonRoute(text, steps) {
+        var unsure = { kind: 'unsure' };
+        var skip = function (k) {
+            while (k < text.length && JSON_BLANKS.indexOf(text.charAt(k)) !== -1) k++;
+            return k;
+        };
+        var walk = function (at, level) {
+            var i = skip(at);
+            var start = jsonValueStart(text, i);
+            if (start.kind === 'error' || start.kind === 'unsure') return start;
+            /* The path's value is read in full, an object or an array too. */
+            if (level === steps.length) {
+                var whole = readJsonValue(text, i, 0);
+                return whole.kind === 'end' ? { kind: 'found' } : whole;
+            };
+            var step = steps[level];
+            var missing = {
+                kind: 'missing',
+                step: step
+            };
+            if (start.kind === 'scalar') {
+                if (level === 0) return unsure;
+                var scalar = readJsonValue(text, i, 0);
+                return scalar.kind === 'end' ? missing : scalar;
+            };
+            var isObject = text.charAt(i) === '{';
+            /* A step into a value of the other kind: what is inside it is not told. */
+            if ((step.key !== undefined) !== isObject) return readJsonValue(text, i, 0).kind === 'end' ? missing : unsure;
+            var close = isObject ? '}' : ']';
+            var p = skip(i + 1);
+            if (text.charAt(p) === close) return missing;
+            for (var index = 0; index < 1000000; index++) {
+                if (isObject) {
+                    if (text.charAt(p) !== '"') return unsure;
+                    var keyEnd = jsonStringEnd(text, p);
+                    if (keyEnd === -1) return unsure;
+                    var key = text.slice(p + 1, keyEnd - 1);
+                    if (key.indexOf('\\') !== -1) return unsure;
+                    p = skip(keyEnd);
+                    if (text.charAt(p) !== ':') return unsure;
+                    p = skip(p + 1);
+                    if (key === step.key) return walk(p, level + 1);
+                } else if (index === step.index) {
+                    return walk(p, level + 1);
+                };
+                var passed = readJsonValue(text, p, 0);
+                if (passed.kind !== 'end') return passed;
+                p = skip(passed.end);
+                if (text.charAt(p) === close) return missing;
+                if (text.charAt(p) !== ',') return unsure;
+                p = skip(p + 1);
+            };
+            return unsure;
+        };
+        var found = walk(0, 0);
+        /* A position in UTF-16 code units, which a character outside the basic plane before it would move. */
+        if (found.kind === 'error' && /[\uD800-\uDFFF]/.test(text.slice(0, found.position))) return unsure;
+        return found;
+    };
+
+    /**
+     * @function jsonPathSteps
+     * @description Reads the path of a JSON_VALUE as a path of simple steps: $, alone or after the word lax or strict in lower case and
+     * one space or more, then any number of .name (letters, digits and underscores, not starting with a digit), ."quoted name" (one
+     * character or more, no backslash) and [n] (a whole number of up to 9 digits, no leading 0). A path with a wildcard, a filter, a
+     * blank inside or before it, a tab after its mode, an upper-case mode or any other syntax is none, so nothing is said of the call, as
+     * SQL Server's answer to it may be about the path.
+     * @param {string} path - The path, as the literal holds it.
+     * @returns {?Object} {isStrict, steps}, each step {key} or {index}, or null.
+     */
+    function jsonPathSteps(path) {
+        var head = /^(?:(lax|strict) +)?\$/.exec(path);
+        if (!head) return null;
+        var steps = [];
+        var rest = path.slice(head[0].length);
+        while (rest.length) {
+            var m = /^\.([A-Za-z_][A-Za-z0-9_]*)/.exec(rest) || /^\."([^"\\]+)"/.exec(rest);
+            if (m) {
+                steps.push({ key: m[1] });
+            } else {
+                m = /^\[(0|[1-9][0-9]{0,8})\]/.exec(rest);
+                if (!m) return null;
+                steps.push({ index: Number(m[1]) });
+            };
+            rest = rest.slice(m[0].length);
+        };
+        return {
+            isStrict: head[1] === 'strict',
+            steps: steps
+        };
+    };
+
+    /**
+     * @function rule106
+     * @description MCE106: reports, as an error, a JSON_VALUE or JSON_QUERY of two text literals (a JSON_QUERY of one, whose path is $) that
+     * the query check evaluates and refuses at Validate (round 2 org tests B53 and B54, items 28 and 69: the check evaluates a JSON_VALUE of
+     * a constant, and items 56 and 71 found no other constant it evaluates, and round 5 org test B06 added JSON_QUERY). Both arguments are
+     * plain text literals, and the path one of simple steps (jsonPathSteps), so the check's answer is about the text: a path that is a
+     * column, an expression or of another syntax gets nothing, and so does a text or a path written N'...', which the check refuses with
+     * Incorrect syntax before it reads the JSON (MCE068). The check parses only as far as the path needs (readJsonRoute): (1) the first
+     * start of a value in the text up to the path's value, the value included, that is an error is MCE's answer, "JSON text is not
+     * properly formatted. Unexpected character '0' is found at position 5." for '{"a":01}', and 'x' and 't' at position 5 for '{"a":x}',
+     * '{"a":tru}' and '{"b":x, "a":1}' (round 6 org test B04), with the character and its place from the text (0-based) in every case, and
+     * no fix: which JSON was meant is the author's to say. '{"a":1}}' with $.a, '[1,2,]' with $[0] and '{"a":"b" x}' with $.a passed, as
+     * the text after the value is not read. The value at the path is read whole, an object or an array too, for JSON_VALUE as for
+     * JSON_QUERY: 'x' at position 8 for '{"a":[1,x]}' and at 10 for '{"a":{"k":x}}', and a word read as one run of letters, 'T' for
+     * '{"a":True}' and 'n' for '{"a":nullx}', both at position 5 (round 7 org test B03).
+     * (2) A strict JSON_VALUE path that the text lacks, where the text is an object or an array read to the point: "Property cannot be found on
+     * the specified JSON path." for 'strict $.couponCode' on a text without couponCode. The fix, Use a lax path, removes the word strict and
+     * the spaces after it, so JSON_VALUE returns NULL for the missing property: safe, as the query did not pass Validate, so no result it could
+     * produce changes, and in Fix all. It keeps Format's layout in a query laid out by Format. A text that the reading does not tell, a
+     * true, false or null that goes on with a digit or another character, a bare end of the text, an unterminated string, gets nothing,
+     * and so does a lax path that the text lacks, and a JSON_MODIFY, which no org test tried on a constant (JSON_CONSTANT_CALLS).
+     * @param {string} sql - Full SQL source text, for the layout of the fix.
+     * @param {Array<Object>} tokens - Full token stream (unused: the rule reads the comment-free stream).
+     * @param {Object} ctx - Shared per-lint-call context, used for ctx.getCoreTokens(), ctx.getStrict() and ctx.isFormatLaidOut().
+     * @returns {Array<Array>} Raw finding tuples, one per call.
+     */
+    function rule106(sql, tokens, ctx) {
+        var findings = [];
+        var core = ctx.getCoreTokens();
+        var isPlainText = function (span) {
+            return span.end === span.start + 1 && core[span.start].type === 'string' && core[span.start].value.charAt(0) === '\'';
+        };
+        for (var i = 0; i < core.length; i++) {
+            if (core[i].quote || !JSON_CONSTANT_CALLS[core[i].upper]) continue;
+            var close = addedCallClose(core, i, {});
+            if (close === -1 || isCallUnread(ctx, core, close)) continue;
+            var args = addedArguments(core, i, close);
+            var isQuery = core[i].upper === 'JSON_QUERY';
+            if (!args.length || (args.length !== 2 && !(isQuery && args.length === 1))) continue;
+            if (!isPlainText(args[0]) || (args.length === 2 && !isPlainText(args[1]))) continue;
+            var pathToken = args.length === 2 ? core[args[1].start] : null;
+            var path = jsonPathSteps(pathToken ? stringLiteralContent(pathToken) : '$');
+            if (!path) continue;
+            var text = stringLiteralContent(core[args[0].start]);
+            var read = readJsonRoute(text, path.steps);
+            if (read.kind === 'error') {
+                findings.push(['MCE106', 'error', 'MCE\'s query check evaluates a ' + core[i].upper + ' of a text and refuses this one: "JSON text is not properly formatted. Unexpected character \'' + read.char +
+                    '\' is found at position ' + read.position + '." Write valid JSON in the text.', DOCS.ERR_JSON, core[args[0].start], core[args[0].start]]);
+                continue;
+            };
+            if (read.kind !== 'missing' || isQuery || !path.isStrict) continue;
+            var strictWord = /^strict +/.exec(stringLiteralContent(pathToken))[0];
+            var step = read.step.key !== undefined ? 'property ' + read.step.key : 'element [' + read.step.index + ']';
+            findings.push(['MCE106', 'error', 'The text has no ' + step + ', and a strict path needs it. MCE\'s query check evaluates the call and refuses it: "Property cannot be found on the specified JSON path." A lax path returns NULL instead.',
+                DOCS.ERR_JSON, pathToken, pathToken,
+                [{
+                    title: 'Use a lax path',
+                    edits: formatLaidOutEdits(sql, [{ start: pathToken.start + 1, end: pathToken.start + 1 + strictWord.length, text: '' }], ctx),
+                    isSafe: true,
+                    isInFixAll: true
+                }]]);
+        };
+        return findings;
+    };
+
+    // ------------------------------------------------------------------
+    // MCE107: a conversion of a text field that can fail.
+    // ------------------------------------------------------------------
+
+    /* The schema types of a field of free text, for MCE107: a Text field and a Phone field, which a Data Extension holds as nvarchar
+     * (the article session's org test C09, item 65), and the Text fields of the Data Views. An Email field is MCE105's, and a Locale
+     * field holds codes. */
+    var FREE_TEXT_FIELD_TYPES = {
+        Text: true,
+        Phone: true
+    };
+
+    /* The date types a CAST or CONVERT of text can fail for, each with what Automation Studio's Action Log is known to say of the
+     * failed run: 'named' for DATE, which gets MCE's own text and then the system-error line (round 3 org test G04, round 4 org tests
+     * H01 and H03), 'system' for DATETIME, which gets the system-error line alone (round 4 H02, with an impossible date), and null for
+     * the types no test tried, of which the message then says nothing. */
+    var DATE_CAST_TYPES = {
+        DATE: 'named',
+        DATETIME: 'system',
+        DATETIME2: null,
+        SMALLDATETIME: null,
+        DATETIMEOFFSET: null
+    };
+
+    /* The number types whose failed conversion of a text left the system-error line alone in the Action Log: DECIMAL, which NUMERIC and
+     * DEC are (round 4 org test H04, and round 3 G11 for a text into a Decimal field), and BIGINT (round 6 org test B02). */
+    var SYSTEM_LINE_CAST_TYPES = {
+        BIGINT: true,
+        DECIMAL: true,
+        DEC: true,
+        NUMERIC: true
+    };
+
+    /* The number types whose failed conversion of a text the Action Log quotes, with the value: INT, as CAST(EmailAddress AS INT) and
+     * a text into a Number field were (round 2 org tests E07 and D13, round 5 A04), and SMALLINT, TINYINT and BIT (round 6 org test
+     * B02). INTEGER is INT. No test converted text to FLOAT, REAL, MONEY or SMALLMONEY, so MCE107 says nothing of their log. */
+    var QUOTED_CAST_TYPES = {
+        INT: true,
+        INTEGER: true,
+        SMALLINT: true,
+        TINYINT: true,
+        BIT: true
+    };
+
+    /* The number types that a text ISNUMERIC passes can still fail, each with a text of round 5 org test B02 that failed it: ISNUMERIC
+     * is 1 for a text that converts to any number type, float and decimal among them (Microsoft's ISNUMERIC page), so it passes '1.5'
+     * and '1e3', and '1.5' failed a Number field, an int, and '1e3' a Decimal field. So ISNUMERIC(x) = 1 guards no conversion of x to
+     * these, and MCE107 says so (the review of MCE107, 2026-10-21). For FLOAT, REAL, MONEY, SMALLMONEY and BIT no such text was tried, and
+     * ISNUMERIC is read as a guard. */
+    var ISNUMERIC_MISSED_TEXTS = {
+        INT: '1.5',
+        INTEGER: '1.5',
+        BIGINT: '1.5',
+        SMALLINT: '1.5',
+        TINYINT: '1.5',
+        DECIMAL: '1e3',
+        DEC: '1e3',
+        NUMERIC: '1e3'
+    };
+
+    /* The names of a type that SQL Server takes as one, for a TRY_CAST or TRY_CONVERT test of the same type as the call (tryTestsColumn). */
+    var CAST_TYPE_SYNONYMS = {
+        INTEGER: 'INT',
+        DEC: 'DECIMAL',
+        NUMERIC: 'DECIMAL'
+    };
+
+    /**
+     * @function sameColumnRefs
+     * @description Tells whether two plain column references name the same column: the same name without brackets and regard to case,
+     * and the same table alias where both write one.
+     * @param {Object} a - From plainColumnRef.
+     * @param {Object} b - From plainColumnRef.
+     * @returns {boolean}
+     */
+    function sameColumnRefs(a, b) {
+        var bare = function (name) { return String(name).replace(/^\[|\]$/g, '').toUpperCase(); };
+        return bare(a.column) === bare(b.column) && (!a.qualifier || !b.qualifier || bare(a.qualifier) === bare(b.qualifier));
+    };
+
+    /**
+     * @function callTestsColumn
+     * @description Tells whether core[seg] is one test that a call of the given names makes true for a column, as ISDATE(x) = 1,
+     * ISJSON(x) > 0, ISNUMERIC(x) >= 1, ISJSON(x) <> 0: the call on the column (keptColumnOfValue), then a comparison with a whole
+     * number that only a true answer passes.
+     * @param {Array<Object>} core - Comment-free token stream.
+     * @param {Object} seg - {start, end}, the test.
+     * @param {Object} ref - The column, from plainColumnRef.
+     * @param {Object} names - The names of the test calls, in upper case, as keys.
+     * @returns {boolean}
+     */
+    function callTestsColumn(core, seg, ref, names) {
+        var first = core[seg.start];
+        if (!first || first.quote || !names[first.upper] || !isPunctToken(core[seg.start + 1], '(')) return false;
+        var close = matchParen(core, seg.start + 1);
+        if (close === -1 || !isPunctToken(core[close], ')') || close + 3 !== seg.end) return false;
+        var args = addedArguments(core, seg.start, close);
+        var column = args.length ? keptColumnOfValue(core, args[0]) : null;
+        var op = core[close + 1];
+        var number = core[close + 2];
+        if (!column || !sameColumnRefs(column, ref) || !op || op.type !== 'operator' || !number || number.type !== 'number') return false;
+        var n = Number(number.value);
+        return (op.value === '=' && n === 1) || (op.value === '>' && n === 0) || (op.value === '>=' && n === 1) || ((op.value === '<>' || op.value === '!=') && n === 0);
+    };
+
+    /**
+     * @function tryTestsColumn
+     * @description Tells whether core[seg] is TRY_CONVERT(type, x) IS NOT NULL or TRY_CAST(x AS type) IS NOT NULL for a column, to
+     * the type of the call it guards: the conversion that gives NULL where the value does not convert, so the test is true for a value
+     * that does. A test of another type guards nothing, as TRY_CAST(x AS DECIMAL) passes '1.5', which INT refuses. Sizes are not read.
+     * @param {Array<Object>} core - Comment-free token stream.
+     * @param {Object} seg - {start, end}, the test.
+     * @param {Object} ref - The column, from plainColumnRef.
+     * @param {string} typeName - The type of the call, in upper case, from castTypeOf.
+     * @returns {boolean}
+     */
+    function tryTestsColumn(core, seg, ref, typeName) {
+        var first = core[seg.start];
+        if (!first || first.quote || (first.upper !== 'TRY_CONVERT' && first.upper !== 'TRY_CAST') || !isPunctToken(core[seg.start + 1], '(')) return false;
+        var close = matchParen(core, seg.start + 1);
+        if (close === -1 || !isKw(core[close + 1], 'IS') || !isKw(core[close + 2], 'NOT') || !isKw(core[close + 3], 'NULL') || close + 4 !== seg.end) return false;
+        var parts = castParts(core, {
+            start: seg.start,
+            end: close + 1
+        });
+        var column = parts ? keptColumnOfValue(core, parts.value) : null;
+        if (!column || !sameColumnRefs(column, ref)) return false;
+        var type = castTypeOf(core, parts.type, DATE_CAST_TYPES) || castTypeOf(core, parts.type, NUMBER_CAST_TYPES);
+        var same = function (name) { return CAST_TYPE_SYNONYMS[name] || name; };
+        return !!type && same(type.name) === same(typeName);
+    };
+
+    /**
+     * @function whereHoldsTest
+     * @description Tells whether the WHERE of the SELECT that holds a call has a test (isTest) among the conditions joined by AND, so
+     * every row it keeps passes the test, for a call outside that WHERE and the ON conditions of its joins. SQL Server promises no
+     * order for the conditions of a WHERE and its joins (Microsoft's SELECT page, "Logical processing order of the SELECT statement"),
+     * so a test beside the call guards nothing. A condition with an OR at its own level proves nothing, and a test of another SELECT or
+     * a derived table is not read, so the call is reported.
+     * @param {Object} facts - From addedRuleFacts.
+     * @param {number} callIdx - Index of the call's name.
+     * @param {function(Object): boolean} isTest - Tells whether a condition {start, end} is the test.
+     * @returns {boolean}
+     */
+    function whereHoldsTest(facts, callIdx, isTest) {
+        var core = facts.core;
+        var scope = facts.scopeBySelect[facts.ownSelect[callIdx]];
+        if (!scope || !scope.where) return false;
+        var isAround = function (span) { return callIdx >= span.start && callIdx < span.end; };
+        if (isAround(scope.where) || scope.ons.some(isAround)) return false;
+        var holds = function (start, end, depth) {
+            var segs = conditionSegments(core, start, end, depth);
+            if (!segs.length || segs.some(function (seg) { return seg.connector === 'OR'; })) return false;
+            return segs.some(function (seg) {
+                if (seg.end - seg.start > 2 && isPunctToken(core[seg.start], '(') && matchParen(core, seg.start) === seg.end - 1) return holds(seg.start + 1, seg.end - 1, depth + 1);
+                return isTest(seg);
+            });
+        };
+        return holds(scope.where.start, scope.where.end, scope.depth);
+    };
+
+    /**
+     * @function groupIdenticalCalls
+     * @description Groups the calls of a query by their tokens and the SELECT that holds them, in the order of their first call, so
+     * a fix can change every copy of a call at once: a call that is in the select list and in the GROUP BY or the ORDER BY of one SELECT
+     * must change in both places, or SQL Server refuses the query.
+     * @param {Object} facts - From addedRuleFacts.
+     * @param {Array<Object>} calls - {i, close} for each call: the index of its name and of its ).
+     * @returns {Array<Array<Object>>} The groups, each in source order.
+     */
+    function groupIdenticalCalls(facts, calls) {
+        var groups = [];
+        var byKey = {};
+        calls.forEach(function (c) {
+            var key = facts.ownSelect[c.i] + ' ' + divisionTokensKey(facts.core, c.i, c.close + 1);
+            if (!byKey[key]) {
+                byKey[key] = [];
+                groups.push(byKey[key]);
+            };
+            byKey[key].push(c);
+        });
+        return groups;
+    };
+
+    /**
+     * @function textConversionMessage
+     * @description MCE107's message: one value that does not convert fails the whole run, what the Action Log says for the target type
+     * where a test showed it, and the TRY name that returns NULL instead.
+     * @param {boolean} isDate - true for a conversion to a date type, false for a number type.
+     * @param {?string} log - What the Action Log says: 'named' (a reason of MCE's own), 'quoted' (the value) or 'system' (the system-error line alone), or null when no test showed it.
+     * @param {string} fieldType - 'Text' or 'Phone'.
+     * @param {string} tryName - TRY_CAST or TRY_CONVERT.
+     * @param {?Object} missed - {text, type} where the call's only guard is ISNUMERIC, which passes the text and the type refuses it
+     *   (ISNUMERIC_MISSED_TEXTS), or null.
+     * @returns {string}
+     */
+    function textConversionMessage(isDate, log, fieldType, tryName, missed) {
+        var head = 'One value of this ' + fieldType + ' field that is no ' + (isDate ? 'date' : 'number') + ' fails the whole run';
+        var tail = ' ' + tryName + ' returns NULL for it instead.';
+        if (missed) return 'ISNUMERIC does not guard this conversion: it passes a text such as \'' + missed.text + '\', which ' + missed.type + ' refuses, and one such value fails the whole run.' + tail;
+        if (log === 'named') return head + '. The Action Log says "Could not convert date and/or time from string data type."' + tail;
+        if (log === 'quoted') return head + '. The Action Log quotes the value, which stays there after the activity is deleted.' + tail;
+        if (log === 'system') return head + '. The Action Log says only "Automation failed due to system error."' + tail;
+        return head + '.' + tail;
+    };
+
+    /**
+     * @function rule107
+     * @description MCE107: reports, as an info, a CAST or CONVERT (not TRY_CAST, TRY_CONVERT or TRY_PARSE) of a plain reference to a
+     * Text or Phone field (FREE_TEXT_FIELD_TYPES, also inside LOWER, UPPER, TRIM, LTRIM and RTRIM, as MCE105 reads an address) to a
+     * date type (DATE_CAST_TYPES) or a number type (NUMBER_CAST_TYPES). One value that does not convert fails the whole run. Round 3
+     * org test G04 and round 4 H01 and H03 converted to DATE (the Action Log said "Could not convert date and/or time from string data
+     * type."), round 4 H02 to DATETIME and H04 to DECIMAL (only the system-error line, SYSTEM_LINE_CAST_TYPES, as for BIGINT in round 6
+     * B02), and round 2 E07 to INT (the log quotes the value, QUOTED_CAST_TYPES, as for SMALLINT, TINYINT and BIT in round 6 B02). It is
+     * an info, as the data is often clean. An Email field is MCE105's alone, and a literal is MCE089's or the query check's. No finding where the call sits in a CASE or an IIF whose condition names the same column (isInColumnCondition,
+     * as MCE105 reads it), or where the WHERE of its SELECT holds, among conditions joined by AND, ISDATE(x) = 1 for a date type,
+     * ISNUMERIC(x) = 1 for a number type, or TRY_CONVERT or TRY_CAST of the column to the same type IS NOT NULL, for a call outside that
+     * WHERE and the joins' ON (whereHoldsTest). ISNUMERIC guards no conversion to an integer type or DECIMAL, as it passes '1.5' and
+     * '1e3' (ISNUMERIC_MISSED_TEXTS): where it is the only guard, in a CASE, an IIF or the WHERE, the message says so. A test of the
+     * other kind, ISDATE for a number or ISNUMERIC for a date, guards nothing. The fix renames the call, TRY_CAST or TRY_CONVERT: safe,
+     * as a run that passed gives the same rows, and not in Fix all, as it turns a failed run into NULL for the bad rows. The copies of
+     * one call in a SELECT, as in its select list and its GROUP BY, are one finding and one fix (groupIdenticalCalls).
+     * @param {string} sql - Full SQL source text, for the layout of the fix.
+     * @param {Array<Object>} tokens - Full token stream (unused: the rule reads the comment-free stream).
+     * @param {Object} ctx - Shared per-lint-call context, used for ctx.schema, ctx.getCoreTokens(), ctx.getStrict(), ctx.isFormatLaidOut() and
+     *   addedRuleFacts.
+     * @returns {Array<Array>} Raw finding tuples, one per call.
+     */
+    function rule107(sql, tokens, ctx) {
+        var findings = [];
+        if (!Object.keys(ensureIndex(ctx.schema)).length) return findings;
+        var core = ctx.getCoreTokens();
+        var facts = null;
+        var calls = [];
+        for (var i = 0; i < core.length; i++) {
+            var t = core[i];
+            if (t.quote || (t.upper !== 'CAST' && t.upper !== 'CONVERT')) continue;
+            var close = addedCallClose(core, i, CALL_CHECK_KEYWORDS);
+            if (close === -1 || isCallUnread(ctx, core, close)) continue;
+            var parts = castParts(core, {
+                start: i,
+                end: close + 1
+            });
+            if (!parts) continue;
+            var dateType = castTypeOf(core, parts.type, DATE_CAST_TYPES);
+            var numberType = dateType ? null : castTypeOf(core, parts.type, NUMBER_CAST_TYPES);
+            if (!dateType && !numberType) continue;
+            facts = facts || addedRuleFacts(ctx);
+            var found = fieldColumnOfValue(facts, core, parts.value, FREE_TEXT_FIELD_TYPES);
+            if (!found) continue;
+            var typeName = (dateType || numberType).name;
+            var missedText = numberType ? ISNUMERIC_MISSED_TEXTS[numberType.name] || null : null;
+            /* A CASE or an IIF whose condition names the column guards the call, unless the column is named only inside ISNUMERIC. */
+            var isNumericGuard = false;
+            if (isInColumnCondition(core, i, close, found.ref.column)) {
+                if (!missedText || isInColumnCondition(core, i, close, found.ref.column, { ISNUMERIC: 1 })) continue;
+                isNumericGuard = true;
+            };
+            var testNames = dateType ? { ISDATE: 1 } : (missedText ? {} : { ISNUMERIC: 1 });
+            var isTested = function (seg) {
+                return callTestsColumn(core, seg, found.ref, testNames) || tryTestsColumn(core, seg, found.ref, typeName);
+            };
+            if (whereHoldsTest(facts, i, isTested)) continue;
+            if (missedText && !isNumericGuard) {
+                isNumericGuard = whereHoldsTest(facts, i, function (seg) { return callTestsColumn(core, seg, found.ref, { ISNUMERIC: 1 }); });
+            };
+            var log = dateType ? dateType.value : (QUOTED_CAST_TYPES[numberType.name] ? 'quoted' : (SYSTEM_LINE_CAST_TYPES[numberType.name] ? 'system' : null));
+            /* The section of the MCE SQL Errors article on the run error the type gives, where a test showed it. */
+            var docs = {
+                named: DOCS.ERR_DATE,
+                quoted: DOCS.ERR_CONVERSION,
+                system: DOCS.ERR_SYSTEM
+            }[log] || DOCS.CONV;
+            calls.push({
+                i: i,
+                close: close,
+                isDate: !!dateType,
+                log: log,
+                docs: docs,
+                fieldType: found.field.type === 'Phone' ? 'Phone' : 'Text',
+                missed: isNumericGuard ? {
+                    text: missedText,
+                    type: typeName
+                } : null
+            });
+        };
+        if (!calls.length) return findings;
+        groupIdenticalCalls(facts, calls).forEach(function (group) {
+            var first = group[0];
+            var t = core[first.i];
+            var tryName = t.upper === 'CAST' ? 'TRY_CAST' : 'TRY_CONVERT';
+            findings.push(['MCE107', 'info', textConversionMessage(first.isDate, first.log, first.fieldType, tryName, first.missed), first.docs, t, core[first.close],
+                [{
+                    title: 'Use ' + tryName,
+                    edits: formatLaidOutEdits(sql, group.map(function (c) {
+                        return {
+                            start: core[c.i].start,
+                            end: core[c.i].end,
+                            text: tryName
+                        };
+                    }), ctx),
+                    isSafe: true,
+                    isInFixAll: false
+                }]]);
+        });
+        return findings;
+    };
+
+    // ------------------------------------------------------------------
+    // MCE108: JSON read from a field with no ISJSON guard.
+    // ------------------------------------------------------------------
+
+    /* The calls that read a JSON text and fail the whole run for a value that is no JSON: round 2 org tests C03 and E09 ran
+     * JSON_VALUE of an email address column, which holds no JSON, and the Action Log said only "Automation failed due to system
+     * error." JSON_QUERY reads the text the same way. */
+    var JSON_READ_CALLS = {
+        JSON_VALUE: 1,
+        JSON_QUERY: 1
+    };
+
+    /* The schema types of a field that holds no text, so a JSON read of it is a type error SQL Server raises for the query, not for a
+     * value, and MCE108's message and fix do not fit it. */
+    var NON_TEXT_FIELD_TYPES = {
+        Number: true,
+        Decimal: true,
+        Date: true,
+        Boolean: true
+    };
+
+    /**
+     * @function hasJsonTest
+     * @description Tells whether core[from, to) holds ISJSON of the column, whatever it is compared with: MCE108 reads the condition of a
+     * CASE or an IIF loosely, as MCE097 reads a division's, so a call that may be guarded gets no finding.
+     * @param {Array<Object>} core - Comment-free token stream.
+     * @param {number} from - Index of the first token.
+     * @param {number} to - Index just past the last token.
+     * @param {Object} ref - The column, from plainColumnRef.
+     * @returns {boolean}
+     */
+    function hasJsonTest(core, from, to, ref) {
+        for (var k = from; k < to; k++) {
+            var t = core[k];
+            if (t.quote || t.upper !== 'ISJSON' || !isPunctToken(core[k + 1], '(')) continue;
+            var close = matchParen(core, k + 1);
+            if (close === -1) continue;
+            var args = addedArguments(core, k, close);
+            var column = args.length ? keptColumnOfValue(core, args[0]) : null;
+            if (column && sameColumnRefs(column, ref)) return true;
+        };
+        return false;
+    };
+
+    /**
+     * @function isJsonGuarded
+     * @description Tells whether a JSON read of a column has an ISJSON guard that its tokens show. (1) The WHERE of its SELECT holds
+     * ISJSON(x) = 1 or > 0 among conditions joined by AND (whereHoldsTest), for a call outside that WHERE and the joins' ON. (2) A CASE or an
+     * IIF around the call has ISJSON of the column in its input or in a condition that ends before the call (hasJsonTest), as MCE097
+     * leaves a division in a CASE alone. A CASE or an IIF guards no call inside an aggregate or a window call inside it, as SQL Server
+     * works out the aggregate first (conditionalShapes).
+     * @param {Object} facts - From addedRuleFacts.
+     * @param {Object} shapes - From conditionalShapes.
+     * @param {number} callIdx - Index of the call's name.
+     * @param {Object} ref - The column, from plainColumnRef.
+     * @returns {boolean}
+     */
+    function isJsonGuarded(facts, shapes, callIdx, ref) {
+        var core = facts.core;
+        if (whereHoldsTest(facts, callIdx, function (seg) { return callTestsColumn(core, seg, ref, { ISJSON: 1 }); })) return true;
+        var aggregate = shapes.aggregateOf[callIdx];
+        var caseShapes = caseShapesOf(core);
+        for (var k = 0; k < callIdx; k++) {
+            var shape = caseShapes[k];
+            if (!shape || shape.end < callIdx || aggregate > k) continue;
+            var marks = shape.marks.concat([shape.end]);
+            if (marks[0] <= callIdx && hasJsonTest(core, k + 1, marks[0], ref)) return true;
+            for (var m = 0; m < marks.length - 1; m++) {
+                if (core[marks[m]].upper === 'WHEN' && marks[m + 1] <= callIdx && hasJsonTest(core, marks[m] + 1, marks[m + 1], ref)) return true;
+            };
+        };
+        return shapes.iifs.some(function (iif) {
+            if (iif.at > callIdx || iif.close < callIdx || aggregate > iif.at) return false;
+            var args = addedArguments(core, iif.at, iif.close);
+            return args.length === 3 && args[0].end <= callIdx && hasJsonTest(core, args[0].start, args[0].end, ref);
+        });
+    };
+
+    /**
+     * @function rule108
+     * @description MCE108: reports, as an info, a JSON_VALUE or JSON_QUERY (JSON_READ_CALLS) whose first argument is a plain column
+     * reference and that has no ISJSON guard of the same column (isJsonGuarded). One value that is no JSON fails the whole run, and the
+     * Action Log says only "Automation failed due to system error." (round 2 org tests C03 and E09), where the same call behind
+     * CASE WHEN ISJSON(x) = 1 ran (round 2 C04). A text literal as the first argument is MCE106's, and a field the schema types as a
+     * Number, Decimal, Date or Boolean field (NON_TEXT_FIELD_TYPES) is no text to read. The fix wraps the call in
+     * CASE WHEN ISJSON(x) = 1 THEN ... END, so a value that is no JSON gives NULL: safe, as a run that passed gives the same rows, and
+     * not in Fix all, as it turns a failed run into NULL for the bad rows. The copies of one call in a SELECT, as in its select list and
+     * its GROUP BY, are one finding and one fix (groupIdenticalCalls). The rule asks for no schema, and takes a column of a derived
+     * table or a CTE for a field, as the value there is not known.
+     * @param {string} sql - Full SQL source text, for the layout of the fix.
+     * @param {Array<Object>} tokens - Full token stream (unused: the rule reads the comment-free stream).
+     * @param {Object} ctx - Shared per-lint-call context, used for ctx.getCoreTokens(), ctx.getStrict(), ctx.isFormatLaidOut() and
+     *   addedRuleFacts.
+     * @returns {Array<Array>} Raw finding tuples, one per call.
+     */
+    function rule108(sql, tokens, ctx) {
+        var findings = [];
+        var core = ctx.getCoreTokens();
+        var facts = null;
+        var shapes = null;
+        var calls = [];
+        for (var i = 0; i < core.length; i++) {
+            var t = core[i];
+            if (t.quote || !JSON_READ_CALLS[t.upper]) continue;
+            var close = addedCallClose(core, i, {});
+            if (close === -1 || isCallUnread(ctx, core, close)) continue;
+            var args = addedArguments(core, i, close);
+            /* JSON_VALUE takes a path; JSON_QUERY's is optional. */
+            if (!args.length || (args.length < 2 && t.upper === 'JSON_VALUE')) continue;
+            var inner = unwrapParens(core, args[0].start, args[0].end);
+            var ref = plainColumnRef(core, inner.start, inner.end);
+            if (!ref) continue;
+            facts = facts || addedRuleFacts(ctx);
+            shapes = shapes || conditionalShapes(core);
+            var located = addedColumnAt(facts, ref.start, ref.qualifier, ref.column);
+            if (located && located.field && NON_TEXT_FIELD_TYPES[located.field.type] === true) continue;
+            if (isJsonGuarded(facts, shapes, i, ref)) continue;
+            calls.push({
+                i: i,
+                close: close,
+                ref: ref
+            });
+        };
+        if (!calls.length) return findings;
+        groupIdenticalCalls(facts, calls).forEach(function (group) {
+            var first = group[0];
+            findings.push(['MCE108', 'info', 'One value that is not JSON fails the whole run. The Action Log says only "Automation failed due to system error." Guard the call with CASE WHEN ISJSON(x) = 1 THEN ... END.', DOCS.ERR_SYSTEM, core[first.i], core[first.close],
+                [{
+                    title: 'Guard with ISJSON',
+                    edits: formatLaidOutEdits(sql, group.reduce(function (edits, c) {
+                        var refText = spanText(sql, core, c.ref);
+                        edits.push({
+                            start: core[c.i].start,
+                            end: core[c.i].start,
+                            text: 'CASE WHEN ISJSON(' + refText + ') = 1 THEN '
+                        });
+                        edits.push({
+                            start: core[c.close].end,
+                            end: core[c.close].end,
+                            text: ' END'
+                        });
+                        return edits;
+                    }, []), ctx),
+                    isSafe: true,
+                    isInFixAll: false
+                }]]);
+        });
         return findings;
     };
 
@@ -19982,7 +23040,8 @@ window.SQLStudioSQL = {
      * value for certain (isCertainNeverNumberColumn). A warning with no fix for a field whose known values are none a number but whose
      * rows may all be NULL or '', or whose list may leave values out (the verification of the lint round, 2026-10-14). A warning
      * otherwise, as a field of numbers in text runs, with a fix that writes the numbers as texts, which changes results: '01' equals 1,
-     * and does not equal '1'.
+     * and does not equal '1'. That message names the field's type (textFieldLabel), so a Data Extension's Locale field reads as a
+     * Locale field, where its table shows it.
      * @param {string} sql - Full SQL source text.
      * @param {Object} facts - From addedRuleFacts.
      * @param {Object} ref - The column, from plainColumnRef.
@@ -20009,7 +23068,7 @@ window.SQLStudioSQL = {
                 text: '\'' + spanText(sql, core, n) + '\''
             };
         });
-        return ['MCE087', 'warning', name + ' is a Text field, so SQL Server converts every value to a number to compare it with ' + numberText + ', and a value that is no number fails the run. Compare with a text instead.', DOCS.WHERE, anchor, anchor,
+        return ['MCE087', 'warning', name + ' is ' + textFieldLabel(field) + ', so SQL Server converts every value to a number to compare it with ' + numberText + ', and a value that is no number fails the run. Compare with a text instead.', DOCS.WHERE, anchor, anchor,
             [{ title: title, edits: edits, isSafe: false, isInFixAll: false }]];
     };
 
@@ -20022,8 +23081,8 @@ window.SQLStudioSQL = {
      */
     function textFieldAt(facts, ref) {
         if (!ref) return null;
-        var field = addedFieldAt(facts, ref.start, ref.qualifier, ref.column);
-        return addedFieldKind(field) === 'text' ? field : null;
+        var found = addedColumnAt(facts, ref.start, ref.qualifier, ref.column);
+        return found && addedFieldKind(found.field, found.table) === 'text' ? found.field : null;
     };
 
     /**
@@ -20123,7 +23182,7 @@ window.SQLStudioSQL = {
      * outer join can leave out. A warning otherwise: a field of words whose rows may all be NULL or '', as '' converts to 0, or whose list
      * is a sample, and a Text field of numbers, such as _MobileSubscription._OptOutStatusID, which runs (the verification of the lint
      * round, 2026-10-14). A comparison of two columns is MCE017's and is left to it, a column IN a subquery too
-     * (inSubqueryTypeFindings). The field must resolve through the schema (addedFieldAt).
+     * (inSubqueryTypeFindings). The field must resolve through the schema (addedColumnAt).
      * @param {string} sql - Full SQL source text.
      * @param {Array<Object>} tokens - Full token stream.
      * @param {Object} ctx - Shared per-lint-call context, used for ctx.schema, ctx.getCoreTokens(), ctx.getSelectScopes() and ctx.getSelects().
@@ -20223,10 +23282,12 @@ window.SQLStudioSQL = {
         if (!scope || scope.selectList.items.length !== 1) return null;
         var item = scope.selectList.items[0];
         if (item.kind !== 'column' || !item.sourceColumn) return null;
-        var testedField = addedFieldAt(facts, testedRef.start, testedRef.qualifier, testedRef.column);
-        var innerField = addedFieldAt(facts, inIdx + 2, item.sourceTable, item.sourceColumn);
-        var testedKind = addedFieldKind(testedField);
-        var innerKind = addedFieldKind(innerField);
+        var tested = addedColumnAt(facts, testedRef.start, testedRef.qualifier, testedRef.column);
+        var inner = addedColumnAt(facts, inIdx + 2, item.sourceTable, item.sourceColumn);
+        var testedField = tested ? tested.field : null;
+        var innerField = inner ? inner.field : null;
+        var testedKind = tested ? addedFieldKind(tested.field, tested.table) : null;
+        var innerKind = inner ? addedFieldKind(inner.field, inner.table) : null;
         var isNumeric = function (kind) { return kind === 'number' || kind === 'decimal'; };
         var innerSpan = itemValueSpan(core, item);
         var textRef = null;
@@ -20251,13 +23312,14 @@ window.SQLStudioSQL = {
 
     /**
      * @function textFieldLabel
-     * @description Names the type of a field of text for a message: a Text field, an Email field, an EmailAddress field or a Phone
-     * field.
+     * @description Names the type of a field of text for a message: a Text field, an Email field, an EmailAddress field, a Phone field
+     * or a Locale field.
      * @param {Object} field - A schema field of kind 'text'.
      * @returns {string}
      */
     function textFieldLabel(field) {
         if (field.type === 'Email' || field.type === 'EmailAddress') return 'an ' + field.type + ' field';
+        if (field.type === 'Locale') return 'a Locale field';
         return field.type === 'Phone' ? 'a Phone field' : 'a Text field';
     };
 
@@ -20375,13 +23437,13 @@ window.SQLStudioSQL = {
         var facts = addedRuleFacts(ctx);
         var core = facts.core;
         var isDateField = function (ref) {
-            return !!ref && addedFieldKind(addedFieldAt(facts, ref.start, ref.qualifier, ref.column)) === 'date';
+            return !!ref && addedKindAt(facts, ref.start, ref.qualifier, ref.column) === 'date';
         };
         /* A Data View date is the moment of an event, with its time. A Data Extension's Date field often holds a day alone, at
          * midnight, where a bound of that day keeps every row, so a bound is judged for a Data View date alone. */
         var isViewDate = function (ref) {
             var found = ref ? addedColumnAt(facts, ref.start, ref.qualifier, ref.column) : null;
-            return !!found && found.table.kind === 'dataview' && addedFieldKind(found.field) === 'date';
+            return !!found && found.table.kind === 'dataview' && addedFieldKind(found.field, found.table) === 'date';
         };
         /* (c)'s test of a UTC call at core[k]: compared with a Data View date, and not moved to server time on purpose. The span the
          * comparison holds tells a DATEDIFF from a window. (b) asks it of the calls on its side too, so each answer is kept. */
@@ -20662,7 +23724,7 @@ window.SQLStudioSQL = {
         };
         if (span.end === span.start + 3 && isNowCallAt(core, span.start)) return valueOf('date', t.upper + '()');
         var ref = plainColumnRef(core, span.start, span.end);
-        var kind = ref ? addedFieldKind(addedFieldAt(facts, ref.start, ref.qualifier, ref.column)) : null;
+        var kind = ref ? addedKindAt(facts, ref.start, ref.qualifier, ref.column) : null;
         return kind ? valueOf(kind, ref.column) : null;
     };
 
@@ -21226,7 +24288,7 @@ window.SQLStudioSQL = {
             return false;
         };
         var ref = plainColumnRef(core, span.start, span.end);
-        return !!ref && addedFieldKind(addedFieldAt(facts, ref.start, ref.qualifier, ref.column)) === 'number';
+        return !!ref && addedKindAt(facts, ref.start, ref.qualifier, ref.column) === 'number';
     };
 
     /**
@@ -21290,9 +24352,10 @@ window.SQLStudioSQL = {
      * page). A list that passes 4,000 characters fails the run with error 9829, "STRING_AGG aggregation result exceeded the limit of
      * 8000 bytes.", so the warning says to cast the value to NVARCHAR(MAX), as Microsoft's examples do. The fix is that cast: safe, as
      * every list that fits comes out the same, and kept out of Fix all, as the column's type becomes NVARCHAR(MAX). A Text field with
-     * no length may be NVARCHAR(MAX) already, and is left alone. A field the SQL data proves varchar (isVarcharField), with a separator
-     * that is no text value, gives VARCHAR(8000) and fails past 8,000 characters (Microsoft's STRING_AGG page), so its cast is to
-     * VARCHAR(MAX), the separator's own kind.
+     * no length may be NVARCHAR(MAX) already, and is left alone. A field the SQL data proves varchar (isVarcharField), or the Locale
+     * field of a Data Extension, a varchar of 5 characters (isDataExtensionLocale), with a separator that is no text value, gives
+     * VARCHAR(8000) and fails past 8,000 characters (Microsoft's STRING_AGG page), so its cast is to VARCHAR(MAX), the separator's own
+     * kind.
      * @param {string} sql - Full SQL source text.
      * @param {Object} facts - From addedRuleFacts.
      * @param {number} i - Index of STRING_AGG.
@@ -21304,13 +24367,16 @@ window.SQLStudioSQL = {
         var args = addedArguments(core, i, close);
         if (args.length !== 2) return null;
         var ref = plainColumnRef(core, args[0].start, args[0].end);
-        var field = ref ? addedFieldAt(facts, ref.start, ref.qualifier, ref.column) : null;
-        var kind = addedFieldKind(field);
-        if (!kind || (kind === 'text' && !(Number(field.length) > 0 && Number(field.length) <= 4000))) return null;
+        var found = ref ? addedColumnAt(facts, ref.start, ref.qualifier, ref.column) : null;
+        var field = found ? found.field : null;
+        var kind = addedFieldKind(field, found && found.table);
+        /* A Data Extension's Locale field is 5 characters long whatever length the schema gives it. */
+        var length = isDataExtensionLocale(field, found && found.table) ? 5 : Number(field && field.length);
+        if (!kind || (kind === 'text' && !(length > 0 && length <= 4000))) return null;
         /* A varchar field with a text separator fails before its length matters, MCE098's error with the same cast. */
         if (varcharAggregateAt(facts, i)) return null;
         var refText = spanText(sql, core, args[0]);
-        var isVarchar = isVarcharField(field);
+        var isVarchar = isVarcharField(field, found && found.table);
         var capped = isVarchar ? 'VARCHAR(8000)' : 'NVARCHAR(4000)';
         var wide = isVarchar ? 'VARCHAR(MAX)' : 'NVARCHAR(MAX)';
         return ['MCE091', 'warning', 'STRING_AGG of ' + refText + ' returns ' + capped + ', and a group whose list passes ' + (isVarchar ? '8,000' : '4,000') + ' characters fails the run. Cast it: STRING_AGG(CAST(' + refText + ' AS ' + wide + '), ...).', DOCS.AGG, core[i], core[i],
@@ -21397,13 +24463,15 @@ window.SQLStudioSQL = {
      * @function isTextAgainstNumber
      * @description Tells whether two fields are a column of text and a Number or Decimal, the comparison MCE017 reports.
      * @param {?Object} a - A schema field, or null.
+     * @param {?Object} aTable - Its schema table, or null, for a Locale field (addedFieldKind).
      * @param {?Object} b - Another, or null.
+     * @param {?Object} bTable - Its schema table, or null.
      * @returns {boolean}
      */
-    function isTextAgainstNumber(a, b) {
+    function isTextAgainstNumber(a, aTable, b, bTable) {
         if (!a || !b) return false;
         var isNumber = function (f) { return f.type === 'Number' || f.type === 'Decimal'; };
-        return (addedFieldKind(a) === 'text' && isNumber(b)) || (isNumber(a) && addedFieldKind(b) === 'text');
+        return (addedFieldKind(a, aTable) === 'text' && isNumber(b)) || (isNumber(a) && addedFieldKind(b, bTable) === 'text');
     };
 
     /**
@@ -21481,7 +24549,7 @@ window.SQLStudioSQL = {
                     var joinedTable = ctx.schema && ctx.schema.byName ? fieldCheckTable(ctx.schema.byName, joined) : null;
                     var otherTable = ctx.schema && ctx.schema.byName ? fieldCheckTable(ctx.schema.byName, otherEntry) : null;
                     var fieldOf = function (table, column) { return table && Array.isArray(table.fields) ? findFieldNamed(table, String(column).replace(/^\[|\]$/g, '')) : null; };
-                    var pairs = pairsByOther[otherRef].filter(function (p) { return !isTextAgainstNumber(fieldOf(joinedTable, p.joined), fieldOf(otherTable, p.other)); });
+                    var pairs = pairsByOther[otherRef].filter(function (p) { return !isTextAgainstNumber(fieldOf(joinedTable, p.joined), joinedTable, fieldOf(otherTable, p.other), otherTable); });
                     if (!pairs.length || !pairs.every(function (p) { return isFieldOf(joinedView, p.joined) && isFieldOf(otherView, p.other); })) return;
                     var isRelated = pairs.some(function (p) {
                         return relations.some(function (r) {
@@ -21771,7 +24839,7 @@ window.SQLStudioSQL = {
                 isSafe: true,
                 isInFixAll: true
             };
-            findings.push(['MCE095', 'error', 'Marketing Cloud Engagement\'s query check reads this subquery\'s FROM past its ) and refuses the comma after it: Old style JOIN (ANSI JOINs) syntax is not allowed. Add WHERE 1 = 1 before the ).', DOCS.JOIN, core[from], core[close], [fix]]);
+            findings.push(['MCE095', 'error', 'Marketing Cloud Engagement\'s query check reads this subquery\'s FROM past its ) and refuses the comma after it: Old style JOIN (ANSI JOINs) syntax is not allowed. Add WHERE 1 = 1 before the ).', DOCS.ERR_COMMA_JOIN, core[from], core[close], [fix]]);
         };
         return findings;
     };
@@ -21844,10 +24912,11 @@ window.SQLStudioSQL = {
 
     /**
      * @function registerAddedRules
-     * @description Adds the rules of 2026-10-14 to RULES, after the others, so the list itself stays as it was.
+     * @description Adds the rules of 2026-10-14 to RULES, after the others, so the list itself stays as it was, with MCE101 to MCE108 that
+     * came after them.
      */
     function registerAddedRules() {
-        RULES.push(rule085, rule086, rule087, rule088, rule089, rule026More, rule090, rule091, rule092, rule093, rule094, rule095, rule101, rule102);
+        RULES.push(rule085, rule086, rule087, rule088, rule089, rule026More, rule090, rule091, rule092, rule093, rule094, rule095, rule101, rule102, rule103, rule104, rule105, rule106, rule107, rule108);
     };
     registerAddedRules();
 
@@ -22049,7 +25118,7 @@ window.SQLStudioSQL = {
             var message = scope.isAllKnown
                 ? t.raw + ' in double quotes is a column name to SQL Server, and no table here has it: Invalid column name \'' + t.value + '\'. Write ' + text + ' in single quotes for a text.'
                 : t.raw + ' in double quotes is a column name to SQL Server, not a text, so the query fails unless a table here has that column. Write ' + text + ' in single quotes for a text.';
-            findings.push(['MCE096', scope.isAllKnown ? 'error' : 'warning', message, DOCS.WHERE, t, t,
+            findings.push(['MCE096', scope.isAllKnown ? 'error' : 'warning', message, DOCS.ERR_COLUMN, t, t,
                 [{ title: 'Write ' + text, edits: [{ start: t.start, end: t.end, text: text }], isSafe: false, isInFixAll: false }]]);
         };
         return findings;
@@ -22164,6 +25233,45 @@ window.SQLStudioSQL = {
     };
 
     /**
+     * @function emptyGroupDivisorKind
+     * @description Tells whether a divisor is a call that can be 0 for a group: 'count' for COUNT or COUNT_BIG of a column, not COUNT(*),
+     * which counts a group's own row at least, and is 0 for a group with no value, the cause of the runs that failed on a division
+     * (round 2 org tests C05 and E08, round 4 H05), and 'sum' for SUM, 0 for values that are 0 or cancel out. The call is read through parentheses, a CAST or CONVERT around it and
+     * an OVER after it. A sum, a difference or a product of these with numbers, and any other call, is none.
+     * @param {Array<Object>} core - Comment-free token stream.
+     * @param {Object} span - {start, end}, the divisor.
+     * @param {number} depth - How deep the check has gone, to stop a deep nesting.
+     * @returns {?string} 'count', 'sum' or null.
+     */
+    function emptyGroupDivisorKind(core, span, depth) {
+        if (span.end <= span.start || depth > 20) return null;
+        var inner = unwrapParens(core, span.start, span.end);
+        var t = core[inner.start];
+        if (!t || t.quote || !isPunctToken(core[inner.start + 1], '(')) return null;
+        var close = matchParen(core, inner.start + 1);
+        if (close === -1) return null;
+        var args = addedArguments(core, inner.start, close);
+        if (divisorFactorEnd(core, inner.start) === inner.end) {
+            if (t.upper === 'SUM') return 'sum';
+            if (t.upper === 'COUNT' || t.upper === 'COUNT_BIG') {
+                var isStar = args.length === 1 && args[0].end === args[0].start + 1 && core[args[0].start].value === '*';
+                return args.length === 1 && !isStar ? 'count' : null;
+            };
+        };
+        if (close !== inner.end - 1 || !DIVISOR_PASS_CALLS[t.upper] || !args.length) return null;
+        if (t.upper === 'CONVERT' || t.upper === 'TRY_CONVERT') return args.length >= 2 ? emptyGroupDivisorKind(core, args[1], depth + 1) : null;
+        for (var a = args[0].start; a < args[0].end; a++) {
+            if (isKw(core[a], 'AS') && core[a].depth === core[inner.start + 1].depth + 1) {
+                return emptyGroupDivisorKind(core, {
+                    start: args[0].start,
+                    end: a
+                }, depth + 1);
+            };
+        };
+        return null;
+    };
+
+    /**
      * @function conditionalSpans
      * @description Tells for each token whether it sits inside a CASE or an IIF, which pick the rows a division in them is worked out for,
      * in one pass with a count of the open CASEs and a stack of the open parentheses, so thousands of divisions or nested groups cost one
@@ -22235,7 +25343,11 @@ window.SQLStudioSQL = {
 
     /**
      * @function rule097
-     * @description MCE097: an info on a / or a % whose divisor can be 0 in a row (isZeroableDivisor) and has no guard (divisionIsGuarded).
+     * @description MCE097: a / or a % whose divisor can be 0 in a row (isZeroableDivisor) and has no guard (divisionIsGuarded). It is a
+     * warning where the divisor is COUNT of a column (emptyGroupDivisorKind): `SUM(OrderTotal) / COUNT(CouponCode)` grouped by
+     * subscriber failed for a subscriber with no coupon (round 2 org tests C05 and E08, round 4 H05), and an info for any other divisor.
+     * A SUM keeps the info with a message of its own: it is 0 only for values that are 0 or cancel out, no test failed on one, and a
+     * share of a total, x / SUM(x) OVER (), is common and valid (the review of 1.4.2 RC2, 2026-10-21).
      * MCE runs with ANSI_WARNINGS on (the author's org, 2026-10-14, item 50), so a division by zero fails the whole run, which shows as a
      * failed run with no reason (items 24 and 28): s.BounceCount / (s.BounceCount - s.BounceCount) validated and its run failed with
      * FatalError (item 51). A constant divisor and COUNT(*) of a grouped SELECT are left alone. The same division twice in one SELECT, in its
@@ -22285,7 +25397,11 @@ window.SQLStudioSQL = {
                 };
             };
             var text = 'NULLIF(' + spanText(sql, core, inner) + ', 0)';
-            findings.push(['MCE097', 'info', 'A divisor of 0 in any row fails the whole run, as Marketing Cloud Engagement runs with ANSI_WARNINGS on, and the run gives no reason. Divide by NULLIF(x, 0) to get NULL for that row instead.', DOCS.NUM, core[divisor.start], core[divisor.end - 1],
+            var kind = emptyGroupDivisorKind(core, divisor, 0);
+            var message = 'A divisor of 0 in any row fails the whole run, as Marketing Cloud Engagement runs with ANSI_WARNINGS on, and the run gives no reason. Divide by NULLIF(x, 0) to get NULL for that row instead.';
+            if (kind === 'count') message = 'COUNT of a column is 0 for a group with no value, and a divisor of 0 in any row fails the whole run with no reason. Divide by NULLIF(x, 0) to get NULL for that row instead.';
+            if (kind === 'sum') message = 'A SUM can be 0 for a group, and a divisor of 0 in any row fails the whole run with no reason. Divide by NULLIF(x, 0) to get NULL for that row instead.';
+            findings.push(['MCE097', kind === 'count' ? 'warning' : 'info', message, DOCS.ERR_SYSTEM, core[divisor.start], core[divisor.end - 1],
                 [{ title: 'Divide by ' + (text.length > 60 ? 'NULLIF(x, 0)' : text), edits: [{ start: core[divisor.start].start, end: core[divisor.end - 1].end, text: text }], isSafe: true, isInFixAll: false }]]);
         };
         return findings;
@@ -22296,14 +25412,30 @@ window.SQLStudioSQL = {
     // ------------------------------------------------------------------
 
     /**
-     * @function isVarcharField
-     * @description Tells whether a schema field is proven varchar, by the SQL type the SQL data gives it (sqlType), as
-     * _Subscribers.Status: Test 17 read it on the author's org (2026-10-14, item 51). A field of no known SQL type is no varchar.
+     * @function isDataExtensionLocale
+     * @description Tells whether a schema field is the Locale field of a Data Extension, which is a varchar of 5 characters (the article
+     * session's org test C09, 2026-10-20: SQL_VARIANT_PROPERTY of the fields of a Data Extension made with Save to DE). The Locale of a
+     * Data View, _Subscribers.Locale, was not read, so it is left out, and so is a field whose table is not known. It is the one test
+     * for both the varchar (isVarcharField, MCE091's length) and the text kind (addedFieldKind).
      * @param {?Object} field - A schema field, or null.
+     * @param {?Object} table - Its schema table, or null when it is not known.
      * @returns {boolean}
      */
-    function isVarcharField(field) {
-        return !!field && /^varchar\b/i.test(String(field.sqlType || ''));
+    function isDataExtensionLocale(field, table) {
+        return !!field && !!table && table.kind !== 'dataview' && String(field.type || '').toLowerCase() === 'locale';
+    };
+
+    /**
+     * @function isVarcharField
+     * @description Tells whether a schema field is proven varchar, by the SQL type the SQL data gives it (sqlType), as
+     * _Subscribers.Status: Test 17 read it on the author's org (2026-10-14, item 51), or as the Locale field of a Data Extension
+     * (isDataExtensionLocale). A field of no known SQL type is no varchar.
+     * @param {?Object} field - A schema field, or null.
+     * @param {?Object} [table] - Its schema table, for the Locale field of a Data Extension.
+     * @returns {boolean}
+     */
+    function isVarcharField(field, table) {
+        return (!!field && /^varchar\b/i.test(String(field.sqlType || ''))) || isDataExtensionLocale(field, table);
     };
 
     /**
@@ -22345,7 +25477,8 @@ window.SQLStudioSQL = {
         var args = addedArguments(core, i, close);
         if (args.length !== 2 || !isNvarcharSeparator(core, args[1])) return null;
         var ref = plainColumnRef(core, args[0].start, args[0].end);
-        return ref && isVarcharField(addedFieldAt(facts, ref.start, ref.qualifier, ref.column)) ? { value: args[0] } : null;
+        var found = ref ? addedColumnAt(facts, ref.start, ref.qualifier, ref.column) : null;
+        return found && isVarcharField(found.field, found.table) ? { value: args[0] } : null;
     };
 
     /**
@@ -22369,7 +25502,7 @@ window.SQLStudioSQL = {
             var found = varcharAggregateAt(facts, i);
             if (!found) continue;
             var valueText = spanText(sql, core, found.value);
-            findings.push(['MCE098', 'error', valueText + ' is varchar, and Marketing Cloud Engagement writes the separator as nvarchar text, which STRING_AGG refuses: Argument data type nvarchar is invalid for argument 2 of string_agg function. Cast the value to NVARCHAR(MAX).', DOCS.AGG, core[found.value.start], core[found.value.end - 1],
+            findings.push(['MCE098', 'error', valueText + ' is varchar, and Marketing Cloud Engagement writes the separator as nvarchar text, which STRING_AGG refuses: Argument data type nvarchar is invalid for argument 2 of string_agg function. Cast the value to NVARCHAR(MAX).', DOCS.ERR_STRING_AGG, core[found.value.start], core[found.value.end - 1],
                 [{
                     title: 'Cast to NVARCHAR(MAX)',
                     edits: formatLaidOutEdits(sql, [{ start: core[found.value.start].start, end: core[found.value.end - 1].end, text: 'CAST(' + valueText + ' AS NVARCHAR(MAX))' }], ctx),
@@ -22439,7 +25572,9 @@ window.SQLStudioSQL = {
      * @description MCE099: a warning on a select item of the query's output, its own SELECT or a branch of its top-level UNION, that is
      * a binary value as a whole (binaryHexLength). MCE writes the bytes into the Text field as characters: a raw HASHBYTES loaded as
      * unreadable characters, @@DBTS stopped its row from loading in SQL Studio, and Contact Builder's Records tab did not finish
-     * loading (the author's org, 2026-10-14, item 54, Tests 33b and 33c). The fix writes the value as hex, CONVERT(VARCHAR(n), x, 2),
+     * loading (the author's org, 2026-10-14, item 54, Tests 33b and 33c). A raw HASHBYTES of a key ran, and then SQL Studio could not
+     * fetch any row: "Could not fetch results: Internal Server Error", MCE's own REST answer (round 2 org test C16, 2026-10-21), so the
+     * message says the rows can fail to load at all. The fix writes the value as hex, CONVERT(VARCHAR(n), x, 2),
      * as CONVERT(VARCHAR(64), HASHBYTES(...), 2) read fine (item 50). It changes the value into hex text, so it needs review and is
      * not in Fix all.
      * @param {string} sql - Full SQL source text (unused directly, kept for the shared rule signature).
@@ -22462,7 +25597,7 @@ window.SQLStudioSQL = {
                 if (last < first || !core[last]) return;
                 var hex = binaryHexLength(core, first, last + 1);
                 if (hex === null) return;
-                findings.push(['MCE099', 'warning', 'This value is binary, and Marketing Cloud Engagement writes its bytes into the Text field as unreadable characters, which can stop the rows from loading in SQL Studio and Contact Builder. Write it as hex: CONVERT(VARCHAR(n), x, 2).', DOCS.CONV, core[first], core[last],
+                findings.push(['MCE099', 'warning', 'This value is binary, and Marketing Cloud Engagement writes its bytes into the Text field as unreadable characters, which can stop the rows from loading at all, in SQL Studio and Contact Builder. Write it as hex: CONVERT(VARCHAR(n), x, 2).', DOCS.CONV, core[first], core[last],
                     [{ title: 'Write it as hex', edits: [{ start: core[first].start, end: core[first].start, text: 'CONVERT(VARCHAR(' + hex + '), ' }, { start: core[last].end, end: core[last].end, text: ', 2)' }], isSafe: false, isInFixAll: false }]]);
             });
         });
@@ -22470,26 +25605,26 @@ window.SQLStudioSQL = {
     };
 
     // ------------------------------------------------------------------
-    // MCE100: a line comment, which hides all that follows it once MCE saves the query.
+    // MCE100: a line comment, which the save of a Query Activity treats as never closed.
     // ------------------------------------------------------------------
 
     /* MCE100's message for each place the comment sits (rule100), one sentence on the cause and then the answer. */
     var LINE_COMMENT_MESSAGES = {
-        leading: 'Marketing Cloud Engagement\'s save loses everything after a line comment, so this one hides the whole query, and the save fails with "Cannot find table 0." Write it as a block comment.',
-        before: 'Marketing Cloud Engagement\'s save loses everything after a line comment, so this one hides the rest of the query, and the save fails, as with "Invalid column name" or "could not be bound". Write it as a block comment.',
-        closing: 'Marketing Cloud Engagement\'s save loses everything after a line comment, so a query that ends with one fails at Run with no reason, even with a line break after it. Write it as a block comment.'
+        leading: 'Marketing Cloud Engagement\'s save treats a line comment as never closed, so this one comments out the whole query, and the save fails with "Cannot find table 0." Write it as a block comment.',
+        before: 'Marketing Cloud Engagement\'s save treats a line comment as never closed, so everything below this one becomes part of the comment, and the save fails with "Invalid column name" or "could not be bound". Write it as a block comment.',
+        closing: 'A line comment that closes the query passes Marketing Cloud Engagement\'s save, and the run then fails with no reason, even with a line break after it. Write it as a block comment.'
     };
 
     /**
      * @function rule100
      * @description MCE100: an error on every line comment, a "--" comment token, whatever its place. Validate takes each of them, and the
      * save of a Query Activity, which SQL Studio's Run, Save As, Save and Save to Data Extension use as Automation Studio's Finish does,
-     * loses everything after the comment (the author's org, 2026-10-15, items 60 to 62). Where it ends a line with query after it, the
+     * treats the comment as never closed (the author's org, 2026-10-15, items 60 to 62). Where it ends a line with query after it, the
      * save failed with "The multi-part identifier ... could not be bound." or "Invalid column name". Where it leads the query, with
      * "Cannot find table 0." Where it closes the last line, the save passed and the run failed with FatalError and no reason, a line
      * break after it or not. What the save does is not known: a line break inside a text value survived it (item 62).
      * A "--" in a text value or a block comment is no comment token and no finding, and neither is a text of comments alone, which holds
-     * no query to hide. The fix writes the comment as a block comment, exactly as Format does (formatterRenderComment), the comment's
+     * no query below a comment. The fix writes the comment as a block comment, exactly as Format does (formatterRenderComment), the comment's
      * trailing blanks dropped, so the query means the same and MCE keeps all of it. Safe and in Fix all. A comment whose text holds a
      * "/*" or a "*\/" has no fix, as T-SQL nests block comments and a "/*" would leave the new one open. The edit is the plain one:
      * Format's text is what it writes, and a statement that holds a line comment is never one that Format leaves as it is, so
@@ -22514,12 +25649,12 @@ window.SQLStudioSQL = {
             if (t.type !== 'comment' || t.raw.slice(0, 2) !== '--') return;
             var message = LINE_COMMENT_MESSAGES[index < firstCode ? 'leading' : (index < lastCode ? 'before' : 'closing')];
             if (/\/\*|\*\//.test(t.raw)) {
-                findings.push(['MCE100', 'error', message, DOCS.BASICS, t, t]);
+                findings.push(['MCE100', 'error', message, DOCS.ERR_LINE_COMMENT, t, t]);
                 return;
             };
             /* A line break that ends the comment's line is not part of the token. A carriage return before it is, and stays. */
             var carriageReturn = /\r$/.test(t.raw) ? '\r' : '';
-            findings.push(['MCE100', 'error', message, DOCS.BASICS, t, t, [
+            findings.push(['MCE100', 'error', message, DOCS.ERR_LINE_COMMENT, t, t, [
                 { title: 'Write it as a block comment', edits: [{ start: t.start, end: t.end, text: formatterRenderComment(t) + carriageReturn }], isSafe: true, isInFixAll: true }
             ]]);
         });
@@ -22621,7 +25756,7 @@ window.SQLStudioSQL = {
      * @function lint
      * @description Lints SQL text. A text of one statement is read as it is. A text of several statements (a tab keeps several queries, on lines of their own or apart by ';' or a GO line, see splitStatements) is linted a statement at a time, so every rule reads one query, and each finding is moved to its place in the text, its fixes' edits too. MCE002 counts the statements: an info at the second one in the editor, an error where options.isRunTarget is true, which the Frontend sets for the text Run is about to send (a selection, else the whole text), so the run gate stops a run of several queries. A GO line with no second statement is an MCE002 error either way.
      * @param {string} sql - SQL text to lint.
-     * @param {Object} context - {schema, targetKey, targetName, targetAction, options: {disabled, isRunTarget, isSqlStudio}}: targetKey and targetName are the CustomerKey and the name of the Query Activity's target, and targetAction its data action (Update, Append or Overwrite, none when not known), for MCE050. isSqlStudio is true where SQL Studio's Frontend lints, for MCE999.
+     * @param {Object} context - {schema, targetKey, targetName, targetAction, options: {disabled, isRunTarget, isSqlStudio, writesToTemporary}}: targetKey and targetName are the CustomerKey and the name of the Query Activity's target, and targetAction its data action (Update, Append or Overwrite, none when not known), for MCE050 and MCE015. isSqlStudio is true where SQL Studio's Frontend lints, for MCE999. writesToTemporary is true for the lint of a Run, whose rows go into a temporary Data Extension that SQL Studio creates, so MCE015 stays an error there whatever the target.
      * @returns {Array<Object>} Lint findings, sorted by start position.
      */
     function lint(sql, context) {
@@ -22762,7 +25897,7 @@ window.SQLStudioSQL = {
         };
         return groups.map(function (semis) {
             var isBefore = semis === leading;
-            return ['MCE002', 'error', 'Marketing Cloud Engagement\'s query check refuses a ; ' + (isBefore ? 'before the query' : 'in the query, also at its end') + ': \';\' is a reserved word and may not appear in your query. Remove it.', DOCS.SFREF, semis[0].start, semis[semis.length - 1].end, [{
+            return ['MCE002', 'error', 'Marketing Cloud Engagement\'s query check refuses a ; ' + (isBefore ? 'before the query' : 'in the query, also at its end') + ': \';\' is a reserved word and may not appear in your query. Remove it.', DOCS.ERR_RESERVED, semis[0].start, semis[semis.length - 1].end, [{
                 title: 'Remove the ;',
                 edits: semis.map(function (t) {
                     return {
@@ -23693,7 +26828,9 @@ window.SQLStudioSQL = {
         var next = core[n + 1];
         var isDotted = isPunctToken(prev, '.') || isPunctToken(next, '.');
         var isAfterAs = isKw(prev, 'AS');
-        if (RESERVED_SET[w.upper]) {
+        /* A word the query check accepts as an alias (RESERVED_ALIAS_ACCEPTED, empty since round 8) is a name like the words SQL Server
+         * does not reserve, so Format keeps its case as an alias with or without AS and as a qualifier (round 6 and 7 org tests B03 and B02). */
+        if (RESERVED_SET[w.upper] && !isAcceptedAliasKeyword(w)) {
             var isAliasEnd = !next || isPunctToken(next, ',') || isPunctToken(next, ')') || isPunctToken(next, ';') ||
                 (next.type === 'keyword' && FORMATTER_ALIAS_END_KEYWORDS.indexOf(next.upper) !== -1);
             /* A whole ORDER BY item is the alias the select list gives, ORDER BY Order for AS Order. */
@@ -23716,7 +26853,7 @@ window.SQLStudioSQL = {
          * come after a number, and APPLY joins. */
         var isCountWord = ['ROW', 'ROWS', 'PRECEDING', 'FOLLOWING'].indexOf(w.upper) !== -1;
         var isAfterValue = !!prev && (isPunctToken(prev, ')') || prev.type === 'identifier' || prev.type === 'string' || (prev.type === 'number' && !isCountWord) ||
-            isKw(prev, 'END') || isKw(prev, 'NULL') || (isUnreservedKeyword(prev) && formatterIsKeywordName(core, n - 1)));
+            isKw(prev, 'END') || isKw(prev, 'NULL') || (isAliasKeyword(prev) && formatterIsKeywordName(core, n - 1)));
         var isNameEnd = !next || isPunctToken(next, ',') || isPunctToken(next, ')') || isPunctToken(next, ';') ||
             (next.type === 'keyword' && FORMATTER_ALIAS_END_KEYWORDS.indexOf(next.upper) !== -1);
         /* The ONLY of FETCH NEXT 1 ROW ONLY follows ROW or ROWS, a name to the tokenizer. */
@@ -23792,6 +26929,11 @@ window.SQLStudioSQL = {
             if (upper === 'GROUPING' && next && next.type === 'identifier' && !next.quote && next.upper === 'SETS' && coreTokens[i + 2] && coreTokens[i + 2].type === 'punct' && coreTokens[i + 2].value === '(') {
                 overrides[i] = 'GROUPING';
                 overrides[i + 1] = 'SETS';
+            };
+            /* The PRECISION of the type DOUBLE PRECISION is grammar, upper case as DOUBLE is, though the word is a plain name elsewhere
+             * since round 8 org test B03. */
+            if (upper === 'DOUBLE' && next && next.type === 'identifier' && !next.quote && next.upper === 'PRECISION') {
+                overrides[i + 1] = 'PRECISION';
             };
             if (FORMATTER_CONVERT_NAMES[upper] && next && next.type === 'punct' && next.value === '(') {
                 typeAt[i + 2] = true;
@@ -24379,10 +27521,10 @@ window.SQLStudioSQL = {
         var isImplicitAlias = (prev.type === 'punct' && prev.value === ')') || prev.type === 'identifier' ||
             prev.type === 'string' || prev.type === 'number' ||
             (prev.type === 'keyword' && (prev.upper === 'END' || prev.upper === 'NULL')) ||
-            (isUnreservedKeyword(prev) && formatterIsKeywordName(coreTokens, itEnd - 2));
+            (isAliasKeyword(prev) && formatterIsKeywordName(coreTokens, itEnd - 2));
         /* One with no AS after a value, COUNT(*) Rows, at the item's own level, and no part of Name = expr (the second verification of the
          * lint round, 2026-10-14). */
-        if (last.type === 'keyword' && isUnreservedKeyword(last) && last.depth === coreTokens[itStart].depth && isImplicitAlias &&
+        if (last.type === 'keyword' && isAliasKeyword(last) && last.depth === coreTokens[itStart].depth && isImplicitAlias &&
             formatterIsKeywordName(coreTokens, itEnd - 1)) {
             return {
                 exprEnd: itEnd - 1,
@@ -24456,7 +27598,7 @@ window.SQLStudioSQL = {
     function formatterIsAliasAt(coreTokens, idx) {
         var t = coreTokens[idx];
         if (!t) return false;
-        return t.type === 'identifier' || (t.type === 'keyword' && (isKw(coreTokens[idx - 1], 'AS') || isUnreservedKeyword(t)) && formatterIsKeywordName(coreTokens, idx));
+        return t.type === 'identifier' || (t.type === 'keyword' && (isKw(coreTokens[idx - 1], 'AS') || isAliasKeyword(t)) && formatterIsKeywordName(coreTokens, idx));
     };
 
     /**
@@ -24676,8 +27818,13 @@ window.SQLStudioSQL = {
         };
         var aliasFrom = j4;
         var aliasSuffix = '';
-        if (coreTokens[j4] && coreTokens[j4].type === 'keyword' && coreTokens[j4].upper === 'AS') j4++;
-        if (formatterIsAliasAt(coreTokens, j4)) {
+        /* No alias without a whole name before it: a word of RESERVED_ALIAS_ACCEPTED as the table reads no table name, and being a name
+         * where an alias stands (isAliasKeyword), it became the alias of nothing, FROM  AS Precision, as FROM Disk and FROM Precision did
+         * before both left the reserved words (the reviews of RC3 and RC4). A reserved word besides, FROM Order, is dropped by the inner
+         * format, and the safety net of formatSql keeps the query as written. */
+        var hasName = chainTokens.length > 0 && !isPunctToken(coreTokens[j3 - 1], '.');
+        if (hasName && coreTokens[j4] && coreTokens[j4].type === 'keyword' && coreTokens[j4].upper === 'AS') j4++;
+        if (hasName && formatterIsAliasAt(coreTokens, j4)) {
             aliasSuffix = ' AS ' + coreTokens[j4].raw;
             j4++;
             /* A function's alias may name its columns, CROSS APPLY STRING_SPLIT(...) AS x(n) or d.doc.nodes('/a') AS x(n), which stay
@@ -27026,8 +30173,10 @@ window.SQLStudioSQL = {
         };
         /* A word that the tokenizer reads as a keyword though SQL Server does not reserve it is a name where a value starts: a column
          * named Time, or the qualifier At of At.OrderId for FROM Orders AS At. Where such a word is grammar, as ROWS of a window frame or
-         * TIME of AT TIME ZONE, it never starts a value (the verification of the lint round, 2026-10-14: MCE000 at the select list). */
-        if (t.type === 'identifier' || isUnreservedKeyword(t)) {
+         * TIME of AT TIME ZONE, it never starts a value (the verification of the lint round, 2026-10-14: MCE000 at the select list).
+         * A word of RESERVED_ALIAS_ACCEPTED is a name before a dot only, as the qualifier Precision of Precision.ContactKey for FROM Orders
+         * AS Precision was before round 8 showed Precision to be a plain name (round 7 org test B02 passed it, as round 6's B03 did Disk). */
+        if (t.type === 'identifier' || isUnreservedKeyword(t) || (isAcceptedAliasKeyword(t) && this.isPunctAt(1, '.'))) {
             var isCondition = this.parseIdentifierPrimary();
             return {
                 pure: true,
@@ -27843,13 +30992,13 @@ window.SQLStudioSQL = {
         };
         /* Time.* for FROM Orders AS Time, and Time = expr: a word the tokenizer reads as a keyword though SQL Server does not reserve it is
          * a name here (the second verification pass, 2026-10-14). */
-        if (this.cur() && (this.cur().type === 'identifier' || isUnreservedKeyword(this.cur())) && this.isPunctAt(1, '.') &&
+        if (this.cur() && (this.cur().type === 'identifier' || isAliasKeyword(this.cur())) && this.isPunctAt(1, '.') &&
             this.at(2) && this.at(2).type === 'operator' && this.at(2).value === '*') {
             this.advance(); this.advance(); this.advance();
             return;
         };
         // 'alias = expr', or a string literal alias: 'Total' = expr
-        if (this.cur() && (this.cur().type === 'identifier' || isUnreservedKeyword(this.cur()) || this.cur().type === 'string') && this.at(1) && this.at(1).type === 'operator' && this.at(1).value === '=') {
+        if (this.cur() && (this.cur().type === 'identifier' || isAliasKeyword(this.cur()) || this.cur().type === 'string') && this.at(1) && this.at(1).type === 'operator' && this.at(1).value === '=') {
             this.advance(); // alias name
             this.advance(); // '='
             var fb = this.setFallback("This alias assignment is missing its value after '='. Add an expression");
@@ -27869,7 +31018,7 @@ window.SQLStudioSQL = {
              * expression has read AT TIME ZONE, WITHIN GROUP and OVER, so no such word is grammar here (the second verification of the lint
              * round, 2026-10-14: it got "There is extra text after the end of the query"). */
             var t2 = this.cur();
-            if (t2 && (t2.type === 'identifier' || isUnreservedKeyword(t2))) this.advance();
+            if (t2 && (t2.type === 'identifier' || isAliasKeyword(t2))) this.advance();
         };
     };
 
@@ -27918,7 +31067,7 @@ window.SQLStudioSQL = {
             var t = this.cur();
             /* A word the tokenizer reads as a keyword though SQL Server does not reserve it, as AS Zone, or Zone with no AS (the second
              * verification of the lint round, 2026-10-14), is the alias. */
-            if (t && (t.type === 'identifier' || isUnreservedKeyword(t))) {
+            if (t && (t.type === 'identifier' || isAliasKeyword(t))) {
                 this.advance();
                 if (this.isPunct('(')) this.parseColumnAliasList();
             } else if (isQuery || asTok) {
@@ -27959,8 +31108,10 @@ window.SQLStudioSQL = {
         if (this.isKeyword('AS')) {
             this.advance();
             var at = this.cur();
-            /* A word the tokenizer reads as a keyword though SQL Server does not reserve it, as AS At or AS Rows, is the alias. */
-            if (!at || !(at.type === 'identifier' || isUnreservedKeyword(at))) this.fail(at, 'AS needs a table alias after it. Add an alias');
+            /* A word the tokenizer reads as a keyword though SQL Server does not reserve it, as AS At or AS Rows, is the alias, and so is one
+             * the query check accepts as an alias (RESERVED_ALIAS_ACCEPTED, empty since round 8). A reserved word besides, AS Table, stays
+             * an error. */
+            if (!at || !(at.type === 'identifier' || isAliasKeyword(at))) this.fail(at, 'AS needs a table alias after it. Add an alias');
             this.advance();
             hasAlias = true;
         } else {
@@ -27968,7 +31119,7 @@ window.SQLStudioSQL = {
             /* WINDOW name AS ( starts SQL Server 2022's WINDOW clause, which MCE075 reports: no alias named Window. A word the tokenizer
              * reads as a keyword though SQL Server does not reserve it, FROM Orders Time, is the alias, but APPLY, which joins after CROSS
              * or OUTER (the second verification of the lint round, 2026-10-14). */
-            if (at2 && (at2.type === 'identifier' || (isUnreservedKeyword(at2) && at2.upper !== 'APPLY')) && !this.isWindowClauseStart()) {
+            if (at2 && (at2.type === 'identifier' || (isAliasKeyword(at2) && at2.upper !== 'APPLY')) && !this.isWindowClauseStart()) {
                 this.advance();
                 hasAlias = true;
             };
@@ -30573,6 +33724,12 @@ window.SQLStudioSQL = {
         inferColumnTypeTables: inferColumnTypeTables,
         inferSaveColumnTypes: inferSaveColumnTypes,
         inferSaveColumnSources: inferSaveColumnSources,
+        inferTextLengths: inferTextLengths,
+        textFieldLength: textFieldLength,
+        inferTextSources: inferTextSources,
+        isNumericText: isNumericText,
+        readsAsDate: readsAsDate,
+        inferNullColumns: inferNullColumns,
         inferValueType: inferValueType,
         isEmailAddress: isEmailAddress,
         formatDateValue: formatDateValue,
@@ -30634,7 +33791,7 @@ window.SQLStudioSQL = {
 
 
 /* ======================================================== sqlstudio.css == */
-window.SQLStudioEmbeddedCss = "/* ==========================================================================\n   SQL Studio styles\n\n   Brand: SQL Studio follows the same design tokens and Lightning-adjacent\n   chrome as its sibling app Diagramforce. The dark tokens\n   are the base, and .ss[data-theme=\"light\"] overrides them. The App picks\n   the theme from the user's choice or the operating system's mode. Everything is scoped under .ss so the app can be\n   dropped into a Cloud Page without leaking styles or claiming <html>.\n\n   Sections:\n   1. Design tokens (brand, semantic, surfaces, sizing, shadows)\n   2. Reset and base\n   3. Layout shell (toolbar-on-top anatomy: header, sidebar, main - no status bar)\n   4. Buttons and form controls\n   5. Sidebar tree and search\n   6. Toolbar, help/theme menu, and problems strip\n   7. Editor pane and split resizer\n   8. Results grid, header, notice, error panel and pager\n   9. Dialogs, dropdown managers and modal\n   10. Toasts\n   11. Misc (badges, scrollbars, focus, responsive)\n   ========================================================================== */\n\n/* -------------------------------------------------------------------- */\n/* 1. Design tokens                                                      */\n/* -------------------------------------------------------------------- */\n.ss {\n  /* Brand (theme-stable) */\n  --brand-blue: #1D73C9;\n  --brand-red: #DA4E55;\n  --brand-amber: #F6B355;\n  --brand-amber-strong: #D4911F;\n  --brand-green: #27AE60;\n\n  /* Semantic: the primary hue flips between themes (deliberate, matches\n     Diagramforce); danger is always the brand red. --color-action is a separate accent hue for the\n     Run button, primary dialog buttons, and results/pager accents - it\n     also flips between themes, but independently of --color-primary. */\n  --color-primary: var(--brand-red);\n  --color-primary-hover: color-mix(in srgb, var(--color-primary) 82%, black);\n  --color-danger: var(--brand-red);\n  --color-accent: var(--brand-amber);\n  --color-action: var(--brand-amber);\n  --color-action-hover: color-mix(in srgb, var(--color-action) 82%, black);\n  --color-action-fg: #1C1E21;\n  --tint-danger: color-mix(in srgb, var(--color-danger) 14%, transparent);\n  --tint-warning: color-mix(in srgb, var(--warning-color, var(--brand-amber)) 16%, transparent);\n  --tint-info: color-mix(in srgb, var(--brand-blue) 14%, transparent);\n  /* The focused completion row and the header strip of its details panel, in both themes: brand blue with white\n     text, which reads at 4.8:1 on it, and the row reads at 4.4:1 against the light list and 3.2:1 against the dark\n     one. The Monaco theme writes the same pair (Editor._registerThemes). The rest of the panel is a card in a light\n     tint of the same blue, under which the note's secondary text keeps 4.5:1 in the light theme. */\n  --focus-band: var(--brand-blue);\n  --focus-band-fg: #FFFFFF;\n  --focus-card: color-mix(in srgb, var(--brand-blue) 8%, transparent);\n  --tint-success: color-mix(in srgb, var(--brand-green) 14%, transparent);\n\n  /* Dark theme surfaces and text (default) */\n  --bg-app: #212121;\n  --bg-surface: #18191A;\n  --bg-surface-raised: #242526;\n  --bg-elevated: rgba(127, 127, 127, 0.08);\n  --bg-hover: rgba(255, 255, 255, 0.10);\n  --text-primary: #F5F6F7;\n  --text-secondary: #B0B3B8;\n  --text-muted: #9CA3AF;\n  /* The rows of a query the editor no longer holds, and the mark that says so (.ss-stale-mark): muted, at 4.67:1 on a hovered row and\n     5.77:1 on the results header. */\n  --text-stale: var(--text-muted);\n  /* The soft hatch behind those rows: lighter stripes, which keep --text-stale at 5.5:1 or more where they lie. */\n  --stale-hatch: rgba(255, 255, 255, 0.045);\n  --text-inverse: #1C1E21;\n  --border-color: #3A3B3C;\n  --border-color-strong: #4E4F50;\n  --toolbar-bg: #242526;\n  --toolbar-button-hover: rgba(255, 255, 255, 0.10);\n  --toolbar-button-active: rgba(218, 78, 85, 0.15);\n  /* The quick tip (.ss-tip): a step lighter than the sidebar, with a border and a tight shadow that set it off from the rows\n     under it (the author's RC11 test, 2026-10-09: the surface and border colours left it hard to tell from the list). */\n  --tooltip-bg: #333437;\n  --tooltip-fg: var(--text-primary);\n  --tooltip-border: #6A6D72;\n  --shadow-tooltip: 0 4px 14px rgba(0, 0, 0, 0.55);\n  --modal-btn-neutral-bg: #E4E6EB;\n  --modal-btn-neutral-hover: #D2D6DC;\n  --modal-btn-neutral-fg: #1C1E21;\n  /* The severity colours: --warning-color, --color-danger and --brand-blue\n     mark (squiggles, rulers, borders, dots) at 3:1 or more, and the -text\n     variants colour words at 4.5:1 or more on the tints, the active tab and\n     the hovered tab they sit on. The dark theme's error red and info blue are\n     a shade lighter as text. */\n  --warning-color: var(--brand-amber);\n  --warning-text: var(--warning-color);\n  --danger-text: #E89397;\n  --info-text: #73AFEB;\n  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);\n  --shadow-md: 0 5px 40px rgba(0, 0, 0, 0.35);\n  --shadow-lg: 0 12px 28px 0 rgba(0, 0, 0, 0.4), 0 2px 4px 0 rgba(0, 0, 0, 0.2);\n  --shadow-dropdown: 0 14px 24px -10px rgba(0, 0, 0, 0.55);\n\n  /* Editor tokens: keywords/functions use the\n     flipping primary/accent hues, data views stay brand blue in both\n     themes, strings are always green, comments always --text-muted.\n     Each reads at 4.5:1 or more on --editor-bg, which the details\n     panel's code blocks share too: where a brand colour falls short,\n     the token takes the same hue a step lighter here, and a step darker\n     in the light theme below. Dark: the keyword red is #DB545B (the\n     brand red is 4.36:1), the Data View blue #2884E0 (the brand blue\n     is 3.65:1). */\n  --editor-bg: var(--bg-surface);\n  --editor-fg: var(--text-primary);\n  --editor-keyword: #DB545B;\n  --editor-function: var(--brand-amber);\n  --editor-string: var(--brand-green);\n  --editor-identifier: var(--text-primary);\n  --editor-dataview: #2884E0;\n  --editor-comment: var(--text-muted);\n  --editor-operator: #778899;\n\n  /* Sizing and type */\n  --toolbar-height: 50px;\n  --panel-header-height: 45px;\n  --border-radius-sm: 6px;\n  --border-radius-md: 8px;\n  --spacing-xs: 4px;\n  --spacing-sm: 8px;\n  --spacing-md: 12px;\n  --spacing-lg: 16px;\n  --spacing-xl: 24px;\n  --font-family: system-ui, -apple-system, \"Segoe UI\", Roboto, Ubuntu, Cantarell, \"Noto Sans\", sans-serif;\n  --font-mono: ui-monospace, SFMono-Regular, \"SF Mono\", Menlo, Consolas, \"Liberation Mono\", monospace;\n  --font-size-xs: 11px;\n  --font-size-sm: 12px;\n  --font-size-md: 14px;\n  --font-size-lg: 16px;\n  --line-height: 1.65;\n  --logo-data-uri: url(\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAABGdBTUEAALGPC/xhBQAAAERlWElmTU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAQKADAAQAAAABAAAAQAAAAABGUUKwAAABy2lUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iWE1QIENvcmUgNi4wLjAiPgogICA8cmRmOlJERiB4bWxuczpyZGY9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkvMDIvMjItcmRmLXN5bnRheC1ucyMiPgogICAgICA8cmRmOkRlc2NyaXB0aW9uIHJkZjphYm91dD0iIgogICAgICAgICAgICB4bWxuczpleGlmPSJodHRwOi8vbnMuYWRvYmUuY29tL2V4aWYvMS4wLyI+CiAgICAgICAgIDxleGlmOkNvbG9yU3BhY2U+MTwvZXhpZjpDb2xvclNwYWNlPgogICAgICAgICA8ZXhpZjpQaXhlbFhEaW1lbnNpb24+MTk2PC9leGlmOlBpeGVsWERpbWVuc2lvbj4KICAgICAgICAgPGV4aWY6UGl4ZWxZRGltZW5zaW9uPjE5NjwvZXhpZjpQaXhlbFlEaW1lbnNpb24+CiAgICAgIDwvcmRmOkRlc2NyaXB0aW9uPgogICA8L3JkZjpSREY+CjwveDp4bXBtZXRhPgosnlo7AAAMIklEQVR4AeVba2wdxRX+9u7eh31jO7ZjB2xwchMCAURCHhWPQsEhIWlTKlIeKvTxB1X9gUAV/0qlItoK2kogVX0L8SeIP6gtqC0VJLQxSdoqPOI4AkNMXnZiOwlx8OPavs/dfmf2Pnbvrl+xHYN9lPHenZmdme+bc86cmc1qmIRYlhVhtVqmaqZFTGEmnenzJFkOJskUZ/qMqU/TtASv44o2VilBC8htTDsAaz2vjUxRQDN4T/BjPspqcyEWO9VIgpXhj2Gmbt4f5PVVpjdIhpAzOSH4rUz/Y5ovIli2+qH3TCMr/ogVn2YK2g8Is19kKUBME8VT1IRnnWgKpZKZA/+MXeGLDtwJU34XoD7pJKGQS/BbWOt1Js78fAMvBIgouKIJ20nC7kIOwZcR9F5W2Dh/wQtcESHBeo/Xr5CE0YDKA+5eGOAFrVotONGCGcgTcJ/cLDBRmANUfwly1i0w8AJ3nWAXDWCEZzUsPAIU5lohoIaJEd6CE8FcQwIyjO0lvF1oIpgzi0iAEaIJfN42NpdgNgSzERIT+BxubC4Bfjso0j2qr2JA/tH8okFN+JqJKDEXgFqmP1KtEKD6lI9VdnHjKiFAw7njXfjJy+9hRA+7SMhmTTTVV+HpR25DyBCLubgOhVozPoSfvrAHHSMBGE48bNLQA/jZI7ejsa4i14eGVDqDH7+4H73n4zCMAMIhA3VVZbiqsRprV9ZhdVMNysK5vdsUx1VCAFA51IfIBwfREr2Gpx5yxmCLwG09eh7N65tw95di+eyLuva1tODwgQ/RHm1EyKEFFjsJEmAiVexXOjCZ336iD8fP9CuCBKPJylJfyFi+tAKbNy7HjtuuQsMSIU6EhZMQ0WmXWIEAtmW6UKunybauBiSDCjHpuoadu9qRysgAnVPnamKcGw3ZkTj69ryBUCSIEGdb2i5NfhZgj0FX2hcK6ogQeFnYgNQ93juA373aiod//jr+9Pc2jCZlvzO58XkIyJKAK41BfDlzGqlCpGxjEtVvO/op9rR2jQNy/KKBAy3IDnQjQAAzIQJTzEbI6I8n8es/v48fPLcbR0/LqdjEJHgIED+nRXVs00+gikdslk8jLxW0YCoQaPujcQy+uwuhqiC0WVh49YCmiDjYcRbff+4tHOw4MyEJXgJkYGU6lkXiuF3v9mpBMEAtOJfTgokZdlIUP7wX5lAPgtEgAhzsJM1UNSH2ztjdTs5GfX5rRhBGqg/mu88je+ET1hh7nF4CODCjTINWHsD26ElU8SzRLG2Ahjc1LeDsJ4YxfHgXjKgBnacPJdblA8OdFSLx4vDE/oW5RCqDZDqrHKGzZsoMoDE6il/d9AFWR05h6MAfqXkXWMWfBI8higkYEVamL4hpw2jO9OC14RjCcuCaE3GIbcdsX7BVrQgTe9zRjr3ASC+C5Qw8uaSqkCLf4LhXC2GCf/7RZqT5nGjN0GgKR7ouYO/h0zjwUS8SyYwixgafwLMb2nB1xSCSZhjWYA9G2l7GopseJQdeEjwEyMzoigCpHMA91Z1oSTRi2DR45wRq4aU329G8rkmtEGNjYEiVHMbox7sRiEh31C6TyaN747TAgV9ZX+mqsHZlPR5sXo3WT87iN39txX/azyC2OIVfbDiEVZUDSGZtJ6MZYaROHUCq6VaEGjawDScGH0WUgemcJElWSENsURybKukLqFpOkRXh8PFzePvQKWZ7mXXWTRzfB3O4VxEQYLsa28UUfYA9cBm8O61btRR/eGILHv3qSjy95j2sqiiCz49BfEfiyD8ZPMgrA7e4UbFM48D0MNd8bhMkgene+lOoNlIeXyBD2fnmh7m4wN2wfcfZTw0jcfQttexpEvbRfAJBasD4nPk1NkaemIiOx791C9asuQEJ+oVS0fQgMn0dSJ/vYJG7Yy8BLM9rgNIC2t+Kyji2LOnx1YJDx86h5VCXp+H8IJIn9yEb74Emzov/ZBOqiHCPI1/9Iq8yFQYia74LvYJnO6aXBCubQar7HU/7HgKEIE1myJGynLV7G7pQHeSKYHlHLr7AGx3K7MeROMbZp7mIacnar9Z/2xV4BjO9DEYs4UpErt7KlcFLgBYwkPn0CKxsytWNPwFUVZmlfDIZacUqh7Glvpda4CZAfMEhrggtyhe42kaycz+yg920d0HOf3kSNNuO5e9MS6hxIwJlfIfr2GOoPti5OcLYQC2JxV59CVBbNGWvHHXuKpzefwPPkCrCaiNSbML+9ZL4goL9FW1fK91xc2D6ohrolZdTVcfYDpc2Pul7i462GkZVE/GXaAGdjpVJKBKczXkIEOeUV1XnNaOZWNVUja/fskIFIM5GJC4o9QXJTtr+EGdf6byjtplGcPmdDLTqmFkySEe16fzUK5dSe2kSDi1WfidAwtPy4rgo3jiAZaKqJc5SrT5ZLicPbVqNf+zvQJzBiApnC23Z0WHz+mUImqPK84vduYS2GYjWIxJrJvYDrqKZvIl36ejbn+Zq455fM52CEeMENBZ7KxkhC3K26k8AD0XqothOLZDlT3ZgeSloQVsvttS0K9uXIMQp4okjK5qhRaroqGZa/Ys9xU8Mor89xeW8mCe/TB6sLB2lP3KIm6J8AUlQBJRec+UP33UtaiojPr4ggJ2vv4MLH+2i3yuSox5Ttl+P8Io7c63MxoUDpl9J9narGKbUBCQSDVZXuTr2J8BVxXvTtLSSvmCljy/Q0HZyEHuPWQyPhb2iWLT9sMx+eDEzZ8P/230lensx0tlF+y+ZABJjRKMI14nvKcpFESCPKy2ooBbIeZVT6PRe6VyORIZrfz5fZp9OLxy7M58za9dP/92CzNAQNbjQu+rLzGYRabicGiD/zakoF0mABdGCe3y0IEhP+8Fni7HvbB2PvGwvb8/+Ji5Rszn7GkY7O3HujTfp/PIHpEWgYhpVN67lojQZH+B4bryfD22+FrW+vgB45WSTrQX0/HqUs0/1nz3RkBkYwPHf/t6efW7lXcLVSy8vR/UtN7uy5aakpqd8nAxqAbeoX7uZcUHJKW5BC87VI8QzpXBMZl+cT4m5jNP65IpEzTUkunvQ8cwvEf/4iO/sm6k0Fm9Yj/LlyzxjKPEUk+vWWevbm6/D3/57TB1IBhx2l6Zv2PnxZbj1iiTqZmT23TYtY5BZP//2PvS++hpS589zx8m9dqlQ9fXyCC6/75sskTbckzBNAmxf8NiOG3GIB5ByjO6UbLYR/SvuQP00Z98iiIH3W3mkPqKaT/f3Y+TECQx92I7EmbPKrn3Bs7aZSqHxvh2IXrWSd27w0tg0CZAmLDy8+XqV5M5fvB371/PLZQzPAKbzhRcxevq07cRo0zKbstSNBVxaMhNJLN64AQ0P3O/XsMqbAQKknekAHHNsrgKNnl3AlnpxVyXHjZlMYtE1VyP2+GMIhCUk9B/jDBHg6Hmuf1I7BHzl2jVY+cQPEaqV///hD16GOq8IMNPcADEEv+wb9+CK732Hx+9y/j42+HlBgDhIi8DFNCqvvw4NDz6AqnU3CjbK+OClhlcDGLZaWf7HarUnliq2WJkUDxnkpePMiLzUGOV5ftYRSotvy/L0WU5xS0W8uah20Qdo9Al8wVpbi4rrVqP2jjsY6a1huUDyPl/aXv7eQ0CgfAki12xneUmMxCNlozqWf27a1+0MoG6ILVFvnAuNcdwBRnGLuccoCg82eCRXv3ULMv0DPFjVua6XIVRTg0hjI8quvAJGRf6VuDw1efBSWyPbm3j9l9zYD3sDDrss/3dqHeSf8l6n2s949ac6pkJbd4kGcMciDeQzp9qYF9rkcqbaz1TrTzQKhTkrei4GPzuHcxONYU7LFeakEMBTQvWZyZwO59J3bn9aIwTIu2P3UemlH81c9CiYLwgBfTSBnrkYwdz2qTD3cQerPi1rndvBzEnvrYJdNEDkL/ZlQf1VmPME7KIjlM9IFgADglGwgphz4R5VYZTgn+Q9Y935TILCJhjlyzFidsS7zNjN+6ckc36SUJhY+XZQsCrJm4C6YYF8VOjQhMJDdu0v5F/BkJ95uL4ZHBMO9wcL99PZPCskQc6Rch9Pgx9PW42852cm6usS9+ln/qG5v8q+JvfxtMZ385jw4+lJ6TjJkP0pP65yfj7Pd18+xwlzw4FgNmQ/w33N1D6f/z9nGYh4iZaoUAAAAABJRU5ErkJggg==\");\n  --transition-fast: 150ms ease;\n  --transition-normal: 400ms cubic-bezier(0.08, 0.52, 0.52, 1);\n\n  color-scheme: dark;\n  background: var(--bg-app);\n  color: var(--text-primary);\n}\n\n.ss[data-theme=\"light\"] {\n  --color-primary: var(--brand-blue);\n  --color-primary-hover: color-mix(in srgb, var(--color-primary) 85%, black);\n  --color-action: var(--brand-blue);\n  --color-action-hover: color-mix(in srgb, var(--color-action) 85%, black);\n  --color-action-fg: #FFFFFF;\n\n  --bg-app: #F5F6F7;\n  --bg-surface: #FFFFFF;\n  --bg-surface-raised: #FFFFFF;\n  --bg-elevated: rgba(127, 127, 127, 0.08);\n  --bg-hover: rgba(0, 0, 0, 0.06);\n  --text-primary: #1C1E21;\n  --text-secondary: #606770;\n  --text-muted: #65707B;\n  /* Secondary, not muted, in the light theme: --text-muted on the app background read at 4.09:1 on a hovered row and 4.29:1 on the\n     results header, where --text-secondary keeps 4.63:1 and 4.86:1. The two greys are a shade apart. */\n  --text-stale: var(--text-secondary);\n  /* Darker stripes in the light theme, which keep --text-stale at 4.7:1 or more where they lie. */\n  --stale-hatch: rgba(0, 0, 0, 0.05);\n  --text-inverse: #FFFFFF;\n  --border-color: #DADDE1;\n  --border-color-strong: #BEC3C9;\n  --toolbar-bg: #FFFFFF;\n  --toolbar-button-hover: rgba(0, 0, 0, 0.06);\n  --toolbar-button-active: rgba(53, 120, 229, 0.12);\n  --tooltip-bg: #FFFFFF;\n  --tooltip-fg: var(--text-primary);\n  --tooltip-border: #A9AFB6;\n  --shadow-tooltip: 0 4px 14px rgba(0, 0, 0, 0.16);\n  --modal-btn-neutral-bg: #E4E6EB;\n  --modal-btn-neutral-hover: #D2D6DC;\n  --modal-btn-neutral-fg: #1C1E21;\n  /* The light theme's severity colours: the warning amber a shade darker\n     than the strong one, which marked at 2.67:1 on white, and every -text\n     variant a shade darker again, for 4.5:1 as text. */\n  --warning-color: #B47B1A;\n  --warning-text: #825913;\n  --danger-text: #B9272E;\n  --info-text: #1962AC;\n  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.1);\n  --shadow-md: 0 5px 40px rgba(0, 0, 0, 0.12);\n  --shadow-lg: 0 12px 28px 0 rgba(0, 0, 0, 0.2), 0 2px 4px 0 rgba(0, 0, 0, 0.1);\n  --shadow-dropdown: 0 14px 24px -10px rgba(0, 0, 0, 0.18);\n\n  /* The light theme's editor tokens at 4.5:1 or more on white: the keyword\n     and Data View blue as they are, the amber a step darker than the\n     strong one (2.67:1), the green a step darker than the brand green\n     (2.87:1), the operator grey a step darker than Monaco's (3.64:1), and\n     the second bracket pair's green a step darker than Monaco's (3.93:1). */\n  --editor-keyword: var(--color-primary);\n  --editor-function: #9E6C17;\n  --editor-string: #1E864A;\n  --editor-dataview: var(--brand-blue);\n  --editor-operator: #667788;\n  --editor-bracket-2: #2D872D;\n\n  color-scheme: light;\n}\n\n/* -------------------------------------------------------------------- */\n/* 2. Reset and base                                                     */\n/* -------------------------------------------------------------------- */\n.ss, .ss * {\n  box-sizing: border-box;\n}\n.ss {\n  position: relative;\n  display: flex;\n  flex-direction: column;\n  /* The viewport, not 100%: the Cloud Page gives html, body and #sqlstudio no height, so a\n     percentage resolved to auto there and the app grew with its content (a 100-row page made\n     it about 3,000px tall, scrolling the whole page instead of the grid). */\n  height: 100vh;\n  min-height: 640px;\n  font-family: var(--font-family);\n  font-size: var(--font-size-sm);\n  line-height: var(--line-height);\n}\n/* :where() keeps this reset at zero specificity, so every component's own\n   color rule (.ss-btn, .ss-toolbar__button, .ss-tab, ...) always wins\n   without needing !important or selector-weight tricks. */\n:where(.ss button, .ss input, .ss select, .ss textarea) {\n  font-family: inherit;\n  font-size: inherit;\n  color: inherit;\n}\n/* A page without a doctype renders in quirks mode, where tables do not inherit\n   the text colour or font: the results grid came out black on the dark theme\n   on the first org deployment. */\n:where(.ss table) {\n  color: inherit;\n  font-size: inherit;\n  font-weight: inherit;\n  font-style: inherit;\n  line-height: inherit;\n}\n.ss a {\n  color: var(--color-primary);\n}\n.ss svg {\n  fill: currentColor;\n}\n.ss :focus-visible {\n  outline: 2px solid var(--color-primary);\n  outline-offset: 1px;\n}\n.ss ul {\n  margin: 0;\n  padding: 0;\n  list-style: none;\n}\n.ss h1, .ss h2, .ss h3, .ss p {\n  margin: 0;\n}\n\n/* -------------------------------------------------------------------- */\n/* 3. Layout shell                                                       */\n/* -------------------------------------------------------------------- */\n.ss-toolbar__brand {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  text-decoration: none;\n  white-space: nowrap;\n  flex: 0 0 auto;\n  padding: 0 var(--spacing-xs);\n}\n.ss-toolbar__brand-logo {\n  width: 32px;\n  height: 32px;\n  flex: 0 0 auto;\n  border-radius: var(--border-radius-sm);\n  background-image: var(--logo-data-uri);\n  background-size: contain;\n  background-repeat: no-repeat;\n  background-position: center;\n}\n.ss-toolbar__brand-name {\n  font-size: 16px;\n  font-weight: 700;\n  letter-spacing: -0.3px;\n  color: var(--color-primary);\n}\n.ss-about-logo {\n  width: 64px;\n  height: 64px;\n  border-radius: var(--border-radius-md);\n  background-image: var(--logo-data-uri);\n  background-size: contain;\n  background-repeat: no-repeat;\n  background-position: center;\n}\n.ss-header__actions {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n}\n\n.ss-body {\n  display: flex;\n  flex: 1 1 auto;\n  min-height: 0;\n  position: relative;\n}\n\n.ss-sidebar {\n  display: flex;\n  flex-direction: column;\n  width: 280px;\n  min-width: 240px;\n  max-width: 480px;\n  flex: 0 0 auto;\n  position: relative;\n  border-left: 1px solid var(--border-color); /* the sidebar sits on the right, like Diagramforce's stencil */\n  background: var(--bg-elevated);\n  overflow: hidden;\n}\n.ss-sidebar.is-collapsed {\n  width: 0 !important;\n  min-width: 0;\n  border-left: none;\n}\n.ss-sidebar__resizer {\n  position: absolute;\n  top: 0;\n  bottom: 0;\n  left: 0;\n  width: 6px;\n  cursor: col-resize;\n  z-index: 5;\n}\n.ss-sidebar__search {\n  position: relative;\n  display: flex;\n  align-items: center;\n  height: var(--panel-header-height);\n  padding: 0 var(--spacing-sm);\n  border-bottom: 1px solid var(--border-color);\n}\n.ss-sidebar__search .ss-input {\n  padding-right: 26px;\n}\n.ss-sidebar__search-clear {\n  position: absolute;\n  right: 14px;\n  top: 50%;\n  transform: translateY(-50%);\n  border: none;\n  background: none;\n  padding: 2px;\n  color: var(--text-secondary);\n  cursor: pointer;\n  border-radius: var(--border-radius-sm);\n}\n.ss-sidebar__search-clear:hover {\n  color: var(--color-primary);\n  background: var(--bg-hover);\n}\n.ss-sidebar__tree {\n  flex: 1 1 auto;\n  overflow-y: auto;\n  overflow-x: hidden;\n  padding: var(--spacing-xs) 0;\n}\n.ss-tree__section-title {\n  padding: var(--spacing-sm) var(--spacing-md) 2px var(--spacing-sm);\n  font-size: var(--font-size-sm);\n  font-weight: 700;\n  color: var(--text-primary);\n  text-transform: uppercase;\n  letter-spacing: 0.03em;\n}\n/* What is under a section title starts one indent step in from it, as a folder's children do from the\n   folder, so the title reads as the outermost level: the title's caret is at the sidebar's left padding, a\n   top-level row's caret one step in and a subfolder's another. */\n.ss-tree__section-body {\n  padding-left: var(--spacing-lg);\n}\n/* The lines in a section body (the hint, a group title, a message, the footer) start in line with the carets\n   of its rows, not a step further in. */\n.ss-tree__section-body > .ss-tree__hint,\n.ss-tree__section-body > .ss-tree__group-title,\n.ss-tree__section-body > .ss-tree__empty,\n.ss-tree__section-body > .ss-tree__loading,\n.ss-tree__section-body > .ss-tree__list-status {\n  padding-left: var(--spacing-sm);\n}\n/* A section title as a button: pressing it collapses or expands the section, as a Data View group's\n   caret does. It keeps the title's type, and adds the caret and a hover. */\n.ss-tree__section-toggle {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  width: 100%;\n  border: none;\n  background: none;\n  line-height: var(--line-height);\n  text-align: left;\n  cursor: pointer;\n}\n.ss-tree__section-toggle:hover {\n  background: var(--bg-hover);\n}\n.ss-tree__section-caret {\n  flex: 0 0 auto;\n  width: 14px;\n  text-align: center;\n  color: var(--text-secondary);\n}\n/* The Snippets title holds its toggle and its save button side by side, as a table row holds its toggle and its actions, so\n   no control sits inside another. The toggle fills the row and the save button keeps the right end. */\n.ss-tree__section-head {\n  display: flex;\n  align-items: center;\n  padding-right: var(--spacing-xs);\n}\n.ss-tree__section-head > .ss-tree__section-toggle {\n  flex: 1 1 auto;\n  width: auto;\n  min-width: 0;\n}\n/* The app's own tooltip (UI._wireTips), for elements with a data-tip: it comes sooner than a title's. */\n.ss-tip {\n  position: absolute;\n  z-index: 300;\n  max-width: min(420px, calc(100% - 16px));\n  /* Its line breaks and the SQL's indentation are kept, as a snippet's and a tab's tip show SQL. */\n  white-space: pre-wrap;\n  tab-size: 4;\n  overflow-wrap: anywhere;\n  padding: 4px 8px;\n  border: 1px solid var(--tooltip-border);\n  border-radius: var(--border-radius-sm);\n  background: var(--tooltip-bg);\n  box-shadow: var(--shadow-tooltip);\n  font-size: var(--font-size-xs);\n  color: var(--tooltip-fg);\n  pointer-events: none;\n}\n.ss-tip[hidden] {\n  display: none;\n}\n/* The reload icon of a section's title turns while its list loads (UI._renderReloadButton). */\n.ss-tree__section-action.is-busy svg {\n  animation: ss-spin 0.8s linear infinite;\n}\n/* A line of a section's list state, under its hint: the pages of a first load, a list that stops short, a reload that failed. */\n.ss-tree__list-status {\n  padding: 2px var(--spacing-md) var(--spacing-xs);\n  color: var(--text-muted);\n  font-size: 11px;\n}\n.ss-tree__section-head > .ss-tree__section-action {\n  margin-top: var(--spacing-xs);\n}\n/* The section titles dock (1.2.0, the author's RC3 test, 2026-10-08: the Snippets section was out of sight below a long Data\n   Extension list until the others were collapsed). Each sticks to the top of the sidebar's scroll while its section scrolls\n   by, below the titles before it, and to the bottom while its section is further down, above the titles after it, so every\n   title is always in sight. Each title is one height (--ss-dock-h, the height the title had already), and\n   UI._dockSectionTitles gives each the number of titles above and below it, so they stack without a gap or an overlap,\n   whatever the sidebar's state when the tree is drawn. The background covers the rows that scroll under them: the sidebar's\n   own --bg-elevated is a see-through grey over the app's --bg-app, so the title lays the same two on each other. */\n.ss-tree__dock {\n  --ss-dock-h: 30px;\n  position: sticky;\n  z-index: 2;\n  /* Less the scroll's own padding, which sticky offsets start inside: rows showed through that strip above the top title. */\n  top: calc(var(--ss-dock-h) * var(--ss-dock-above, 0) - var(--spacing-xs));\n  bottom: calc(var(--ss-dock-h) * var(--ss-dock-below, 0) - var(--spacing-xs));\n  box-sizing: border-box;\n  height: var(--ss-dock-h);\n  background: linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-app);\n}\n/* The Data Views title is its own toggle, with no head around it: its hover lays --bg-hover over the same two, as the hover's\n   see-through grey alone let the rows under it show through (the author's RC10 test, 2026-10-09). */\n.ss-tree__dock.ss-tree__section-toggle:hover {\n  background: linear-gradient(var(--bg-hover), var(--bg-hover)), linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-app);\n}\n/* The line under a snippet's name in its dialog: what is saved, and who sees it. */\n.ss-snippet-note {\n  margin: var(--spacing-sm) 0;\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n}\n/* The SQL a new snippet saves, in the dialog that asks for its name: monospace, its lines kept, as tall as a dozen of them\n   before it scrolls. */\n.ss-snippet-preview {\n  max-height: 14em;\n  margin: 0;\n  padding: var(--spacing-sm);\n  overflow: auto;\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  background: var(--bg-app);\n  color: var(--text-primary);\n  font-family: var(--font-mono);\n  font-size: 12px;\n  white-space: pre;\n  user-select: text;\n  -webkit-user-select: text;\n}\n/* The line above the Data Extension tree that gives the totals and says to search. */\n/* A note of the Data Extensions section, such as the one on SQL Studio installed in a child, has the hint's look and a class of its own,\n   so the hint stays the line above a tree. */\n.ss-tree__hint,\n.ss-tree__note {\n  padding: 2px var(--spacing-md) var(--spacing-xs);\n  color: var(--text-muted);\n  font-size: 11px;\n}\n/* A folder of the Data Extension tree reads heavier than the Data Extensions beside it, which have no count. */\n.ss-tree__folder--de > .ss-tree__name {\n  font-weight: 600;\n}\n/* The made-up group of the Data Extensions in no loaded folder reads in italics, so it does not pass\n   for a real folder of that name. */\n.ss-tree__folder--made-up > .ss-tree__name {\n  font-style: italic;\n}\n/* The number of Data Extensions below a folder, at the right end of its row. */\n.ss-tree__count {\n  flex: 0 0 auto;\n  color: var(--text-muted);\n  font-size: 11px;\n}\n/* The \"Show N more\" button under a folder's first Data Extensions, in line with their names. It is\n   a .ss-tree__link too, which comes later in this file, hence the two classes. */\n.ss-tree__link.ss-tree__more {\n  display: block;\n  padding: 3px var(--spacing-sm) 3px 26px;\n  text-align: left;\n}\n/* Inline text link inside a sidebar/Save As hint row (Retry on a failed\n   Data Extension list load, Reload in the list-loaded footer). */\n.ss-tree__link {\n  display: inline;\n  border: none;\n  background: none;\n  padding: 0;\n  color: var(--color-primary);\n  cursor: pointer;\n  font: inherit;\n}\n.ss-tree__link:hover {\n  text-decoration: underline;\n}\n/* Shared DE name prefix, replacing the old SHARED badge. */\n.ss-tree__ent-prefix {\n  color: var(--text-muted);\n}\n/* A parent Business Unit Data Extension's folder path, on its own line under its row, in line with the name. */\n.ss-tree__path {\n  padding: 0 var(--spacing-sm) 3px 26px;\n  color: var(--text-muted);\n  font-size: 11px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n/* The \"Parent BU\" heading above the parent's shared and synchronized Data Extensions in a search. */\n.ss-tree__group-title {\n  padding: var(--spacing-sm) var(--spacing-md) 2px;\n  color: var(--text-secondary);\n  font-size: 11px;\n  font-weight: 700;\n  text-transform: uppercase;\n  letter-spacing: 0.03em;\n}\n.ss-sidebar-overlay-bg {\n  display: none;\n}\n\n.ss-main {\n  display: flex;\n  flex-direction: column;\n  flex: 1 1 auto;\n  min-width: 0;\n  min-height: 0;\n}\n\n/* -------------------------------------------------------------------- */\n/* 4. Buttons and form controls                                          */\n/* -------------------------------------------------------------------- */\n/* Neutral dialog/modal button: used for\n   Cancel and other non-primary actions in modals and dropdown panels. */\n.ss-btn {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  gap: var(--spacing-xs);\n  height: 28px;\n  padding: 0 var(--spacing-md);\n  border: 1px solid transparent;\n  border-radius: var(--border-radius-sm);\n  background: var(--modal-btn-neutral-bg);\n  color: var(--modal-btn-neutral-fg);\n  cursor: pointer;\n  white-space: nowrap;\n  line-height: 1;\n  transition: background-color var(--transition-fast);\n}\n.ss-btn:hover {\n  background: var(--modal-btn-neutral-hover);\n}\n.ss-btn:disabled {\n  opacity: 0.35;\n  cursor: not-allowed;\n}\n.ss-btn--primary {\n  background: var(--color-action);\n  border-color: var(--color-action);\n  color: var(--color-action-fg);\n}\n.ss-btn--primary:hover {\n  background: var(--color-action-hover);\n  border-color: var(--color-action-hover);\n}\n.ss-btn--icon {\n  width: 28px;\n  padding: 0;\n}\n.ss-btn--sm {\n  height: 24px;\n  padding: 0 var(--spacing-sm);\n  font-size: var(--font-size-sm);\n}\n.ss-btn--link {\n  border-color: transparent;\n  background: transparent;\n  color: var(--color-primary);\n  text-decoration: underline;\n}\n.ss-btn--link:hover {\n  background: transparent;\n  color: var(--color-primary-hover);\n}\n\n.ss-field {\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n  margin-bottom: var(--spacing-md);\n}\n.ss-label {\n  font-size: var(--font-size-sm);\n  font-weight: 600;\n  color: var(--text-secondary);\n}\n.ss-hint {\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n}\n/* The History dialog's line on where its entries are kept, between the search box and the list. */\n.ss .ss-history__where {\n  margin: 6px 0 8px;\n}\n.ss-input, .ss-select, .ss-textarea {\n  height: 30px;\n  padding: 0 var(--spacing-sm);\n  border: 1px solid var(--border-color-strong);\n  border-radius: var(--border-radius-sm);\n  background: var(--bg-surface-raised);\n  color: var(--text-primary);\n  width: 100%;\n}\n.ss-textarea {\n  height: auto;\n  padding: var(--spacing-sm);\n  resize: vertical;\n  font-family: var(--font-mono);\n}\n/* A focused field is marked in the action colour, the colour of a chosen card and of Save, so that red only marks an error: in the dark\n   theme the primary colour is the danger colour, and a focused field looked like an invalid one (the author's decision on 1.3.0 RC4,\n   2026-10-11). It is the border and the keyboard ring of every text field, select and textarea, whatever its class. Checkboxes and\n   radios have the action ring too: as first built they kept the primary ring, and a focused checkbox still looked wrong in the dark\n   theme (the author's RC5 test, 2026-10-12: \"checkboxes are still red focus\"). Buttons, rows and links keep the primary ring of\n   .ss :focus-visible, by the author's decision of 2026-10-12, as a red ring on Cancel reads as discarding what the view holds. A primary\n   button such as Save keeps its own action ring (.ss-btn--primary). An invalid field keeps its danger border while it has the focus. */\n.ss-input:focus, .ss-select:focus, .ss-textarea:focus {\n  border-color: var(--color-action);\n}\n.ss input:not([type=\"button\"]):not([type=\"submit\"]):focus-visible,\n.ss select:focus-visible,\n.ss textarea:focus-visible {\n  outline-color: var(--color-action);\n}\n.ss-radio-group {\n  display: flex;\n  flex-direction: column;\n  gap: var(--spacing-sm);\n}\n/* Three equal cards in one row (Save As update type). */\n.ss-radio-group--row {\n  flex-direction: row;\n}\n.ss-radio-group--row .ss-radio-option {\n  flex: 1 1 0;\n}\n.ss-radio-option {\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  padding: var(--spacing-sm);\n  cursor: pointer;\n  transition: border-color var(--transition-fast), outline-color var(--transition-fast);\n}\n.ss-radio-option.is-selected {\n  border-color: var(--color-action);\n  outline: 2px solid var(--color-action);\n  outline-offset: -1px;\n}\n.ss-radio-option strong {\n  display: block;\n}\n.ss-radio-option span {\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n}\n\n/* -------------------------------------------------------------------- */\n/* 5. Sidebar tree and search                                            */\n/* -------------------------------------------------------------------- */\n.ss-tree__row {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  padding: 3px var(--spacing-sm);\n  cursor: pointer;\n  border-radius: var(--border-radius-sm);\n  white-space: nowrap;\n  overflow: hidden;\n}\n.ss-tree__row:hover {\n  background: var(--bg-hover);\n}\n/* A table row holds its toggle and its actions side by side, so no control sits inside another. The\n   toggle, which opens and closes the fields, fills the row and has the row's padding, so its arrow and\n   name sit where a folder row has them and a click anywhere on the name's side of the row hits it. The\n   row does not clip, so the toggle's focus outline shows in full, as a focused row's did: the toggle cuts\n   the name short itself.\n   The actions, Insert name and Insert table query (SELECT with all fields), sit at the right end of the row. They take\n   no width of their own: hidden, they leave the whole row to the name, and shown, while the row is\n   hovered or the keyboard's focus is on its toggle or on one of them, they lie over the end of the row on\n   its own background (the sidebar's, made opaque, with the hover tint on a hovered row). So a long name\n   is cut only while they show, and nothing in the row moves. Their left edge fades, so what they cover\n   fades out instead of breaking off (the mask's colour only gives its opacity). Hidden, they stay in the\n   tab order and take no click. */\n.ss-tree__row--table {\n  position: relative;\n  padding: 0;\n  overflow: visible;\n}\n.ss-tree__toggle {\n  display: flex;\n  flex: 1 1 auto;\n  align-items: center;\n  gap: 4px;\n  min-width: 0;\n  padding: 3px var(--spacing-sm);\n  border-radius: var(--border-radius-sm);\n  overflow: hidden;\n}\n.ss-tree__actions {\n  position: absolute;\n  top: 0;\n  right: 0;\n  bottom: 0;\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  padding: 0 var(--spacing-xs) 0 var(--spacing-md);\n  /* The row's own corners, as the row does not clip them. */\n  border-top-right-radius: inherit;\n  border-bottom-right-radius: inherit;\n  background: linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-app);\n  -webkit-mask-image: linear-gradient(to right, transparent, var(--bg-app) var(--spacing-md));\n  mask-image: linear-gradient(to right, transparent, var(--bg-app) var(--spacing-md));\n  opacity: 0;\n  pointer-events: none;\n}\n.ss-tree__row:hover > .ss-tree__actions,\n.ss-field-item:hover > .ss-tree__actions {\n  background: linear-gradient(var(--bg-hover), var(--bg-hover)), linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-app);\n}\n.ss-tree__row:hover > .ss-tree__actions,\n.ss-tree__toggle:focus-visible ~ .ss-tree__actions,\n.ss-field-item:hover > .ss-tree__actions,\n.ss-field-row:focus-visible ~ .ss-tree__actions,\n.ss-tree__actions:focus-within {\n  opacity: 1;\n  pointer-events: auto;\n}\n/* One action: the toolbar icon-button style, scaled to 24px for the sidebar tree. */\n.ss-tree__action {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  flex: 0 0 auto;\n  width: 24px;\n  height: 24px;\n  padding: 0;\n  border: none;\n  border-radius: var(--border-radius-sm);\n  background: transparent;\n  color: var(--text-secondary);\n  cursor: pointer;\n  transition: background-color var(--transition-fast), color var(--transition-fast);\n}\n.ss-tree__action:hover {\n  background: var(--toolbar-button-hover);\n  color: var(--color-primary);\n}\n/* An action that is off, such as Join to the query while the query has no table: dimmed, with its title saying why. */\n.ss-tree__action:disabled {\n  opacity: 0.4;\n  cursor: default;\n}\n.ss-tree__action:disabled:hover {\n  background: transparent;\n  color: var(--text-secondary);\n}\n.ss-tree__caret {\n  flex: 0 0 auto;\n  width: 14px;\n  text-align: center;\n  color: var(--text-secondary);\n  background: none;\n  border: none;\n  padding: 0;\n  cursor: pointer;\n}\n.ss-tree__name {\n  flex: 1 1 auto;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n/* Object-kind marker: DE, SHARED, VIEW, QUERY. */\n.ss-type-badge {\n  flex: 0 0 auto;\n  font-size: 10px;\n  font-weight: 700;\n  text-transform: uppercase;\n  letter-spacing: 0.02em;\n  color: var(--color-primary);\n  border: 1px solid currentColor;\n  border-radius: 2px;\n  padding: 0 3px;\n}\n/* A badge in a folder tree row: smaller type and less space around it, so the name keeps the room. */\n.ss-type-badge--compact {\n  font-size: 9px;\n  letter-spacing: 0;\n  padding: 0 2px;\n}\n.ss-tree__children {\n  padding-left: var(--spacing-lg);\n}\n.ss-tree__fields {\n  padding-left: var(--spacing-xl);\n}\n/* A field holds its row and its Insert name button side by side, as a table row holds its toggle and its\n   actions: the button lies over the end of the row while the field is hovered or the keyboard's focus is\n   on the row or on the button, and takes no width while hidden. The hover tint is the holder's, so it\n   stays while the pointer is on the button. */\n.ss-field-item {\n  position: relative;\n  border-radius: var(--border-radius-sm);\n}\n.ss-field-item:hover {\n  background: var(--bg-hover);\n}\n.ss-field-row {\n  display: flex;\n  align-items: baseline;\n  gap: 6px;\n  padding: 2px var(--spacing-sm);\n  cursor: pointer;\n  border-radius: var(--border-radius-sm);\n  overflow: hidden;\n}\n/* A field row is shorter than a table row: its button fits it. */\n.ss-field-item .ss-tree__action {\n  width: 20px;\n  height: 20px;\n}\n.ss-field-row__name {\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.ss-field-row__type {\n  flex: 0 0 auto;\n  color: var(--text-secondary);\n  font-size: 11px;\n  font-family: var(--font-mono);\n}\n/* The primary key's mark: the SLDS key icon, as tall as the field's text, in the warning text colour, which reads at\n   4.5:1 on the sidebar in both themes. */\n.ss-field-row__key {\n  display: inline-flex;\n  flex: 0 0 auto;\n  align-self: center;\n  color: var(--warning-text);\n}\n.ss-field-row__key .ss-icon {\n  width: 12px;\n  height: 12px;\n}\n.ss-tree__empty, .ss-tree__loading {\n  padding: var(--spacing-md);\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n}\n/* A hint line in a dialog's list (\"Loading...\", \"Could not load: ...\"), padded as the list's empty and loading rows are. */\n.ss-list > .ss-hint {\n  padding: var(--spacing-md);\n}\n\n/* -------------------------------------------------------------------- */\n/* 6. Toolbar and problems strip                                         */\n/* -------------------------------------------------------------------- */\n/* Toolbar, sidebar tree and tab labels are controls, not text: a drag or a select-all never paints\n   them. The query, the grid, the Status messages and the run summary stay selectable. */\n.ss-toolbar,\n.ss-sidebar__tree,\n.ss-tab {\n  -webkit-user-select: none;\n  user-select: none;\n}\n\n.ss-toolbar {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n  height: var(--toolbar-height);\n  padding: 0 var(--spacing-sm);\n  background: var(--toolbar-bg);\n  border-bottom: 1px solid var(--border-color);\n  flex: 0 0 auto;\n  flex-wrap: nowrap;\n  min-width: 0;\n  overflow: visible;\n}\n.ss-icon {\n  width: 16px;\n  height: 16px;\n  flex: 0 0 auto;\n  fill: currentColor;\n}\n/* Toolbar buttons: transparent by default, icon (16px) + label. Run is the one filled/primary button. */\n.ss-toolbar__button {\n  display: inline-flex;\n  align-items: center;\n  gap: 5px;\n  min-height: 32px;\n  padding: var(--spacing-xs) 10px;\n  border: none;\n  border-radius: var(--border-radius-sm);\n  background: transparent;\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n  font-weight: 500;\n  white-space: nowrap;\n  cursor: pointer;\n  transition: background-color var(--transition-fast), color var(--transition-fast);\n}\n.ss-toolbar__button:hover {\n  background: var(--toolbar-button-hover);\n  color: var(--color-primary);\n}\n.ss-toolbar__button.is-active,\n.ss-toolbar__button[aria-expanded=\"true\"] {\n  background: var(--toolbar-button-active);\n  color: var(--color-primary);\n}\n.ss-toolbar__button:disabled {\n  opacity: 0.35;\n  cursor: not-allowed;\n}\n/* .is-unavailable is a disabled toolbar button that stays focusable and says why it does nothing (aria-disabled), as Document while the\n   query cannot be drawn. It looks as :disabled does, with no hover highlight (the author's RC2 test, 2026-10-16: the greyed-out Document\n   button was not grey, as the rule was written for .ss-btn and the toolbar's buttons are .ss-toolbar__button). Its icon and label fade,\n   not the button: the button's opacity would fade its focus ring too, from 4.8:1 to 1.6:1 on the light toolbar and from 3.8:1 to 1.5:1\n   on the dark one, and a disabled button takes no focus, so it never showed one (the review of RC3, 2026-10-16). On a transparent\n   button the two look the same. */\n.ss-toolbar__button.is-unavailable {\n  cursor: not-allowed;\n}\n.ss-toolbar__button.is-unavailable > * {\n  opacity: 0.35;\n}\n.ss-toolbar__button:disabled:hover,\n.ss-toolbar__button.is-unavailable:hover {\n  background: transparent;\n  color: var(--text-secondary);\n}\n.ss-toolbar__button--primary {\n  background: var(--color-action);\n  color: var(--color-action-fg);\n}\n.ss-toolbar__button--primary:hover {\n  background: var(--color-action-hover);\n  color: var(--color-action-fg);\n}\n/* Focus rings on primary controls use --color-action too: amber in dark mode, blue in light mode, same as their fill. */\n.ss-toolbar__button--primary:focus-visible,\n.ss-btn--primary:focus-visible {\n  outline-color: var(--color-action);\n}\n.ss-toolbar__button--icon-only {\n  padding: var(--spacing-xs);\n  min-width: 32px;\n  justify-content: center;\n}\n/* Run while a run is in flight: a spinner in place of the play icon, at full\n   strength rather than the faded disabled look, so it reads as busy. */\n.ss-toolbar__button--primary.is-running:disabled,\n.ss-toolbar__button--primary.is-running:disabled:hover {\n  opacity: 1;\n  cursor: progress;\n  background: var(--color-action);\n  color: var(--color-action-fg);\n}\n/* Validate while Marketing Cloud Engagement checks the query: busy, not faded. */\n.ss-toolbar__button.is-running:disabled {\n  opacity: 1;\n  cursor: progress;\n}\n.ss-toolbar__button.is-running > svg {\n  display: none;\n}\n.ss-toolbar__button.is-running::before {\n  content: '';\n  width: 14px;\n  height: 14px;\n  box-sizing: border-box;\n  border: 2px solid currentColor;\n  border-right-color: transparent;\n  border-radius: 50%;\n  animation: ss-spin 0.8s linear infinite;\n  flex: 0 0 auto;\n}\n\n/* Monaco's hovers and suggestion details can sit outside .ss, so these rules are not scoped\n   to it. Tables there inherit the hover's colour and size, even in quirks mode, and read as a\n   compact list rather than bold oversized headers. */\n.monaco-hover table,\n.suggest-details table {\n  border-collapse: collapse;\n  margin: 4px 0;\n  color: inherit;\n  font-size: inherit;\n  line-height: inherit;\n}\n.monaco-hover th,\n.monaco-hover td,\n.suggest-details th,\n.suggest-details td {\n  padding: 1px 16px 1px 0;\n  text-align: left;\n  vertical-align: top;\n}\n.monaco-hover th,\n.suggest-details th {\n  font-weight: 600;\n  opacity: 0.7;\n  border-bottom: 1px solid rgba(128, 128, 128, 0.35);\n}\n\n/* Off-site links end with the arrow mateuszdabrowski.pl uses. Inline-block keeps the link's\n   underline off it. Monaco's hovers and suggestion details can sit outside .ss. */\n.monaco-hover a::after,\n.suggest-details a::after,\n.ss a[target=\"_blank\"]:not(.ss-btn):not(.ss-toolbar__brand)::after {\n  content: '\\2197';\n  display: inline-block;\n  margin-left: 0.3em;\n  font-size: 0.85em;\n  opacity: 0.6;\n  text-decoration: none;\n}\n\n/* The suggestion details panel and its list (Monaco's suggest widget, set up by Editor._watchSuggestDetails in\n   sqlstudio.js). The widget and the panel sit inside .ss, so the tokens reach them. The script says where the panel\n   is against the list with data-ss-details on both: right, left or below. */\n/* The border-box rule of the reset above reaches Monaco's own boxes. It sizes the panel by its content, so the panel\n   gets Monaco's content-box back, and its two border lines no longer cut off the last 2px of its text. */\n.ss .suggest-details {\n  box-sizing: content-box;\n}\n/* The tie between the focused row and the panel: the row's band (the theme's editorSuggestWidget.selectedBackground,\n   the same blue as --focus-band) goes on over the panel's header strip, and the panel has no border on the side that\n   faces the list. Monaco lays the panel 1px over the list's border on that side, so with no border of its own the\n   panel covers it, and the row and the strip meet with no line between them. At the list's left, Monaco stops the\n   panel 1px short of that border, so the panel moves 1px over it. */\n.ss .suggest-details-container[data-ss-details=\"right\"] .suggest-details {\n  border-left-width: 0;\n}\n.ss .suggest-details-container[data-ss-details=\"left\"] .suggest-details {\n  position: relative;\n  left: 1px;\n  border-right-width: 0;\n}\n.ss .suggest-details-container[data-ss-details=\"below\"] .suggest-details {\n  border-top-width: 0;\n}\n/* The card: Monaco keeps the panel at the list's top, wherever the focused row is, so the rest of the panel takes a\n   light tint of the band's blue, and the whole panel reads as the focused row's own. */\n.ss .suggest-details > .monaco-scrollable-element {\n  background: var(--focus-card);\n}\n/* The close button sits on the header strip in every panel, so it takes the strip's text colour. The selectors are as\n   long as Monaco's own, which load later and would win a tie. */\n.ss .suggest-details > .monaco-scrollable-element > .body > .header > .codicon-close,\n.ss .suggest-details > .monaco-scrollable-element > .body > .header > .codicon-close::before {\n  color: var(--focus-band-fg);\n}\n/* The header strip of any other item: Monaco's own header line, with the item's detail at full opacity, or, for an\n   item with none, the first line of its text, which runs under the close button to the panel's edge. */\n.ss .suggest-details:not(.no-type):not(.ss-join-details) > .monaco-scrollable-element > .body > .header {\n  color: var(--focus-band-fg);\n  background: var(--focus-band);\n}\n.ss .suggest-details:not(.no-type):not(.ss-join-details) > .monaco-scrollable-element > .body > .header > .type {\n  opacity: 1;\n}\n.ss .suggest-details.no-type:not(.ss-join-details) > .monaco-scrollable-element > .body > .docs.markdown-docs {\n  margin-right: 0;\n}\n.ss .suggest-details.no-type:not(.ss-join-details) > .monaco-scrollable-element > .body > .docs.markdown-docs > .rendered-markdown > p:first-child {\n  margin: -4px -5px 0;\n  padding: 4px 29px 4px 5px;\n  color: var(--focus-band-fg);\n  background: var(--focus-band);\n}\n/* A code block in any panel has the editor's own background, so its tokens read as they do in the editor. */\n.ss .suggest-details .rendered-markdown > div {\n  margin: 4px 0;\n  padding: 4px 8px;\n  border-radius: var(--border-radius-sm);\n  background: var(--editor-bg);\n}\n/* A recommended join (class set by the script): its label in bold on the first line, the key columns under it,\n   the SQL it writes in a block, and the note last, smaller and in the secondary text colour, which keeps 4.5:1 on\n   the card. The label takes the place of the panel's own header line, which would only repeat the key columns, so\n   the header keeps its close button alone. The label and the key columns are the header strip, out to the panel's\n   edges, the label clear of the close button. */\n.ss .suggest-details.ss-join-details .header > .type {\n  display: none;\n}\n.ss .suggest-details.ss-join-details > .monaco-scrollable-element > .body > .docs.markdown-docs > .rendered-markdown > p:first-child {\n  margin: -4px -5px 0;\n  padding: 4px 25px 2px 5px;\n  color: var(--focus-band-fg);\n  background: var(--focus-band);\n}\n.ss .suggest-details.ss-join-details > .monaco-scrollable-element > .body > .docs.markdown-docs > .rendered-markdown > p:nth-child(2) {\n  margin: 0 -5px 6px;\n  padding: 0 5px 6px;\n  color: var(--focus-band-fg);\n  font-size: var(--font-size-sm);\n  background: var(--focus-band);\n}\n.ss .suggest-details.ss-join-details .rendered-markdown > div {\n  margin: 6px 0;\n  padding: 6px 8px;\n}\n.ss .suggest-details.ss-join-details .rendered-markdown > div ~ p {\n  margin: 6px 0 0;\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n  line-height: 1.5;\n}\n\n/* Run summary parts that open a breakdown (UI.showHint): after a short hover, on focus, or pinned\n   by a click. */\n.ss-run-summary__hint {\n  text-decoration: underline dotted;\n  text-underline-offset: 3px;\n  cursor: help;\n}\n.ss-run-summary__hint:focus-visible {\n  outline: 2px solid var(--color-action);\n  outline-offset: 2px;\n}\n/* Temp DE when it links to Contact Builder: a click goes there instead of pinning the hint. It keeps the summary's own colour and\n   dotted underline, as the other parts with a hover do, so it does not read as a second red link beside Delete results. */\n.ss a.ss-run-summary__link {\n  cursor: pointer;\n  color: inherit;\n}\n/* The run summary's card (UI.showHint), with the quick tip's look. Only the card: as first written for every .ss-hint, the rule hid the\n   hint lines of the dialogs too, such as History's line on where it is kept and \"Could not load: ...\" (the author's RC12 test, 2026-10-09). */\n.ss-hint[role=\"tooltip\"] {\n  display: none;\n  position: absolute;\n  z-index: 150;\n  max-width: 380px;\n  padding: 10px 12px;\n  border: 1px solid var(--tooltip-border);\n  border-radius: var(--border-radius-sm);\n  background: var(--tooltip-bg);\n  box-shadow: var(--shadow-tooltip);\n  font-size: var(--font-size-xs);\n  color: var(--text-secondary);\n}\n.ss .ss-hint__title {\n  margin: 0 0 4px;\n  font-weight: 600;\n  color: var(--text-primary);\n}\n.ss .ss-hint__title:not(:first-child) {\n  margin-top: 10px;\n}\n/* The run's total split between calls through the API and through WSProxy, above the two tables. */\n.ss .ss-hint__split {\n  margin: 0 0 6px;\n  color: var(--text-primary);\n}\n.ss .ss-hint__line {\n  margin: 2px 0;\n}\n.ss-hint__table {\n  border-collapse: collapse;\n  width: 100%;\n}\n.ss-hint__table td {\n  padding: 2px 0;\n  vertical-align: top;\n}\n.ss-hint__table td + td {\n  padding-left: 16px;\n  text-align: right;\n  white-space: nowrap;\n  color: var(--text-primary);\n}\n/* The Status tab's first line during a run. */\n.ss-status-run-note {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  padding: var(--spacing-sm) var(--spacing-md);\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n  border-bottom: 1px solid var(--border-color);\n}\n\n/* Update notice: a small outlined pill next to the theme toggle. */\n.ss-update-badge {\n  margin-right: var(--spacing-sm);\n  padding: 2px 10px;\n  border: 1px solid var(--color-action);\n  border-radius: 12px;\n  background: transparent;\n  color: var(--color-action);\n  font-size: 12px;\n  font-weight: 600;\n  white-space: nowrap;\n  cursor: pointer;\n}\n.ss-update-badge:hover {\n  background: var(--color-action);\n  color: var(--color-action-fg);\n}\n.ss .ss-update-list {\n  margin: var(--spacing-sm) 0;\n  padding-left: 18px;\n  list-style: disc;\n}\n/* A link that looks like a button takes the button's text colour: `.ss a` gave it the link red, on the neutral grey and on the\n   amber of a primary button alike, in the update dialog's \"All changes\" and \"Update guide\" (the author, 2026-10-05). A link-style\n   button keeps the link colour it asks for. */\n.ss a.ss-btn {\n  text-decoration: none;\n  color: var(--modal-btn-neutral-fg);\n}\n.ss a.ss-btn.ss-btn--primary {\n  color: var(--color-action-fg);\n}\n.ss a.ss-btn.ss-btn--link {\n  color: var(--color-primary);\n}\n.ss .ss-update-list li {\n  margin: 4px 0;\n}\n\n/* Spinner. One turn takes 0.8 s: SPINNER_TURN_MS in sqlstudio.js must match. */\n@keyframes ss-spin {\n  to { transform: rotate(360deg); }\n}\n.ss-spinner {\n  display: inline-block;\n  width: 12px;\n  height: 12px;\n  box-sizing: border-box;\n  border: 2px solid currentColor;\n  border-right-color: transparent;\n  border-radius: 50%;\n  animation: ss-spin 0.8s linear infinite;\n  flex: 0 0 auto;\n}\n@media (prefers-reduced-motion: reduce) {\n  .ss-spinner,\n  .ss-toolbar__button.is-running::before {\n    animation: none;\n  }\n}\n\n/* Theme toggle icon: Diagramforce's\n   moon/sun swap, translated from df- to ss- and scoped to .ss. */\n.ss svg.ss-toolbar__icon--theme,\n.ss svg.ss-toolbar__icon--theme * {\n  /* Diagramforce draws the moon and sun as wire icons; the generic `.ss svg { fill }` rule must not apply. */\n  fill: none;\n  stroke: currentColor;\n  stroke-width: 2;\n  stroke-linecap: round;\n  stroke-linejoin: round;\n}\n.ss-toolbar__icon--theme {\n  width: 18px;\n  height: 18px;\n  fill: none;\n  stroke: currentColor;\n  stroke-width: 2;\n  stroke-linecap: round;\n  stroke-linejoin: round;\n}\n.ss[data-theme=\"dark\"] .ss-icon-sun { display: none; }\n.ss[data-theme=\"dark\"] .ss-icon-moon { display: inline; }\n.ss[data-theme=\"light\"] .ss-icon-sun { display: inline; }\n.ss[data-theme=\"light\"] .ss-icon-moon { display: none; }\n/* The system icon's right half is solid, which the wire-icon rule above would clear. */\n.ss svg.ss-toolbar__icon--theme .ss-icon-system__half { fill: currentColor; }\n.ss .ss-icon-system { display: none; }\n.ss[data-theme-choice=\"system\"] .ss-icon-sun,\n.ss[data-theme-choice=\"system\"] .ss-icon-moon { display: none; }\n.ss[data-theme-choice=\"system\"] .ss-icon-system { display: inline; }\n\n/* Help menu: Diagramforce's\n   ss-toolbar__menu, absolute under its button rather than the centred\n   dropdown-manager system (History keeps that; see section 9). */\n.ss-toolbar__dropdown {\n  position: relative;\n}\n.ss-toolbar__menu {\n  display: none;\n  position: absolute;\n  top: 100%;\n  right: 0;\n  margin-top: 4px;\n  min-width: 180px;\n  background: var(--toolbar-bg);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-md);\n  box-shadow: var(--shadow-md);\n  padding: 4px 0;\n  max-height: calc(100dvh - 64px);\n  overflow-y: auto;\n  z-index: 200;\n}\n.ss-toolbar__dropdown--open > .ss-toolbar__menu {\n  display: block;\n}\n.ss-toolbar__menu-item {\n  display: block;\n  width: 100%;\n  padding: 6px 14px;\n  border: none;\n  background: transparent;\n  color: var(--text-secondary);\n  font-weight: 500;\n  font-size: var(--font-size-sm);\n  font-family: var(--font-family);\n  text-align: left;\n  text-decoration: none;\n  cursor: pointer;\n  white-space: nowrap;\n}\n.ss-toolbar__menu-item:hover {\n  background: var(--toolbar-button-hover);\n  color: var(--text-primary);\n}\n.ss-toolbar__menu-item--icon {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n}\n.ss-toolbar__menu-icon {\n  flex-shrink: 0;\n  opacity: 0.7;\n}\n.ss-toolbar__menu-separator {\n  border-top: 1px solid var(--border-color);\n  margin: 4px 0;\n}\n/* The Document menu (Save as's neighbour): it opens at its button's left edge, not the right, and it carries a line of text, the trust\n   line that says what leaves the browser, which wraps inside the menu's width. */\n.ss-toolbar__menu--start {\n  left: 0;\n  right: auto;\n}\n.ss-toolbar__menu--document {\n  width: 300px;\n}\n.ss-toolbar__menu-note {\n  margin: 0;\n  padding: 6px 14px 8px;\n  color: var(--text-secondary);\n  font-size: var(--font-size-xs);\n  line-height: 1.45;\n  white-space: normal;\n}\n\n.ss-toolbar__divider {\n  width: 1px;\n  height: 20px;\n  background: var(--border-color);\n  margin: 0 var(--spacing-xs);\n}\n.ss-toolbar__spacer {\n  flex: 1 1 auto;\n}\n/* Save and Disconnect, shown only while the tab on screen has a Query Activity open. */\n.ss-toolbar__group {\n  display: inline-flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n}\n.ss-toolbar__group[hidden] {\n  display: none;\n}\n/* Lint findings list, now inside the Status tab of the bottom panel (see\n   .ss-status-panel below); the whole panel scrolls as one unit, so the\n   list itself carries no height cap of its own. */\n/* The Status tab's Show filter: the size of the small buttons next to it. */\n.ss-select--sm {\n  width: auto;\n  height: 24px;\n  padding-top: 0;\n  padding-bottom: 0;\n  font-size: var(--font-size-sm);\n}\n/* The Status tab's findings filter is as wide as the option it shows, not its longest one: \"Show: all\" takes 88 px where \"Show: errors\n   and warnings\" took 189, which kept Delete results whole beside the stale mark in a 744 px header (a 1,024 px window with the\n   sidebar open, the second review of 1.2.1, 2026-10-10). A browser without field-sizing keeps the longest option's width. */\n.ss-results-header .ss-select--sm {\n  field-sizing: content;\n}\n.ss-problem-hidden-note {\n  padding: 3px var(--spacing-md);\n  border-top: 1px solid var(--border-color);\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n}\n.ss-problem {\n  display: flex;\n  gap: var(--spacing-sm);\n  padding: 3px var(--spacing-md);\n  cursor: pointer;\n  border-top: 1px solid var(--border-color);\n  font-size: var(--font-size-sm);\n  align-items: baseline;\n  flex-wrap: wrap;\n}\n.ss-problem:hover {\n  background: var(--bg-hover);\n}\n.ss-problem__loc {\n  color: var(--text-secondary);\n  font-family: var(--font-mono);\n  flex: 0 0 auto;\n}\n.ss-problem__id {\n  color: var(--text-secondary);\n  flex: 0 0 auto;\n}\n/* From a basis of 0: a message longer than the row wraps beside its badge, where from its own width it went whole onto a line of its\n   own, as MCE013's did (the author's RC3 test of 1.3.0, 2026-10-11). Below 160 px it still goes under the badge. */\n.ss-problem__message {\n  flex: 1 1 0;\n  min-width: 160px;\n}\n/* One-click fix button on a lint row:\n   the neutral small button style, pushed to the row's right edge. A\n   \"changes results\" fix keeps the same neutral look plus a small accent\n   dot; the actual \"changes results\" wording lives only in the title\n   tooltip, never as visible row text. */\n.ss-problem__fix {\n  flex: 0 0 auto;\n  margin-left: auto;\n}\n.ss-problem__fix--changes-results::before {\n  content: '';\n  display: inline-block;\n  width: 6px;\n  height: 6px;\n  margin-right: var(--spacing-xs);\n  border-radius: 50%;\n  background: var(--brand-amber);\n}\n.ss[data-theme=\"light\"] .ss-problem__fix--changes-results::before {\n  background: var(--warning-color);\n}\n/* Beside Fix all, in the panel header: how many fixes it leaves, with the dot their buttons carry. */\n.ss-fix-review-note {\n  display: inline-flex;\n  align-items: center;\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n  white-space: nowrap;\n}\n.ss-fix-review-note::before {\n  content: '';\n  display: inline-block;\n  width: 6px;\n  height: 6px;\n  margin-right: var(--spacing-xs);\n  border-radius: 50%;\n  background: var(--brand-amber);\n}\n.ss[data-theme=\"light\"] .ss-fix-review-note::before {\n  background: var(--warning-color);\n}\n\n/* -------------------------------------------------------------------- */\n/* 7. Editor pane and split resizer                                       */\n/* -------------------------------------------------------------------- */\n.ss-split {\n  display: flex;\n  flex-direction: column;\n  flex: 1 1 auto;\n  min-height: 0;\n}\n/* The resizable column: the query tab strip (fixed height) above the editor pane, which fills\n   whatever is left. The split resizer/applyInitialSplit set this\n   element's height, not .ss-editor-pane's, so the strip's own height never eats into the ratio\n   the user dragged. */\n.ss-editor-column {\n  display: flex;\n  flex-direction: column;\n  flex: 0 0 auto;\n  height: 300px;\n  min-height: 120px;\n}\n.ss-editor-pane {\n  position: relative;\n  flex: 1 1 auto;\n  min-height: 0;\n}\n.ss-editor-container {\n  /* Plain wrapper only: it deliberately does not carry the \"monaco-editor\"\n     class, which would tie with this rule's specificity against Monaco's\n     own editor.main.css (loaded later) and lose the position:absolute. */\n  position: absolute;\n  inset: 0;\n}\n.ss-split-resizer {\n  height: 6px;\n  cursor: row-resize;\n  background: var(--bg-elevated);\n  border-top: 1px solid var(--border-color);\n  border-bottom: 1px solid var(--border-color);\n  flex: 0 0 auto;\n}\n.ss-split-resizer:hover {\n  background: var(--toolbar-button-active);\n}\n\n/* Query tab strip: 4 fixed tabs, always visible with their state, styled\n   after Diagramforce's css/tabs.css. The strip shares the editor's background. The tabs sit in a tinted\n   tray, as Diagramforce's ungrouped tray: an inactive tab shows the tray through it, and the active tab\n   is taller, takes the editor's background and outline, and runs into the editor with no line between. */\n.ss-querytabs {\n  display: flex;\n  align-items: center;\n  height: 36px;\n  padding: 0 4px;\n  background: var(--editor-bg);\n  flex: 0 0 auto;\n}\n.ss-querytabs__tray {\n  display: flex;\n  align-items: stretch;\n  gap: 2px;\n  flex: 1 1 auto;\n  min-width: 0;\n  height: 28px;\n  box-sizing: border-box;\n  padding-right: 3px;\n  border-radius: var(--border-radius-sm);\n  background: color-mix(in srgb, var(--text-muted) 9%, transparent);\n}\n.ss-querytab {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  flex: 1 1 0;\n  min-width: 0;\n  height: 28px;\n  box-sizing: border-box;\n  padding: 4px 10px;\n  border: 1px solid transparent;\n  border-bottom: none;\n  border-radius: var(--border-radius-sm) var(--border-radius-sm) 0 0;\n  background: transparent;\n  color: var(--text-muted);\n  font-size: var(--font-size-sm);\n  font-weight: 500;\n  white-space: nowrap;\n  cursor: pointer;\n  position: relative;\n  overflow: hidden;\n  /* A narrow tab drops the run time first, then the row count, and keeps its icon and name (below). */\n  container-type: inline-size;\n  transition: background var(--transition-fast), color var(--transition-fast);\n}\n.ss-querytab:hover {\n  background: color-mix(in srgb, var(--text-muted) 14%, transparent);\n  color: var(--text-secondary);\n}\n.ss-querytab.is-active {\n  align-self: flex-start;\n  height: 32px;\n  background: var(--editor-bg);\n  color: var(--text-primary);\n  border-color: var(--border-color);\n  font-weight: 600;\n  box-shadow: inset 0 2.5px 0 color-mix(in srgb, var(--text-muted) 30%, transparent);\n  z-index: 1;\n}\n.ss-querytab.is-active:hover {\n  background: color-mix(in srgb, var(--text-primary) 7%, var(--editor-bg));\n}\n/* The state icon at the left edge: a query glyph while idle, a spinner while the run is in flight,\n   a check once done, an error mark after a failure. */\n.ss-querytab__icon {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  width: 12px;\n  height: 12px;\n  flex: 0 0 auto;\n}\n.ss-querytab__icon .ss-icon {\n  width: 12px;\n  height: 12px;\n}\n.ss-querytab__icon--idle {\n  opacity: 0.6;\n}\n.ss-querytab__icon--done {\n  color: var(--brand-green);\n}\n.ss-querytab__icon--failed {\n  color: var(--color-danger);\n}\n.ss-querytab__label {\n  flex: 0 1 auto;\n  min-width: 3em;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  text-align: left;\n}\n/* An idle, never-run tab is muted: its glyph and label fade further. */\n.ss-querytab.is-empty:not(.is-active) .ss-querytab__label {\n  opacity: 0.75;\n}\n.ss-querytab__time {\n  flex: 0 0 auto;\n  font-weight: 500;\n  color: var(--text-muted);\n  font-variant-numeric: tabular-nums;\n}\n/* Unsaved changes to the tab's Query Activity: grey, apart from the orange dot of an unseen finish. */\n.ss-querytab__unsaved {\n  width: 6px;\n  height: 6px;\n  border-radius: 50%;\n  background: var(--text-muted);\n  flex: 0 0 auto;\n}\n.ss-querytab__meta {\n  margin-left: auto;\n  padding-left: 8px;\n  flex: 0 1 auto;\n  min-width: 0;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  font-weight: 500;\n  color: var(--text-muted);\n  font-variant-numeric: tabular-nums;\n}\n.ss-querytab__meta--failed {\n  color: var(--danger-text);\n}\n@container (max-width: 300px) {\n  .ss-querytab__time {\n    display: none;\n  }\n}\n@container (max-width: 190px) {\n  .ss-querytab__meta {\n    display: none;\n  }\n}\n/* A tab that finished or failed while another one was on screen, until it is opened. */\n.ss-querytab__dot {\n  width: 6px;\n  height: 6px;\n  border-radius: 50%;\n  background: var(--color-action);\n  flex: 0 0 auto;\n}\n.ss-editor-fallback {\n  width: 100%;\n  height: 100%;\n  border: none;\n  resize: none;\n  padding: var(--spacing-md);\n  font-family: var(--font-mono);\n  background: var(--editor-bg);\n  color: var(--editor-fg);\n}\n.ss-banner {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  padding: 6px var(--spacing-md);\n  background: var(--tint-warning);\n  color: var(--warning-text);\n  border-bottom: 1px solid var(--border-color);\n  font-size: var(--font-size-sm);\n  flex: 0 0 auto;\n}\n.ss-banner--error {\n  background: var(--tint-danger);\n  color: var(--danger-text);\n}\n.ss-banner__close {\n  margin-left: auto;\n  border: none;\n  background: none;\n  cursor: pointer;\n  color: inherit;\n}\n\n/* -------------------------------------------------------------------- */\n/* 8. Results grid, tabs, inspector                                       */\n/* -------------------------------------------------------------------- */\n.ss-results-pane {\n  display: flex;\n  flex-direction: column;\n  flex: 1 1 auto;\n  min-height: 120px;\n}\n/* Bottom panel header: the Status/Results tabs on the left, the run\n   summary next to them (shown on either tab), then the page filter and\n   Export CSV, shown only while Results is active (UI.setActiveTab). */\n.ss-results-header {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  height: var(--panel-header-height);\n  padding: 0 var(--spacing-md);\n  border-bottom: 1px solid var(--border-color);\n  background: var(--bg-elevated);\n  flex: 0 0 auto;\n  /* Lets the cost beside Export CSV shorten when the header has little room (.ss-export-cost, below). */\n  container-type: inline-size;\n}\n.ss-tabs {\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  flex: 0 0 auto;\n}\n.ss-tab {\n  display: inline-flex;\n  align-items: center;\n  gap: 6px;\n  height: 26px;\n  padding: 0 var(--spacing-sm);\n  border: none;\n  border-radius: var(--border-radius-sm);\n  background: transparent;\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n  font-weight: 600;\n  cursor: pointer;\n}\n.ss-tab:hover {\n  background: var(--toolbar-button-hover);\n}\n.ss-tab[aria-selected=\"true\"] {\n  background: var(--toolbar-button-active);\n  color: var(--color-primary);\n}\n.ss-tab__counts {\n  display: inline-flex;\n  align-items: center;\n  gap: 6px;\n}\n.ss-tab__count {\n  display: inline-flex;\n  align-items: center;\n  gap: 3px;\n  font-size: 11px;\n  font-weight: 600;\n}\n.ss-tab__count::before {\n  content: '';\n  display: inline-block;\n  width: 6px;\n  height: 6px;\n  border-radius: 50%;\n  background: currentColor;\n}\n.ss-tab__count--error {\n  color: var(--danger-text);\n}\n.ss-tab__count--warning {\n  color: var(--warning-text);\n}\n.ss-tab__count--info {\n  color: var(--info-text);\n}\n.ss-run-summary {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n/* The link takes no padding of its own: the summary's gap already spaces it, and since the WSProxy calls got their own\n   number (\"4 API calls · 2 WSProxy\") the summary is 7 px too long for a 1,280 px window with the sidebar open, which\n   the padding of a link button cut off. */\n.ss-run-summary__delete {\n  flex: 0 0 auto;\n  padding-left: 0;\n  padding-right: 0;\n}\n/* \"Edited since this run\" (UI.syncStaleMark): the query in the editor is no longer the one whose rows are on screen. It is the header's own\n   item, before the run summary, and never shrinks: inside the summary it was cut off with it, as in a 1,024 px window with the sidebar\n   open, where the page filter and Export CSV leave the summary 139 px. The summary opens with the dot that parts the two, so a header too\n   narrow for the summary (640 px, below) keeps the mark with no dot after it. The gap matches the summary's own. */\n.ss-stale-mark {\n  flex: 0 0 auto;\n  color: var(--text-stale);\n  font-size: var(--font-size-sm);\n  white-space: nowrap;\n  cursor: default;\n}\n.ss-stale-mark[hidden] {\n  display: none;\n}\n.ss-stale-mark:focus-visible {\n  outline: 2px solid var(--color-action);\n  outline-offset: 2px;\n}\n.ss-stale-mark:not([hidden]) + .ss-run-summary {\n  margin-left: calc(var(--spacing-xs) - var(--spacing-sm));\n}\n.ss-stale-mark:not([hidden]) + .ss-run-summary::before {\n  content: '\\00B7';\n}\n/* The page filter keeps its 180 px: in a tight header the run summary, which ends in an ellipsis, gives up room first,\n   as the cost beside Export CSV (below) takes some. */\n.ss-results-filter {\n  flex: 0 0 auto;\n}\n/* Beside Export CSV: what a click costs, said before the click (UI._syncExportCost). It never shrinks or wraps, so the\n   button stays on screen and the run summary gives up its room first. A header with little room shows the short form,\n   and with less still, nothing. The full text then stays for assistive technology (clipped out of sight, not removed)\n   and in the button's title. The widths are the header's own (its container), as the sidebar takes room from it. */\n.ss-export-cost {\n  position: relative;\n  flex: 0 0 auto;\n  color: var(--text-muted);\n  font-size: var(--font-size-sm);\n  white-space: nowrap;\n}\n.ss-export-cost__short {\n  display: none;\n}\n/* In a header of 1,100 px or less, as at 1,280 px with the sidebar open, the run summary's row count, which the Results tab\n   shows too, and Temp DE, a convenience, give way, so the two call counts and Delete results stay whole. */\n@container (max-width: 1100px) {\n  .ss-run-summary__rows,\n  .ss-run-summary__temp {\n    display: none;\n  }\n}\n/* While the stale mark shows, the same two give way from 1,240 px, as the mark takes the room that kept Delete results whole at the\n   header of a 1,440 px window (1,160 px with the sidebar open). In a header of 1,040 px or less the mark drops \"since this run\" and\n   keeps \"· Edited\", with the tip and the label unchanged, which keeps Delete results whole at the header of a 1,280 px window. */\n@container (max-width: 1240px) {\n  .ss-run-summary.is-stale .ss-run-summary__rows,\n  .ss-run-summary.is-stale .ss-run-summary__temp {\n    display: none;\n  }\n}\n@container (max-width: 1040px) {\n  .ss-stale-mark__more {\n    display: none;\n  }\n}\n@container (max-width: 640px) {\n  .ss-export-cost__full {\n    position: absolute;\n    width: 1px;\n    height: 1px;\n    overflow: hidden;\n    clip: rect(0 0 0 0);\n  }\n  .ss-export-cost__short {\n    display: inline;\n  }\n}\n@container (max-width: 540px) {\n  .ss-export-cost {\n    position: absolute;\n    width: 1px;\n    height: 1px;\n    overflow: hidden;\n    clip: rect(0 0 0 0);\n  }\n}\n/* Export CSV shows an export's progress itself (UI._syncExportButton): a spinner in place of the download icon, and\n   \"Exporting 1,200 of 2,715…\" in place of the label. The label is two layers in one grid cell, the text and a hidden copy of\n   its widest form (.ss-export-btn__sizer), so the button is as wide as the widest text and the header does not move on each\n   update. Tabular numbers make \"1,200\" as wide as \"2,715\". The button is disabled meanwhile, and keeps full strength as\n   Run does while it runs, so it reads as busy rather than as unavailable. */\n.ss-export-btn__label {\n  display: inline-grid;\n  font-variant-numeric: tabular-nums;\n}\n.ss-export-btn__label > * {\n  grid-area: 1 / 1;\n}\n.ss-export-btn__sizer {\n  visibility: hidden;\n}\n.ss-export-btn.is-exporting > svg {\n  display: none;\n}\n.ss-export-btn.is-exporting:disabled,\n.ss-export-btn.is-exporting:disabled:hover {\n  opacity: 1;\n  cursor: progress;\n  background: var(--modal-btn-neutral-bg);\n}\n/* Save to DE, beside Export CSV (UI._syncSaveButton). The header has room for its label only when it is wider than 1,280 px, which\n   is a window of about 1,560 px with the sidebar open. Below that it is the icon alone, 24 px wide, which keeps the run summary's\n   Delete results, the cost and Export CSV whole at 1,280 px with the sidebar open (the label stays for assistive technology, clipped\n   out of sight, and in the title). A header of 640 px or less has no room for the run summary, which was already cut to nothing,\n   so it goes, with the spacer that pushed the controls right, and the button and Export CSV fit as before. */\n.ss-save-btn {\n  position: relative;\n  flex: 0 0 auto;\n}\n@container (max-width: 1280px) {\n  .ss-save-btn {\n    width: 24px;\n    padding: 0;\n  }\n  .ss-save-btn__label {\n    position: absolute;\n    width: 1px;\n    height: 1px;\n    overflow: hidden;\n    clip: rect(0 0 0 0);\n  }\n}\n@container (max-width: 640px) {\n  .ss-results-header .ss-run-summary,\n  .ss-results-header .ss-toolbar__spacer {\n    display: none;\n  }\n}\n/* Where an export's progress is announced to a screen reader (aria-live), out of sight. */\n.ss-export-status {\n  position: absolute;\n  width: 1px;\n  height: 1px;\n  overflow: hidden;\n  clip: rect(0 0 0 0);\n  white-space: nowrap;\n}\n/* Status tab content: the lint findings list (.ss-problem, above), then\n   the error panel and the notice lines below it. The whole panel scrolls\n   as one unit; .ss-empty-state (shared with the grid) covers the \"no\n   problems\" case. */\n.ss-status-panel {\n  flex: 1 1 auto;\n  min-height: 0;\n  overflow-y: auto;\n}\n/* An MCE or validation error (red left border, the message, a Details\n   disclosure with the raw response); lives in Status, never in place of\n   the grid. */\n.ss-error-panel {\n  margin: var(--spacing-md);\n  padding: var(--spacing-md);\n  border-left: 3px solid var(--color-danger);\n  background: var(--tint-danger);\n  border-radius: 0 var(--border-radius-sm) var(--border-radius-sm) 0;\n}\n.ss-error-panel__message {\n  white-space: pre-wrap;\n  color: var(--text-primary);\n}\n/* An error about SQL the editor no longer holds (UI._setStaleClasses): muted on the soft hatch of stale rows, its border no longer red,\n   so it stays readable while the query is fixed and does not read as the answer to the query on screen (the author's choice for 1.3.0,\n   2026-10-11). */\n.ss-error-panel.is-stale {\n  border-left-color: var(--border-color-strong);\n  background-color: transparent;\n  background-image: repeating-linear-gradient(-45deg, var(--stale-hatch) 0, var(--stale-hatch) 6px, transparent 6px, transparent 12px);\n}\n.ss-error-panel.is-stale .ss-error-panel__message,\n.ss-error-panel.is-stale .ss-error-panel__hint {\n  color: var(--text-stale);\n}\n.ss-error-panel__hint {\n  margin-top: var(--spacing-xs);\n  white-space: pre-wrap;\n  color: var(--text-secondary);\n}\n.ss-error-panel details {\n  margin-top: var(--spacing-sm);\n}\n.ss-error-panel summary {\n  cursor: pointer;\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n}\n.ss-error-panel pre {\n  margin-top: var(--spacing-xs);\n  padding: var(--spacing-sm);\n  background: var(--bg-elevated);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  font-family: var(--font-mono);\n  font-size: var(--font-size-xs);\n  white-space: pre-wrap;\n  word-break: break-word;\n  max-height: 30vh;\n  overflow-y: auto;\n}\n/* Each outcome notice (0 rows returned, sort rejected, setup results) is one muted line, with\n   nothing to dismiss: the next run or Validate in the tab replaces it. */\n.ss-notice {\n  margin: var(--spacing-xs) var(--spacing-md) 0;\n  padding: 2px 0 2px var(--spacing-sm);\n  border-left: 2px solid var(--border-color-strong);\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n}\n.ss-notice:last-child {\n  margin-bottom: var(--spacing-sm);\n}\n/* Results tab content: the grid and pager, hidden while Status is\n   active. */\n.ss-results-panel {\n  display: flex;\n  flex-direction: column;\n  flex: 1 1 auto;\n  min-height: 0;\n}\n.ss-grid-scroll {\n  flex: 1 1 auto;\n  min-width: 0;\n  overflow: auto;\n  position: relative;\n}\n.ss-grid {\n  border-collapse: collapse;\n  table-layout: fixed;\n  font-size: var(--font-size-sm);\n}\n.ss-grid thead th {\n  position: sticky;\n  top: 0;\n  z-index: 2;\n  /* The same tint as before, laid over the app background so the sticky header is opaque:\n     --bg-elevated alone is 8% grey, and scrolled rows showed through it. */\n  background: linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-app);\n  border-bottom: 1px solid var(--border-color-strong);\n  border-right: 1px solid var(--border-color);\n  padding: 0;\n  text-align: left;\n}\n.ss-grid th button.ss-grid__sort {\n  width: 100%;\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  padding: 4px var(--spacing-sm);\n  border: none;\n  background: transparent;\n  cursor: pointer;\n  font-weight: 600;\n  overflow: hidden;\n  white-space: nowrap;\n  text-overflow: ellipsis;\n}\n/* Active sort column gets the --color-action accent. */\n.ss-grid__sort.is-sorted {\n  color: var(--color-action);\n}\n.ss-grid__resize-handle {\n  position: absolute;\n  right: 0;\n  top: 0;\n  bottom: 0;\n  width: 6px;\n  cursor: col-resize;\n}\n.ss-grid td {\n  padding: 3px var(--spacing-sm);\n  border-bottom: 1px solid var(--border-color);\n  border-right: 1px solid var(--border-color);\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  max-width: 480px;\n  cursor: default;\n}\n.ss-grid tbody tr:hover td {\n  background: var(--bg-hover);\n}\n/* Rows of a query the editor no longer holds (UI.syncStaleMark): the body text and the column headers go muted, on a soft hatch. The\n   colour, not opacity, as --text-stale keeps 4.5:1 on both themes, on a hovered row too. The NULL and (empty) cells, which are secondary\n   text, take it too. As first built only the body text went muted, the colour (empty) cells already have, and a result of empty cells\n   looked unchanged (the author's RC1 test of 1.2.1, 2026-10-10). The hatch is the table body's own background, one pattern across its\n   cells. A hovered row covers it with an opaque hover colour, as the light theme's hover tint over a stripe read at 4.3:1. */\n.ss-grid-scroll.is-stale .ss-grid td,\n.ss-grid-scroll.is-stale .ss-grid th button.ss-grid__sort {\n  color: var(--text-stale);\n}\n.ss-grid-scroll.is-stale .ss-grid tbody {\n  background-image: repeating-linear-gradient(-45deg, var(--stale-hatch) 0, var(--stale-hatch) 6px, transparent 6px, transparent 12px);\n}\n.ss-grid-scroll.is-stale .ss-grid tbody tr:hover td {\n  background: linear-gradient(var(--bg-hover), var(--bg-hover)), var(--bg-app);\n}\n.ss-grid__cell--null {\n  color: var(--text-secondary);\n  font-style: italic;\n}\n.ss-grid__cell--empty {\n  color: var(--text-secondary);\n  font-style: italic;\n}\n.ss-grid__spacer-row td {\n  border: none;\n  padding: 0;\n}\n/* Cell popover: replaces the old\n   inspector pane. Positioned absolutely within .ss (see\n   UI.openCellPopover), closes on Escape or a click outside. */\n.ss-cell-popover {\n  position: absolute;\n  z-index: 120;\n  width: 280px;\n  max-width: 90vw;\n  background: var(--bg-surface);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-md);\n  box-shadow: var(--shadow-dropdown);\n  padding: var(--spacing-sm);\n}\n.ss-cell-popover__value {\n  white-space: pre-wrap;\n  word-break: break-word;\n  font-family: var(--font-mono);\n  background: var(--bg-elevated);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  padding: var(--spacing-sm);\n  margin-bottom: var(--spacing-sm);\n  max-height: 40vh;\n  overflow-y: auto;\n}\n/* Pager, one row under the grid: page\n   size select on the left, prev/range/next centred, \"Page [n] of N\" on the\n   right. No first/last or Go buttons. */\n.ss-pager {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: var(--spacing-sm);\n  padding: var(--spacing-sm) var(--spacing-md);\n  border-top: 1px solid var(--border-color);\n  flex: 0 0 auto;\n  font-size: var(--font-size-sm);\n}\n.ss-pager__left,\n.ss-pager__center,\n.ss-pager__right {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  flex: 1 1 0;\n}\n.ss-pager__center {\n  justify-content: center;\n}\n.ss-pager__right {\n  justify-content: flex-end;\n}\n.ss-pager__range {\n  white-space: nowrap;\n  color: var(--text-secondary);\n}\n.ss-pager__page-input {\n  width: 56px;\n  text-align: center;\n}\n.ss-pager__page-input:focus {\n  border-color: var(--color-action);\n}\n.ss-pager__page-of {\n  color: var(--text-secondary);\n  white-space: nowrap;\n}\n.ss-message-item {\n  padding: var(--spacing-sm);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  margin-bottom: var(--spacing-sm);\n}\n.ss-message-item--error {\n  border-color: var(--color-danger);\n  background: var(--tint-danger);\n}\n.ss-message-item--warning {\n  border-color: var(--warning-color);\n  background: var(--tint-warning);\n}\n.ss-message-item--info {\n  background: var(--bg-elevated);\n}\n.ss-empty-state {\n  padding: var(--spacing-xl);\n  text-align: center;\n  color: var(--text-secondary);\n}\n.ss-empty-state--running {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: var(--spacing-sm);\n}\n.ss-empty-state--running p {\n  margin: 0;\n}\n.ss-empty-state__title {\n  color: var(--text-primary);\n  font-weight: 500;\n}\n/* A finished run whose rows did not load: what happened, the error's own text, where the rows are, and the button that\n   reads them again. */\n.ss-empty-state--unread {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: var(--spacing-sm);\n}\n.ss-empty-state--unread p {\n  margin: 0;\n  max-width: 70ch;\n}\n.ss-unread-page__error {\n  color: var(--text-primary);\n  white-space: pre-wrap;\n}\n.ss-unread-page__detail {\n  font-size: var(--font-size-sm);\n}\n.ss-unread-page__button {\n  display: inline-flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n}\n\n/* -------------------------------------------------------------------- */\n/* 9. Dialogs, dropdown managers and modal                                */\n/* -------------------------------------------------------------------- */\n/* Above the anchored panels (.ss-dropdown-mount, 101): a dialog opened from one, such as History's Clear all or Open's question on\n   unsaved changes, drew under the panel where the two met (2026-10-09). */\n.ss-modal-overlay {\n  position: absolute;\n  inset: 0;\n  background: rgba(0, 0, 0, 0.45);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  z-index: 110;\n  padding: var(--spacing-lg);\n}\n.ss-modal {\n  background: var(--bg-surface);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-md);\n  box-shadow: var(--shadow-md);\n  width: 100%;\n  max-width: 480px;\n  max-height: 100%;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n}\n.ss-modal--wide {\n  max-width: 640px;\n}\n.ss-modal__header {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  padding: var(--spacing-md) var(--spacing-lg);\n  border-bottom: 1px solid var(--border-color);\n}\n.ss-modal__title {\n  font-size: var(--font-size-md);\n  font-weight: 700;\n  flex: 1 1 auto;\n}\n.ss-modal__close {\n  border: none;\n  background: none;\n  cursor: pointer;\n  font-size: 16px;\n  color: var(--text-secondary);\n  padding: 4px;\n  border-radius: var(--border-radius-sm);\n}\n.ss-modal__close:hover {\n  background: var(--bg-hover);\n  color: var(--color-primary);\n}\n.ss-modal__body {\n  padding: var(--spacing-sm) var(--spacing-lg);\n  overflow-y: auto;\n  flex: 1 1 auto;\n}\n.ss-modal__status {\n  margin: var(--spacing-sm) 0 0;\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n}\n.ss-modal__status:empty {\n  display: none;\n}\n.ss-modal__footer {\n  display: flex;\n  justify-content: flex-end;\n  gap: var(--spacing-sm);\n  padding: var(--spacing-md) var(--spacing-lg);\n  border-top: 1px solid var(--border-color);\n  flex: 0 0 auto;\n}\n\n/* Dropdown managers (History, Runs, Settings, Help): anchored under their\n   toolbar button, not centred. Plain anchored, with --shadow-dropdown. */\n.ss-dropdown-scrim {\n  position: absolute;\n  inset: 0;\n  z-index: 100;\n  background: transparent;\n}\n.ss-dropdown-mount {\n  position: absolute;\n  z-index: 101;\n}\n/* --toolbar-bg, not --bg-surface: History\n   keeps its own toolbar button and anchored panel, but uses the same menu\n   surface as the Help ss-toolbar__menu. */\n.ss-dropdown-panel {\n  background: var(--toolbar-bg);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-md);\n  box-shadow: var(--shadow-dropdown);\n  width: 300px;\n  max-height: 70vh;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n}\n.ss-dropdown-panel--wide {\n  width: 420px;\n}\n/* Open: the width its rows had as a centred dialog (.ss-modal--wide). UI.openDropdown caps it at the app's width less 16px. */\n.ss-dropdown-panel--xwide {\n  width: 640px;\n}\n/* About dialog: Diagramforce's df-about layout,\n * translated to ss-. .ss-about is the flex column all its children sit in;\n * .ss-about__separator is the thin full-width rule (there are exactly two:\n * before the links row and before the licence line), and .ss-about__meta /\n * __signed-in / __license are plain centred text rows, not bordered\n * individually, so the muted signed-in line can sit directly under the\n * links row with no rule between them. */\n.ss-about {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  text-align: center;\n  gap: var(--spacing-md);\n  padding: var(--spacing-sm) 0;\n}\n.ss .ss-about__name {\n  margin: 0;\n  font-size: 20px;\n  font-weight: 700;\n  color: var(--text-primary);\n}\n.ss .ss-about__tagline {\n  margin: 2px 0 0;\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n}\n.ss .ss-about__info {\n  margin: 0;\n  max-width: 440px;\n  font-size: 13px;\n  line-height: var(--line-height);\n  color: var(--text-secondary);\n}\n/* Label and value rows, left-aligned in a quiet panel. */\n.ss-about__details {\n  display: grid;\n  grid-template-columns: max-content 1fr;\n  gap: 6px var(--spacing-md);\n  width: 100%;\n  margin: 0;\n  padding: 10px 14px;\n  box-sizing: border-box;\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  background: var(--bg-elevated);\n  text-align: left;\n  font-size: var(--font-size-xs);\n}\n.ss-about__details dt {\n  color: var(--text-muted);\n}\n.ss-about__details dd {\n  margin: 0;\n  color: var(--text-secondary);\n  overflow-wrap: anywhere;\n}\n.ss-about__links {\n  display: flex;\n  flex-wrap: wrap;\n  justify-content: center;\n  gap: var(--spacing-sm);\n}\n.ss-about__pill {\n  padding: 4px 12px;\n  border: 1px solid var(--border-color);\n  border-radius: 14px;\n  color: var(--color-primary);\n  font-size: var(--font-size-xs);\n  text-decoration: none;\n}\n.ss-about__pill:hover {\n  background: var(--bg-hover);\n}\n.ss-about__link {\n  color: var(--color-primary);\n  text-decoration: none;\n}\n.ss-about__link:hover {\n  text-decoration: underline;\n}\n.ss .ss-about__credits {\n  margin: 0;\n  font-size: var(--font-size-xs);\n  color: var(--text-muted);\n  text-align: center;\n}\n.ss .ss-about__credits p {\n  margin: 0 0 2px;\n}\n.ss-about__license {\n  width: 100%;\n  padding-top: var(--spacing-md);\n  border-top: 1px solid var(--border-color);\n  font-size: var(--font-size-xs);\n  color: var(--text-muted);\n}\n.ss .ss-about__license p {\n  margin: 0;\n}\n.ss .ss-about__license p + p {\n  margin-top: 2px;\n}\n/* Write SQL with Claude (Help menu): one section, as Diagramforce's Diagram with AI has. The link and the download button share one\n   colour, the primary hue a step toward the text colour (as the lists' links have). It reads at 8.48:1 on the dark theme's dialog,\n   where the primary colour reads at 4.36:1, and at 9.28:1 in the light theme. The note's muted text reads at 6.93:1 and 5.05:1, the\n   failure line's at 7.59:1 and 6.19:1. The link is underlined at rest, as it has to read as a link and not as the body text above\n   it. The button is a wire button in that colour, so the dialog's one filled button is Close. */\n.ss-skill {\n  --skill-link: color-mix(in srgb, var(--color-primary) 50%, var(--text-primary));\n  display: flex;\n  flex-direction: column;\n  gap: var(--spacing-sm);\n  padding: var(--spacing-xs) 0;\n}\n.ss .ss-skill__title {\n  font-size: var(--font-size-md);\n  font-weight: 600;\n  color: var(--text-primary);\n}\n.ss .ss-skill__blurb,\n.ss .ss-skill__steps {\n  font-size: 13px;\n  line-height: var(--line-height);\n  color: var(--text-secondary);\n}\n.ss .ss-skill code {\n  padding: 0 4px;\n  border-radius: 4px;\n  background: var(--bg-elevated);\n  font-family: var(--font-mono);\n  font-size: var(--font-size-sm);\n  color: var(--text-primary);\n}\n/* Advice, never a warning: the store knows only this browser's downloads. */\n.ss .ss-skill__note {\n  font-size: var(--font-size-sm);\n  line-height: var(--line-height);\n  color: var(--text-muted);\n}\n.ss .ss-skill__status {\n  margin-top: 0;\n  color: var(--danger-text);\n}\n.ss-skill__actions {\n  display: flex;\n  flex-wrap: wrap;\n  align-items: center;\n  justify-content: space-between;\n  gap: var(--spacing-sm) var(--spacing-md);\n  margin-top: var(--spacing-xs);\n}\n.ss .ss-skill__view {\n  font-size: 13px;\n  color: var(--skill-link);\n  text-decoration: underline;\n}\n.ss .ss-skill__view:hover {\n  text-decoration: none;\n}\n/* The width of the idle label and of the busy one, so the button does not move when it turns to \"Downloading…\". */\n.ss .ss-skill__download {\n  min-width: 132px;\n  border-color: var(--skill-link);\n  background: transparent;\n  color: var(--skill-link);\n}\n.ss .ss-skill__download:hover {\n  background: var(--bg-hover);\n}\n.ss .ss-skill__download.is-busy {\n  cursor: progress;\n  background: transparent;\n}\n/* A list of rows in a dialog: the Open and History lists, and the list pickers below. The kind badge, a link in the list (Retry on a\n   failed load) and the focus ring keep their hue, a step toward the text colour. In the dark theme the primary colour read at 3.80:1 on\n   the raised surface behind Open's rows, 2.79:1 on a hovered row there, and 3.08:1 on the tip's surface behind a picker's rows. The mix\n   reads at 7.41:1 and 6.01:1 there, 5.03:1 or more on a hovered row, and 8.18:1 or more in the light theme. A hovered link keeps the\n   colour and is underlined. */\n.ss-list {\n  position: relative;\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  max-height: 320px;\n  overflow-y: auto;\n}\n.ss-list-row {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-md);\n  padding: var(--spacing-sm) var(--spacing-md);\n  border-bottom: 1px solid var(--border-color);\n  cursor: pointer;\n}\n.ss-list-row:last-child {\n  border-bottom: none;\n}\n.ss-list-row:hover {\n  background: var(--bg-hover);\n}\n/* The highlighted row of any list (.is-active, under the arrow keys of Open's and History's search and the pickers') is the picker's\n   highlight: a light veil of the text colour (6%) and a 3px bar in the action colour, on the list's own surface (the author's RC5 test,\n   2026-10-12). The primary colour is red in the dark theme, which read as an error. The pointer moving over a row highlights it, so a\n   hovered row has this look too. */\n.ss-list .ss-list-row.is-active {\n  background: color-mix(in srgb, var(--text-primary) 6%, transparent);\n  box-shadow: inset 3px 0 0 var(--color-action);\n}\n/* \"Searching...\" under Open's list while the Backend answers, or why the latest request failed: a quiet line in the muted text colour\n   (.ss-hint), outside the list, which scrolls. Inside it, as first built, it was the list's last line, out of view below rows that\n   filled the list (the review of 2026-10-12). It keeps its one line when it is empty, so the panel keeps its height as it comes and\n   goes. It stays empty while a pick loads, as the box over the list says Opening (.ss-list-opening, below), and says why a pick failed\n   to open. */\n.ss-list-status {\n  min-height: calc(var(--font-size-sm) * var(--line-height));\n  margin: var(--spacing-xs) 0 0;\n  padding: 0 var(--spacing-md);\n  line-height: var(--line-height);\n}\n/* Open's list in a frame, which the box of Opening \"name\"... lies over (.ss-list-opening). The box is beside the list, not in it, as the list\n   scrolls and is greyed out: it stays in the middle of the frame and keeps its own colours. */\n.ss-list-frame {\n  position: relative;\n}\n/* Open while it loads a pick (the author's RC8 test, 2026-10-12: \"grey out open results with a spinner and line in it's center so that\n   it's clear it's time to wait for the load\"). RC8 had only a line under the list that said Opening, and the list went on answering:\n   a click was still a click, and the arrows still moved the highlight.\n   - The list is greyed out: its rows stay where they are, at 40% of their strength, so the list plainly looks off in both themes, and\n     the highlighted row keeps its bar. It takes no pointer events, which the rows inherit: no hover veil and no click. The wheel does\n     not scroll it either.\n   - The frame keeps a height that holds the box, as the list can be hidden while it holds nothing.\n   - The cursor says to wait, as the list under it takes no pointer. */\n.ss-list-frame.is-opening {\n  min-height: 56px;\n  cursor: progress;\n}\n.ss-list-frame.is-opening > .ss-list {\n  opacity: 0.4;\n  pointer-events: none;\n}\n/* The status region over the list. It is empty, and invisible, until a pick is loading, and then it holds the box in its middle. It\n   takes no pointer, so the frame has the cursor. */\n.ss-list-opening {\n  position: absolute;\n  inset: 0;\n  z-index: 1;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  box-sizing: border-box;\n  padding: var(--spacing-sm);\n  pointer-events: none;\n}\n/* The box of Opening \"name\"... after a spinner. It has the quick tip's surface (.ss-tip): the surface, border, shadow and text colour,\n   a step off the greyed-out rows under it, so its text reads at 4.5:1 or more in both themes whatever row lies under it (the tip's text\n   colour on its surface is 11:1 or more in the dark theme and 16:1 or more in the light one). A long name wraps inside the box. */\n.ss-list-opening__box {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  max-width: 100%;\n  box-sizing: border-box;\n  padding: var(--spacing-sm) var(--spacing-md);\n  border: 1px solid var(--tooltip-border);\n  border-radius: var(--border-radius-sm);\n  background: var(--tooltip-bg);\n  box-shadow: var(--shadow-tooltip);\n  color: var(--tooltip-fg);\n  line-height: var(--line-height);\n}\n.ss-list-opening__text {\n  min-width: 0;\n  overflow-wrap: anywhere;\n}\n/* Open's search with its Reload button at the right, which has the look of the sidebar's (.ss-tree__action). The search takes the room. */\n.ss-open-search {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n  margin-bottom: var(--spacing-xs);\n}\n.ss-open-search .ss-input {\n  flex: 1 1 auto;\n  min-width: 0;\n}\n.ss-list .ss-type-badge,\n.ss-list .ss-tree__link {\n  color: color-mix(in srgb, var(--color-primary) 50%, var(--text-primary));\n}\n/* No row of a list has the keyboard focus: the rows are options of a listbox, and the search above them keeps the focus (Open's and\n   History's rows took it until 1.3.0, and a picker's chosen row until RC6, where the chosen target became a summary). The one thing\n   in a list that Tab reaches is the Retry link of a list that could not load, and its ring is this mix. */\n.ss-list :focus-visible {\n  outline-color: color-mix(in srgb, var(--color-primary) 50%, var(--text-primary));\n}\n/* The list picker (.ss-list--picker): the lists that a Data Extension or a folder is chosen from have this look, one for all of them\n   (the author's RC3 and RC4 tests of 1.3.0, 2026-10-11, where the Existing list had it and the others kept the dialog's own background,\n   a red tint and a red bar). They are the Save to DE overlay's Existing list and Folder list, and Save As's target list. It is the look\n   of the app's quick tip (.ss-tip): the tip's surface, border, shadow and text colour, a step off the dialog behind it. Open and History\n   keep the look above, as their lists fill their panel and are not popups. They take only the highlight's look (.is-active, above),\n   with the keys of the pickers (the author's RC5 test, 2026-10-12).\n   - A hovered row and the highlighted one (.is-active, under the arrow keys) are a light veil of the text colour. A stronger veil, or a\n     tint under it, takes the muted text on the tip's surface below 4.5:1 in one of the themes.\n   - The highlighted row has a bar in the action colour. The primary colour is red in the dark theme, which read as an error.\n   - The chosen row (.is-selected) is framed in the action colour, as the selected option cards are (.ss-radio-option), and has no tint:\n     the red tint read as an error as well. The frame is a shadow, joined with the bar on a chosen row that is highlighted, so the\n     outline stays free. As first built the frame was an outline, which took the focus ring's place on the chosen row, which Tab\n     reached then. Tab reaches no row now.\n   - The Retry link's focus ring is the badge's mix, above: the primary colour reads at 3.08:1 on the tip's surface in the dark theme\n     and 2.58:1 on the veil of a hovered row, and the mix at 6.01:1 and 5.03:1.\n   - The list is positioned (every .ss-list is, above), so that an option's offsetTop is its place in the list, which the keys scroll\n     to (targetCombobox, saveFolderPicker). The Folder list's popup places itself with position: absolute, further down.\n   - The look is the look of a list that is open. A target picker's box (is-closed, set on each draw) has none of it while no list of\n     matches is on show: the search is empty, or Escape closed the matches, or the Data Extensions load, or could not load, or the\n     prompt asks for a search. The box is then plain text on the dialog, with a border that stays but does not show, so the box does\n     not change its size, and the chosen Data Extension is a summary (chosenTargetSummary) and no row. As first built, in RC5, the\n     closed box kept the tip's surface and held the chosen row in its frame, a button. In the author's RC6 test (2026-10-12) a click on\n     a Data Extension of the matches chose it, and the closed box then looked like an open dropdown of one option, whose only row\n     did nothing when clicked (\"Clicking with mouse on DE to save into does nothing\"). */\n.ss-list--picker {\n  border-color: var(--tooltip-border);\n  background: var(--tooltip-bg);\n  box-shadow: var(--shadow-tooltip);\n  color: var(--tooltip-fg);\n}\n.ss-list--picker.is-closed {\n  border-color: transparent;\n  background: transparent;\n  box-shadow: none;\n  color: inherit;\n}\n/* The summary of a picker's chosen target while no list of matches is on show (chosenTargetSummary), as text on the dialog: the caption\n   in the secondary text colour, the name in bold in the dialog's text colour, and the line of its folder and key as a row has it. The\n   badge keeps its hue from the list above (.ss-list .ss-type-badge). The texts read at 4.5:1 or more on the dialog in both themes (the\n   secondary text 8.37:1 in the dark theme and 5.72:1 in the light one, and the badge is checked in the scenario). */\n.ss-list__summary {\n  padding: var(--spacing-xs) var(--spacing-md) var(--spacing-sm);\n}\n.ss-list__caption {\n  font-size: 11px;\n  color: var(--text-secondary);\n}\n.ss-list__summary-name {\n  margin-top: 2px;\n  font-weight: 700;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.ss-list__summary-meta {\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.ss-list--picker .ss-list-row {\n  border-bottom-color: color-mix(in srgb, var(--tooltip-border) 50%, transparent);\n}\n.ss-list--picker .ss-list-row:hover,\n.ss-list--picker .ss-list-row.is-active {\n  background: color-mix(in srgb, var(--text-primary) 6%, transparent);\n}\n.ss-list--picker .ss-list-row.is-active {\n  box-shadow: inset 3px 0 0 var(--color-action);\n}\n.ss-list--picker .ss-list-row.is-selected {\n  box-shadow: inset 0 0 0 2px var(--color-action);\n}\n.ss-list--picker .ss-list-row.is-selected.is-active {\n  box-shadow: inset 3px 0 0 var(--color-action), inset 0 0 0 2px var(--color-action);\n}\n.ss-list-row__main {\n  flex: 1 1 auto;\n  min-width: 0;\n  overflow: hidden;\n}\n.ss-list-row__title {\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.ss-list-row__meta {\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.ss-list-row__sql {\n  font-family: var(--font-mono);\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.ss-check-target {\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  padding: var(--spacing-md);\n  margin-top: var(--spacing-sm);\n}\n.ss-check-target table {\n  width: 100%;\n  border-collapse: collapse;\n  font-size: var(--font-size-sm);\n}\n.ss-check-target th, .ss-check-target td {\n  text-align: left;\n  padding: 3px var(--spacing-sm);\n  border-bottom: 1px solid var(--border-color);\n}\n\n/* -------------------------------------------------------------------- */\n/* 10. Toasts                                                            */\n/* -------------------------------------------------------------------- */\n/* Centred just below the toolbar, where the user is looking after pressing a\n   toolbar button, not in a corner. The column lets clicks through between toasts. */\n.ss-toasts {\n  position: absolute;\n  top: calc(var(--toolbar-height) + var(--spacing-md));\n  left: 50%;\n  transform: translateX(-50%);\n  display: flex;\n  flex-direction: column;\n  align-items: stretch;\n  gap: var(--spacing-sm);\n  z-index: 200;\n  width: min(480px, calc(100% - 32px));\n  pointer-events: none;\n}\n.ss-toast {\n  pointer-events: auto;\n  display: flex;\n  align-items: flex-start;\n  gap: var(--spacing-sm);\n  padding: var(--spacing-sm) var(--spacing-md);\n  border-radius: var(--border-radius-sm);\n  border: 1px solid var(--border-color);\n  background: var(--bg-surface-raised);\n  box-shadow: var(--shadow-md);\n}\n.ss-toast--success {\n  border-color: var(--brand-green);\n}\n.ss-toast--error {\n  border-color: var(--color-danger);\n}\n.ss-toast--warning {\n  border-color: var(--warning-color);\n}\n.ss-toast__body {\n  flex: 1 1 auto;\n  font-size: var(--font-size-sm);\n}\n.ss-toast__close {\n  border: none;\n  background: none;\n  cursor: pointer;\n  color: var(--text-secondary);\n}\n\n/* -------------------------------------------------------------------- */\n/* 11. Misc: badges, scrollbars, focus, responsive                       */\n/* -------------------------------------------------------------------- */\n.ss-badge {\n  display: inline-flex;\n  align-items: center;\n  gap: 3px;\n  padding: 1px 6px;\n  border-radius: 10px;\n  font-size: 11px;\n  font-weight: 600;\n  background: var(--bg-elevated);\n  color: var(--text-secondary);\n}\n.ss-badge--error {\n  background: var(--tint-danger);\n  color: var(--danger-text);\n}\n.ss-badge--warning {\n  background: var(--tint-warning);\n  color: var(--warning-text);\n}\n.ss-badge--info {\n  background: var(--tint-info);\n  color: var(--info-text);\n}\n\n.ss * ::-webkit-scrollbar {\n  width: 10px;\n  height: 10px;\n}\n.ss ::-webkit-scrollbar-thumb {\n  background: var(--border-color-strong);\n  border-radius: 6px;\n}\n.ss ::-webkit-scrollbar-track {\n  background: transparent;\n}\n\n@media (max-width: 1023px) {\n  .ss-sidebar {\n    position: absolute;\n    top: 0;\n    bottom: 0;\n    right: 0;\n    z-index: 50;\n    box-shadow: var(--shadow-md);\n  }\n  .ss-sidebar.is-collapsed {\n    display: none;\n  }\n  .ss-sidebar-overlay-bg {\n    display: block;\n    position: absolute;\n    inset: 0;\n    background: rgba(0, 0, 0, 0.3);\n    z-index: 40;\n  }\n}\n\n/* Narrow windows: toolbar buttons drop their labels (icon only) except the primary Run button,\n   so the single-row toolbar never wraps. Titles carry the label for tooltips. */\n@media (max-width: 1100px) {\n  .ss .ss-toolbar__button--secondary > span { display: none; }\n  .ss .ss-toolbar__button--secondary { padding: 4px 6px; }\n}\n@media (max-width: 900px) {\n  .ss .ss-toolbar__button:not(.ss-toolbar__button--primary) > span { display: none; }\n  .ss .ss-toolbar__button:not(.ss-toolbar__button--primary) { padding: 4px 6px; }\n}\n\n/* Menu links look like menu buttons (Diagramforce): text colour, not link colour. */\n.ss a.ss-toolbar__menu-item {\n  color: var(--text-secondary);\n  text-decoration: none;\n}\n.ss a.ss-toolbar__menu-item:hover {\n  color: var(--text-primary);\n}\n\n/* -------------------------------------------------------------------- */\n/* 12. Save to DE                                                        */\n/* -------------------------------------------------------------------- */\n/* The overlay (SaveToDe in sqlstudio.js) needs the width of a table of fields. */\n.ss-modal--xwide {\n  max-width: 1080px;\n}\n/* A toast's link has a line of its own, as wide as its words, so the off-site arrow stays beside them, in the toast's own text colour\n   rather than the link red (the author's RC7 test, 2026-10-09: the red link wrapped and left its arrow on a line alone). */\n.ss .ss-toast__link {\n  display: table;\n  margin-top: 2px;\n  color: var(--text-primary);\n  text-decoration: underline;\n  white-space: nowrap;\n}\n.ss .ss-toast__link:hover {\n  color: var(--color-primary);\n}\n/* The line beside Close while the rows move: the Data Extension is made, and the window can close. */\n.ss-save__moving {\n  flex: 1 1 auto;\n  margin: 0;\n  align-self: center;\n  font-size: var(--font-size-sm);\n  color: var(--text-primary);\n}\n.ss-save__moving:empty {\n  display: none;\n}\n/* The warnings under the fields table (saveFieldWarnings): a field with no length, a length too short for the values on screen. */\n.ss-save__warnings {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n  margin-top: var(--spacing-xs);\n}\n.ss-save__warnings:empty {\n  display: none;\n}\n/* The line under a failed move's message: the Data Extension's fields are set, so the form's are locked. */\n.ss-save__locked {\n  margin-top: 4px;\n}\n.ss-save__moving-line {\n  display: block;\n}\n.ss-save__top {\n  display: grid;\n  grid-template-columns: repeat(3, minmax(0, 1fr));\n  gap: var(--spacing-md);\n}\n/* The folder picker: the input, and under it the list of folders that opens over the fields table. It is a list picker (.ss-list--picker)\n   and its rows are the other lists' (.ss-list-row): the active one (the arrow keys) is marked by a bar and the chosen one by a frame, as\n   they are there. This rule places it over the table. */\n.ss-combo {\n  position: relative;\n}\n.ss-combo__popup {\n  position: absolute;\n  top: 100%;\n  left: 0;\n  right: 0;\n  z-index: 10;\n  margin-top: 2px;\n  overscroll-behavior: contain;\n}\n.ss-combo__option {\n  padding: 5px var(--spacing-md);\n  line-height: 1.4;\n}\n.ss-combo__list:not(:empty) + .ss-combo__note {\n  border-top: 1px solid color-mix(in srgb, var(--tooltip-border) 50%, transparent);\n}\n/* Beside the other two fields the list is wider than its input, to the left, so a long path shows whole. */\n@media (min-width: 801px) {\n  .ss-combo__popup {\n    left: auto;\n    width: 520px;\n  }\n  /* Save As's Folder is a field of its own, as wide as the dialog's other fields, so its list is as wide as the input. */\n  .ss-combo--full .ss-combo__popup {\n    left: 0;\n    width: auto;\n  }\n}\n/* Save As's Folder is the last field, so the dialog's body scrolls to show its list when it opens, with room under it (scroll-margin). */\n.ss-combo--full .ss-combo__popup {\n  scroll-margin-bottom: var(--spacing-md);\n}\n.ss-save__notice:empty {\n  display: none;\n}\n.ss-save__note {\n  margin: 0 0 var(--spacing-sm);\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n}\n.ss-save__table-wrap {\n  max-height: 36vh;\n  overflow: auto;\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  margin-bottom: var(--spacing-md);\n}\n.ss-save__table {\n  width: 100%;\n  border-collapse: collapse;\n  font-size: var(--font-size-sm);\n}\n.ss-save__table th {\n  position: sticky;\n  top: 0;\n  z-index: 1;\n  padding: 4px;\n  text-align: left;\n  font-weight: 600;\n  color: var(--text-secondary);\n  background: var(--bg-elevated);\n  border-bottom: 1px solid var(--border-color);\n}\n.ss-save__table td {\n  padding: 3px 4px;\n  vertical-align: top;\n}\n.ss-save__table tr.has-error td {\n  background: var(--tint-danger);\n}\n/* The column's name on the line of its inputs: one line as tall as an input (26px) keeps the text at their middle, and the cell stays\n   at the top, so a line of error under an input leaves it where it is (the author's RC13 test, 2026-10-09). */\n.ss-save__source {\n  max-width: 150px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  line-height: 26px;\n  color: var(--text-secondary);\n}\n.ss-save__table .ss-input,\n.ss-save__table .ss-select {\n  height: 26px;\n}\n.ss-save__number {\n  width: 72px;\n  text-align: right;\n}\n/* Key and Null: the box at the middle of its column, under its centred heading, and at the middle of the line of the inputs. */\n.ss .ss-save__table .ss-save__check {\n  text-align: center;\n}\n.ss-save__check-box {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  height: 26px;\n}\n.ss-save__check-box > input {\n  margin: 0;\n}\n.ss-save__error {\n  margin-top: 2px;\n  font-size: 11px;\n  color: var(--danger-text);\n}\n.ss-save__error:empty {\n  display: none;\n}\n.ss .ss-input.is-invalid {\n  border-color: var(--color-danger);\n}\n.ss-save__group {\n  margin-bottom: var(--spacing-sm);\n}\n.ss-save__line {\n  display: flex;\n  flex-wrap: wrap;\n  align-items: center;\n  gap: var(--spacing-sm);\n}\n.ss-save__line .ss-select,\n.ss-save__line .ss-input {\n  width: auto;\n}\n.ss-save__inline {\n  display: inline-flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n}\n.ss-save__cost,\n.ss-save__fix {\n  margin: var(--spacing-xs) 0 0;\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n}\n.ss-save__cost:empty,\n.ss-save__fix:empty {\n  display: none;\n}\n/* The line on what the save does, under the overlay's title, with the gap a field group has before the Name. */\n.ss-modal__body > [data-save=\"hint\"] {\n  margin-bottom: var(--spacing-md);\n}\n/* The cost sits in the footer, left of Cancel and Save, as Export CSV's label sits by its button (the author's RC12 test, 2026-10-09).\n   While a save runs it is empty, and the line on the move takes its place. */\n.ss-modal__footer > .ss-save__cost {\n  flex: 1 1 auto;\n  margin: 0;\n  align-self: center;\n}\n.ss-save__fix {\n  color: var(--danger-text);\n}\n.ss-save__link {\n  display: inline-block;\n  margin-top: var(--spacing-xs);\n  color: var(--color-primary);\n}\n.ss-save__primary .ss-spinner {\n  margin-right: var(--spacing-xs);\n}\n/* The choice at the top of the overlay (New or Existing Data Extension, 1.3.0) and the update type's cards of the Existing choice are\n   Save As's radio cards. A card is dimmed while its radio is off: the choice while a save runs, the update types until a target and its\n   fields are there, and Update when its key fields have no column. */\n.ss-save__choice {\n  margin-bottom: var(--spacing-md);\n}\n.ss-radio-option.is-disabled {\n  opacity: 0.6;\n  cursor: not-allowed;\n}\n.ss-radio-option .ss-save__card-note {\n  display: block;\n  margin-top: 2px;\n  color: var(--warning-text);\n}\n.ss-radio-option .ss-save__card-note:empty {\n  display: none;\n}\n/* The list of Data Extensions to save into: a list picker (.ss-list--picker) in a box that leaves room for the mapping below it. */\n.ss-save__targets {\n  max-height: 200px;\n  margin-top: var(--spacing-xs);\n}\n.ss-save__targets-note {\n  margin: var(--spacing-xs) 0 0;\n}\n/* The mapping of columns to fields: the field a column goes to, as plain text when its name matched, else a list with Leave out. */\n.ss-save__map .ss-select {\n  width: 100%;\n  max-width: 360px;\n}\n.ss-save__matched,\n.ss-save__ftype {\n  display: block;\n  line-height: 26px;\n  white-space: nowrap;\n}\n.ss-save__ftype {\n  color: var(--text-secondary);\n}\n.ss-save__fix.is-neutral {\n  color: var(--text-secondary);\n}\n/* The lint errors that stopped a save of Save As or of the Save to DE overlay (lintErrorsBox), between the dialog's body and its buttons so they\n   are in view whatever the body's scroll. A long list scrolls inside the box. */\n.ss-save__gate {\n  flex: 0 1 auto;\n  max-height: 160px;\n  overflow-y: auto;\n  margin: 0 var(--spacing-lg) var(--spacing-sm);\n  font-size: var(--font-size-sm);\n}\n.ss-save__gate-title {\n  font-weight: 700;\n}\n.ss-save__gate-list {\n  margin: var(--spacing-xs) 0 0;\n  padding-left: 18px;\n}\n.ss-save__gate-id {\n  margin-right: var(--spacing-xs);\n}\n@media (max-width: 800px) {\n  .ss-save__top {\n    grid-template-columns: minmax(0, 1fr);\n  }\n}\n";
+window.SQLStudioEmbeddedCss = "/* ==========================================================================\n   SQL Studio styles\n\n   Brand: SQL Studio follows the same design tokens and Lightning-adjacent\n   chrome as its sibling app Diagramforce. The dark tokens\n   are the base, and .ss[data-theme=\"light\"] overrides them. The App picks\n   the theme from the user's choice or the operating system's mode. Everything is scoped under .ss so the app can be\n   dropped into a Cloud Page without leaking styles or claiming <html>.\n\n   Sections:\n   1. Design tokens (brand, semantic, surfaces, sizing, shadows)\n   2. Reset and base\n   3. Layout shell (toolbar-on-top anatomy: header, sidebar, main - no status bar)\n   4. Buttons and form controls\n   5. Sidebar tree and search\n   6. Toolbar, help/theme menu, and problems strip\n   7. Editor pane and split resizer\n   8. Results grid, header, notice, error panel and pager\n   9. Dialogs, dropdown managers and modal\n   10. Toasts\n   11. Misc (badges, scrollbars, focus, responsive)\n   ========================================================================== */\n\n/* -------------------------------------------------------------------- */\n/* 1. Design tokens                                                      */\n/* -------------------------------------------------------------------- */\n.ss {\n  /* Brand (theme-stable) */\n  --brand-blue: #1D73C9;\n  --brand-red: #DA4E55;\n  --brand-amber: #F6B355;\n  --brand-amber-strong: #D4911F;\n  --brand-green: #27AE60;\n\n  /* Semantic: the primary hue flips between themes (deliberate, matches\n     Diagramforce); danger is always the brand red. --color-action is a separate accent hue for the\n     Run button, primary dialog buttons, and results/pager accents - it\n     also flips between themes, but independently of --color-primary. */\n  --color-primary: var(--brand-red);\n  --color-primary-hover: color-mix(in srgb, var(--color-primary) 82%, black);\n  --color-danger: var(--brand-red);\n  --color-accent: var(--brand-amber);\n  --color-action: var(--brand-amber);\n  --color-action-hover: color-mix(in srgb, var(--color-action) 82%, black);\n  --color-action-fg: #1C1E21;\n  --tint-danger: color-mix(in srgb, var(--color-danger) 14%, transparent);\n  --tint-warning: color-mix(in srgb, var(--warning-color, var(--brand-amber)) 16%, transparent);\n  --tint-info: color-mix(in srgb, var(--brand-blue) 14%, transparent);\n  /* The focused completion row and the header strip of its details panel, in both themes: brand blue with white\n     text, which reads at 4.8:1 on it, and the row reads at 4.4:1 against the light list and 3.2:1 against the dark\n     one. The Monaco theme writes the same pair (Editor._registerThemes). The rest of the panel is a card in a light\n     tint of the same blue, under which the note's secondary text keeps 4.5:1 in the light theme. */\n  --focus-band: var(--brand-blue);\n  --focus-band-fg: #FFFFFF;\n  --focus-card: color-mix(in srgb, var(--brand-blue) 8%, transparent);\n  --tint-success: color-mix(in srgb, var(--brand-green) 14%, transparent);\n\n  /* Dark theme surfaces and text (default) */\n  --bg-app: #212121;\n  --bg-surface: #18191A;\n  --bg-surface-raised: #242526;\n  --bg-elevated: rgba(127, 127, 127, 0.08);\n  --bg-hover: rgba(255, 255, 255, 0.10);\n  --text-primary: #F5F6F7;\n  --text-secondary: #B0B3B8;\n  --text-muted: #9CA3AF;\n  /* The rows of a query the editor no longer holds, and the mark that says so (.ss-stale-mark): muted, at 4.67:1 on a hovered row and\n     5.77:1 on the results header. */\n  --text-stale: var(--text-muted);\n  /* The soft hatch behind those rows: lighter stripes, which keep --text-stale at 5.5:1 or more where they lie. */\n  --stale-hatch: rgba(255, 255, 255, 0.045);\n  --text-inverse: #1C1E21;\n  --border-color: #3A3B3C;\n  --border-color-strong: #4E4F50;\n  --toolbar-bg: #242526;\n  --toolbar-button-hover: rgba(255, 255, 255, 0.10);\n  --toolbar-button-active: rgba(218, 78, 85, 0.15);\n  /* The quick tip (.ss-tip): a step lighter than the sidebar, with a border and a tight shadow that set it off from the rows\n     under it (the author's RC11 test, 2026-10-09: the surface and border colours left it hard to tell from the list). */\n  --tooltip-bg: #333437;\n  --tooltip-fg: var(--text-primary);\n  --tooltip-border: #6A6D72;\n  --shadow-tooltip: 0 4px 14px rgba(0, 0, 0, 0.55);\n  --modal-btn-neutral-bg: #E4E6EB;\n  --modal-btn-neutral-hover: #D2D6DC;\n  --modal-btn-neutral-fg: #1C1E21;\n  /* The severity colours: --warning-color, --color-danger and --brand-blue\n     mark (squiggles, rulers, borders, dots) at 3:1 or more, and the -text\n     variants colour words at 4.5:1 or more on the tints, the active tab and\n     the hovered tab they sit on. The dark theme's error red and info blue are\n     a shade lighter as text. */\n  --warning-color: var(--brand-amber);\n  --warning-text: var(--warning-color);\n  --danger-text: #E89397;\n  --info-text: #73AFEB;\n  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);\n  --shadow-md: 0 5px 40px rgba(0, 0, 0, 0.35);\n  --shadow-lg: 0 12px 28px 0 rgba(0, 0, 0, 0.4), 0 2px 4px 0 rgba(0, 0, 0, 0.2);\n  --shadow-dropdown: 0 14px 24px -10px rgba(0, 0, 0, 0.55);\n\n  /* Editor tokens: keywords/functions use the\n     flipping primary/accent hues, data views stay brand blue in both\n     themes, strings are always green, comments always --text-muted.\n     Each reads at 4.5:1 or more on --editor-bg, which the details\n     panel's code blocks share too: where a brand colour falls short,\n     the token takes the same hue a step lighter here, and a step darker\n     in the light theme below. Dark: the keyword red is #DB545B (the\n     brand red is 4.36:1), the Data View blue #2884E0 (the brand blue\n     is 3.65:1). */\n  --editor-bg: var(--bg-surface);\n  --editor-fg: var(--text-primary);\n  --editor-keyword: #DB545B;\n  --editor-function: var(--brand-amber);\n  --editor-string: var(--brand-green);\n  --editor-identifier: var(--text-primary);\n  --editor-dataview: #2884E0;\n  --editor-comment: var(--text-muted);\n  --editor-operator: #778899;\n\n  /* Sizing and type */\n  --toolbar-height: 50px;\n  --panel-header-height: 45px;\n  --border-radius-sm: 6px;\n  --border-radius-md: 8px;\n  --spacing-xs: 4px;\n  --spacing-sm: 8px;\n  --spacing-md: 12px;\n  --spacing-lg: 16px;\n  --spacing-xl: 24px;\n  --font-family: system-ui, -apple-system, \"Segoe UI\", Roboto, Ubuntu, Cantarell, \"Noto Sans\", sans-serif;\n  --font-mono: ui-monospace, SFMono-Regular, \"SF Mono\", Menlo, Consolas, \"Liberation Mono\", monospace;\n  --font-size-xs: 11px;\n  --font-size-sm: 12px;\n  --font-size-md: 14px;\n  --font-size-lg: 16px;\n  --line-height: 1.65;\n  --logo-data-uri: url(\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAABGdBTUEAALGPC/xhBQAAAERlWElmTU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAQKADAAQAAAABAAAAQAAAAABGUUKwAAABy2lUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iWE1QIENvcmUgNi4wLjAiPgogICA8cmRmOlJERiB4bWxuczpyZGY9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkvMDIvMjItcmRmLXN5bnRheC1ucyMiPgogICAgICA8cmRmOkRlc2NyaXB0aW9uIHJkZjphYm91dD0iIgogICAgICAgICAgICB4bWxuczpleGlmPSJodHRwOi8vbnMuYWRvYmUuY29tL2V4aWYvMS4wLyI+CiAgICAgICAgIDxleGlmOkNvbG9yU3BhY2U+MTwvZXhpZjpDb2xvclNwYWNlPgogICAgICAgICA8ZXhpZjpQaXhlbFhEaW1lbnNpb24+MTk2PC9leGlmOlBpeGVsWERpbWVuc2lvbj4KICAgICAgICAgPGV4aWY6UGl4ZWxZRGltZW5zaW9uPjE5NjwvZXhpZjpQaXhlbFlEaW1lbnNpb24+CiAgICAgIDwvcmRmOkRlc2NyaXB0aW9uPgogICA8L3JkZjpSREY+CjwveDp4bXBtZXRhPgosnlo7AAAMIklEQVR4AeVba2wdxRX+9u7eh31jO7ZjB2xwchMCAURCHhWPQsEhIWlTKlIeKvTxB1X9gUAV/0qlItoK2kogVX0L8SeIP6gtqC0VJLQxSdoqPOI4AkNMXnZiOwlx8OPavs/dfmf2Pnbvrl+xHYN9lPHenZmdme+bc86cmc1qmIRYlhVhtVqmaqZFTGEmnenzJFkOJskUZ/qMqU/TtASv44o2VilBC8htTDsAaz2vjUxRQDN4T/BjPspqcyEWO9VIgpXhj2Gmbt4f5PVVpjdIhpAzOSH4rUz/Y5ovIli2+qH3TCMr/ogVn2YK2g8Is19kKUBME8VT1IRnnWgKpZKZA/+MXeGLDtwJU34XoD7pJKGQS/BbWOt1Js78fAMvBIgouKIJ20nC7kIOwZcR9F5W2Dh/wQtcESHBeo/Xr5CE0YDKA+5eGOAFrVotONGCGcgTcJ/cLDBRmANUfwly1i0w8AJ3nWAXDWCEZzUsPAIU5lohoIaJEd6CE8FcQwIyjO0lvF1oIpgzi0iAEaIJfN42NpdgNgSzERIT+BxubC4Bfjso0j2qr2JA/tH8okFN+JqJKDEXgFqmP1KtEKD6lI9VdnHjKiFAw7njXfjJy+9hRA+7SMhmTTTVV+HpR25DyBCLubgOhVozPoSfvrAHHSMBGE48bNLQA/jZI7ejsa4i14eGVDqDH7+4H73n4zCMAMIhA3VVZbiqsRprV9ZhdVMNysK5vdsUx1VCAFA51IfIBwfREr2Gpx5yxmCLwG09eh7N65tw95di+eyLuva1tODwgQ/RHm1EyKEFFjsJEmAiVexXOjCZ336iD8fP9CuCBKPJylJfyFi+tAKbNy7HjtuuQsMSIU6EhZMQ0WmXWIEAtmW6UKunybauBiSDCjHpuoadu9qRysgAnVPnamKcGw3ZkTj69ryBUCSIEGdb2i5NfhZgj0FX2hcK6ogQeFnYgNQ93juA373aiod//jr+9Pc2jCZlvzO58XkIyJKAK41BfDlzGqlCpGxjEtVvO/op9rR2jQNy/KKBAy3IDnQjQAAzIQJTzEbI6I8n8es/v48fPLcbR0/LqdjEJHgIED+nRXVs00+gikdslk8jLxW0YCoQaPujcQy+uwuhqiC0WVh49YCmiDjYcRbff+4tHOw4MyEJXgJkYGU6lkXiuF3v9mpBMEAtOJfTgokZdlIUP7wX5lAPgtEgAhzsJM1UNSH2ztjdTs5GfX5rRhBGqg/mu88je+ET1hh7nF4CODCjTINWHsD26ElU8SzRLG2Ahjc1LeDsJ4YxfHgXjKgBnacPJdblA8OdFSLx4vDE/oW5RCqDZDqrHKGzZsoMoDE6il/d9AFWR05h6MAfqXkXWMWfBI8higkYEVamL4hpw2jO9OC14RjCcuCaE3GIbcdsX7BVrQgTe9zRjr3ASC+C5Qw8uaSqkCLf4LhXC2GCf/7RZqT5nGjN0GgKR7ouYO/h0zjwUS8SyYwixgafwLMb2nB1xSCSZhjWYA9G2l7GopseJQdeEjwEyMzoigCpHMA91Z1oSTRi2DR45wRq4aU329G8rkmtEGNjYEiVHMbox7sRiEh31C6TyaN747TAgV9ZX+mqsHZlPR5sXo3WT87iN39txX/azyC2OIVfbDiEVZUDSGZtJ6MZYaROHUCq6VaEGjawDScGH0WUgemcJElWSENsURybKukLqFpOkRXh8PFzePvQKWZ7mXXWTRzfB3O4VxEQYLsa28UUfYA9cBm8O61btRR/eGILHv3qSjy95j2sqiiCz49BfEfiyD8ZPMgrA7e4UbFM48D0MNd8bhMkgene+lOoNlIeXyBD2fnmh7m4wN2wfcfZTw0jcfQttexpEvbRfAJBasD4nPk1NkaemIiOx791C9asuQEJ+oVS0fQgMn0dSJ/vYJG7Yy8BLM9rgNIC2t+Kyji2LOnx1YJDx86h5VCXp+H8IJIn9yEb74Emzov/ZBOqiHCPI1/9Iq8yFQYia74LvYJnO6aXBCubQar7HU/7HgKEIE1myJGynLV7G7pQHeSKYHlHLr7AGx3K7MeROMbZp7mIacnar9Z/2xV4BjO9DEYs4UpErt7KlcFLgBYwkPn0CKxsytWNPwFUVZmlfDIZacUqh7Glvpda4CZAfMEhrggtyhe42kaycz+yg920d0HOf3kSNNuO5e9MS6hxIwJlfIfr2GOoPti5OcLYQC2JxV59CVBbNGWvHHXuKpzefwPPkCrCaiNSbML+9ZL4goL9FW1fK91xc2D6ohrolZdTVcfYDpc2Pul7i462GkZVE/GXaAGdjpVJKBKczXkIEOeUV1XnNaOZWNVUja/fskIFIM5GJC4o9QXJTtr+EGdf6byjtplGcPmdDLTqmFkySEe16fzUK5dSe2kSDi1WfidAwtPy4rgo3jiAZaKqJc5SrT5ZLicPbVqNf+zvQJzBiApnC23Z0WHz+mUImqPK84vduYS2GYjWIxJrJvYDrqKZvIl36ejbn+Zq455fM52CEeMENBZ7KxkhC3K26k8AD0XqothOLZDlT3ZgeSloQVsvttS0K9uXIMQp4okjK5qhRaroqGZa/Ys9xU8Mor89xeW8mCe/TB6sLB2lP3KIm6J8AUlQBJRec+UP33UtaiojPr4ggJ2vv4MLH+2i3yuSox5Ttl+P8Io7c63MxoUDpl9J9narGKbUBCQSDVZXuTr2J8BVxXvTtLSSvmCljy/Q0HZyEHuPWQyPhb2iWLT9sMx+eDEzZ8P/230lensx0tlF+y+ZABJjRKMI14nvKcpFESCPKy2ooBbIeZVT6PRe6VyORIZrfz5fZp9OLxy7M58za9dP/92CzNAQNbjQu+rLzGYRabicGiD/zakoF0mABdGCe3y0IEhP+8Fni7HvbB2PvGwvb8/+Ji5Rszn7GkY7O3HujTfp/PIHpEWgYhpVN67lojQZH+B4bryfD22+FrW+vgB45WSTrQX0/HqUs0/1nz3RkBkYwPHf/t6efW7lXcLVSy8vR/UtN7uy5aakpqd8nAxqAbeoX7uZcUHJKW5BC87VI8QzpXBMZl+cT4m5jNP65IpEzTUkunvQ8cwvEf/4iO/sm6k0Fm9Yj/LlyzxjKPEUk+vWWevbm6/D3/57TB1IBhx2l6Zv2PnxZbj1iiTqZmT23TYtY5BZP//2PvS++hpS589zx8m9dqlQ9fXyCC6/75sskTbckzBNAmxf8NiOG3GIB5ByjO6UbLYR/SvuQP00Z98iiIH3W3mkPqKaT/f3Y+TECQx92I7EmbPKrn3Bs7aZSqHxvh2IXrWSd27w0tg0CZAmLDy8+XqV5M5fvB371/PLZQzPAKbzhRcxevq07cRo0zKbstSNBVxaMhNJLN64AQ0P3O/XsMqbAQKknekAHHNsrgKNnl3AlnpxVyXHjZlMYtE1VyP2+GMIhCUk9B/jDBHg6Hmuf1I7BHzl2jVY+cQPEaqV///hD16GOq8IMNPcADEEv+wb9+CK732Hx+9y/j42+HlBgDhIi8DFNCqvvw4NDz6AqnU3CjbK+OClhlcDGLZaWf7HarUnliq2WJkUDxnkpePMiLzUGOV5ftYRSotvy/L0WU5xS0W8uah20Qdo9Al8wVpbi4rrVqP2jjsY6a1huUDyPl/aXv7eQ0CgfAki12xneUmMxCNlozqWf27a1+0MoG6ILVFvnAuNcdwBRnGLuccoCg82eCRXv3ULMv0DPFjVua6XIVRTg0hjI8quvAJGRf6VuDw1efBSWyPbm3j9l9zYD3sDDrss/3dqHeSf8l6n2s949ac6pkJbd4kGcMciDeQzp9qYF9rkcqbaz1TrTzQKhTkrei4GPzuHcxONYU7LFeakEMBTQvWZyZwO59J3bn9aIwTIu2P3UemlH81c9CiYLwgBfTSBnrkYwdz2qTD3cQerPi1rndvBzEnvrYJdNEDkL/ZlQf1VmPME7KIjlM9IFgADglGwgphz4R5VYZTgn+Q9Y935TILCJhjlyzFidsS7zNjN+6ckc36SUJhY+XZQsCrJm4C6YYF8VOjQhMJDdu0v5F/BkJ95uL4ZHBMO9wcL99PZPCskQc6Rch9Pgx9PW42852cm6usS9+ln/qG5v8q+JvfxtMZ385jw4+lJ6TjJkP0pP65yfj7Pd18+xwlzw4FgNmQ/w33N1D6f/z9nGYh4iZaoUAAAAABJRU5ErkJggg==\");\n  --transition-fast: 150ms ease;\n  --transition-normal: 400ms cubic-bezier(0.08, 0.52, 0.52, 1);\n\n  color-scheme: dark;\n  background: var(--bg-app);\n  color: var(--text-primary);\n}\n\n.ss[data-theme=\"light\"] {\n  --color-primary: var(--brand-blue);\n  --color-primary-hover: color-mix(in srgb, var(--color-primary) 85%, black);\n  --color-action: var(--brand-blue);\n  --color-action-hover: color-mix(in srgb, var(--color-action) 85%, black);\n  --color-action-fg: #FFFFFF;\n\n  --bg-app: #F5F6F7;\n  --bg-surface: #FFFFFF;\n  --bg-surface-raised: #FFFFFF;\n  --bg-elevated: rgba(127, 127, 127, 0.08);\n  --bg-hover: rgba(0, 0, 0, 0.06);\n  --text-primary: #1C1E21;\n  --text-secondary: #606770;\n  --text-muted: #65707B;\n  /* Secondary, not muted, in the light theme: --text-muted on the app background read at 4.09:1 on a hovered row and 4.29:1 on the\n     results header, where --text-secondary keeps 4.63:1 and 4.86:1. The two greys are a shade apart. */\n  --text-stale: var(--text-secondary);\n  /* Darker stripes in the light theme, which keep --text-stale at 4.7:1 or more where they lie. */\n  --stale-hatch: rgba(0, 0, 0, 0.05);\n  --text-inverse: #FFFFFF;\n  --border-color: #DADDE1;\n  --border-color-strong: #BEC3C9;\n  --toolbar-bg: #FFFFFF;\n  --toolbar-button-hover: rgba(0, 0, 0, 0.06);\n  --toolbar-button-active: rgba(53, 120, 229, 0.12);\n  --tooltip-bg: #FFFFFF;\n  --tooltip-fg: var(--text-primary);\n  --tooltip-border: #A9AFB6;\n  --shadow-tooltip: 0 4px 14px rgba(0, 0, 0, 0.16);\n  --modal-btn-neutral-bg: #E4E6EB;\n  --modal-btn-neutral-hover: #D2D6DC;\n  --modal-btn-neutral-fg: #1C1E21;\n  /* The light theme's severity colours: the warning amber a shade darker\n     than the strong one, which marked at 2.67:1 on white, and every -text\n     variant a shade darker again, for 4.5:1 as text. */\n  --warning-color: #B47B1A;\n  --warning-text: #825913;\n  --danger-text: #B9272E;\n  --info-text: #1962AC;\n  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.1);\n  --shadow-md: 0 5px 40px rgba(0, 0, 0, 0.12);\n  --shadow-lg: 0 12px 28px 0 rgba(0, 0, 0, 0.2), 0 2px 4px 0 rgba(0, 0, 0, 0.1);\n  --shadow-dropdown: 0 14px 24px -10px rgba(0, 0, 0, 0.18);\n\n  /* The light theme's editor tokens at 4.5:1 or more on white: the keyword\n     and Data View blue as they are, the amber a step darker than the\n     strong one (2.67:1), the green a step darker than the brand green\n     (2.87:1), the operator grey a step darker than Monaco's (3.64:1), and\n     the second bracket pair's green a step darker than Monaco's (3.93:1). */\n  --editor-keyword: var(--color-primary);\n  --editor-function: #9E6C17;\n  --editor-string: #1E864A;\n  --editor-dataview: var(--brand-blue);\n  --editor-operator: #667788;\n  --editor-bracket-2: #2D872D;\n\n  color-scheme: light;\n}\n\n/* -------------------------------------------------------------------- */\n/* 2. Reset and base                                                     */\n/* -------------------------------------------------------------------- */\n.ss, .ss * {\n  box-sizing: border-box;\n}\n.ss {\n  position: relative;\n  display: flex;\n  flex-direction: column;\n  /* The viewport, not 100%: the Cloud Page gives html, body and #sqlstudio no height, so a\n     percentage resolved to auto there and the app grew with its content (a 100-row page made\n     it about 3,000px tall, scrolling the whole page instead of the grid). */\n  height: 100vh;\n  min-height: 640px;\n  font-family: var(--font-family);\n  font-size: var(--font-size-sm);\n  line-height: var(--line-height);\n}\n/* :where() keeps this reset at zero specificity, so every component's own\n   color rule (.ss-btn, .ss-toolbar__button, .ss-tab, ...) always wins\n   without needing !important or selector-weight tricks. */\n:where(.ss button, .ss input, .ss select, .ss textarea) {\n  font-family: inherit;\n  font-size: inherit;\n  color: inherit;\n}\n/* A page without a doctype renders in quirks mode, where tables do not inherit\n   the text colour or font: the results grid came out black on the dark theme\n   on the first org deployment. */\n:where(.ss table) {\n  color: inherit;\n  font-size: inherit;\n  font-weight: inherit;\n  font-style: inherit;\n  line-height: inherit;\n}\n.ss a {\n  color: var(--color-primary);\n}\n.ss svg {\n  fill: currentColor;\n}\n.ss :focus-visible {\n  outline: 2px solid var(--color-primary);\n  outline-offset: 1px;\n}\n.ss ul {\n  margin: 0;\n  padding: 0;\n  list-style: none;\n}\n.ss h1, .ss h2, .ss h3, .ss p {\n  margin: 0;\n}\n\n/* -------------------------------------------------------------------- */\n/* 3. Layout shell                                                       */\n/* -------------------------------------------------------------------- */\n.ss-toolbar__brand {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  text-decoration: none;\n  white-space: nowrap;\n  flex: 0 0 auto;\n  padding: 0 var(--spacing-xs);\n}\n.ss-toolbar__brand-logo {\n  width: 32px;\n  height: 32px;\n  flex: 0 0 auto;\n  border-radius: var(--border-radius-sm);\n  background-image: var(--logo-data-uri);\n  background-size: contain;\n  background-repeat: no-repeat;\n  background-position: center;\n}\n.ss-toolbar__brand-name {\n  font-size: 16px;\n  font-weight: 700;\n  letter-spacing: -0.3px;\n  color: var(--color-primary);\n}\n.ss-about-logo {\n  width: 64px;\n  height: 64px;\n  border-radius: var(--border-radius-md);\n  background-image: var(--logo-data-uri);\n  background-size: contain;\n  background-repeat: no-repeat;\n  background-position: center;\n}\n.ss-header__actions {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n}\n\n.ss-body {\n  display: flex;\n  flex: 1 1 auto;\n  min-height: 0;\n  position: relative;\n}\n\n.ss-sidebar {\n  display: flex;\n  flex-direction: column;\n  width: 280px;\n  min-width: 240px;\n  max-width: 480px;\n  flex: 0 0 auto;\n  position: relative;\n  border-left: 1px solid var(--border-color); /* the sidebar sits on the right, like Diagramforce's stencil */\n  background: var(--bg-elevated);\n  overflow: hidden;\n}\n.ss-sidebar.is-collapsed {\n  width: 0 !important;\n  min-width: 0;\n  border-left: none;\n}\n.ss-sidebar__resizer {\n  position: absolute;\n  top: 0;\n  bottom: 0;\n  left: 0;\n  width: 6px;\n  cursor: col-resize;\n  z-index: 5;\n}\n.ss-sidebar__search {\n  position: relative;\n  display: flex;\n  align-items: center;\n  height: var(--panel-header-height);\n  padding: 0 var(--spacing-sm);\n  border-bottom: 1px solid var(--border-color);\n}\n.ss-sidebar__search .ss-input {\n  padding-right: 26px;\n}\n.ss-sidebar__search-clear {\n  position: absolute;\n  right: 14px;\n  top: 50%;\n  transform: translateY(-50%);\n  border: none;\n  background: none;\n  padding: 2px;\n  color: var(--text-secondary);\n  cursor: pointer;\n  border-radius: var(--border-radius-sm);\n}\n.ss-sidebar__search-clear:hover {\n  color: var(--color-primary);\n  background: var(--bg-hover);\n}\n.ss-sidebar__tree {\n  flex: 1 1 auto;\n  overflow-y: auto;\n  overflow-x: hidden;\n  padding: var(--spacing-xs) 0;\n}\n.ss-tree__section-title {\n  padding: var(--spacing-sm) var(--spacing-md) 2px var(--spacing-sm);\n  font-size: var(--font-size-sm);\n  font-weight: 700;\n  color: var(--text-primary);\n  text-transform: uppercase;\n  letter-spacing: 0.03em;\n}\n/* What is under a section title starts one indent step in from it, as a folder's children do from the\n   folder, so the title reads as the outermost level: the title's caret is at the sidebar's left padding, a\n   top-level row's caret one step in and a subfolder's another. */\n.ss-tree__section-body {\n  padding-left: var(--spacing-lg);\n}\n/* The lines in a section body (the hint, a group title, a message, the footer) start in line with the carets\n   of its rows, not a step further in. */\n.ss-tree__section-body > .ss-tree__hint,\n.ss-tree__section-body > .ss-tree__group-title,\n.ss-tree__section-body > .ss-tree__empty,\n.ss-tree__section-body > .ss-tree__loading,\n.ss-tree__section-body > .ss-tree__list-status {\n  padding-left: var(--spacing-sm);\n}\n/* A section title as a button: pressing it collapses or expands the section, as a Data View group's\n   caret does. It keeps the title's type, and adds the caret and a hover. */\n.ss-tree__section-toggle {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  width: 100%;\n  border: none;\n  background: none;\n  line-height: var(--line-height);\n  text-align: left;\n  cursor: pointer;\n}\n.ss-tree__section-toggle:hover {\n  background: var(--bg-hover);\n}\n.ss-tree__section-caret {\n  flex: 0 0 auto;\n  width: 14px;\n  text-align: center;\n  color: var(--text-secondary);\n}\n/* The Snippets title holds its toggle and its save button side by side, as a table row holds its toggle and its actions, so\n   no control sits inside another. The toggle fills the row and the save button keeps the right end. */\n.ss-tree__section-head {\n  display: flex;\n  align-items: center;\n  padding-right: var(--spacing-xs);\n}\n.ss-tree__section-head > .ss-tree__section-toggle {\n  flex: 1 1 auto;\n  width: auto;\n  min-width: 0;\n}\n/* The app's own tooltip (UI._wireTips), for elements with a data-tip: it comes sooner than a title's. */\n.ss-tip {\n  position: absolute;\n  z-index: 300;\n  max-width: min(420px, calc(100% - 16px));\n  /* Its line breaks and the SQL's indentation are kept, as a snippet's and a tab's tip show SQL. */\n  white-space: pre-wrap;\n  tab-size: 4;\n  overflow-wrap: anywhere;\n  padding: 4px 8px;\n  border: 1px solid var(--tooltip-border);\n  border-radius: var(--border-radius-sm);\n  background: var(--tooltip-bg);\n  box-shadow: var(--shadow-tooltip);\n  font-size: var(--font-size-xs);\n  color: var(--tooltip-fg);\n  pointer-events: none;\n}\n.ss-tip[hidden] {\n  display: none;\n}\n/* The reload icon of a section's title turns while its list loads (UI._renderReloadButton). */\n.ss-tree__section-action.is-busy svg {\n  animation: ss-spin 0.8s linear infinite;\n}\n/* A line of a section's list state, under its hint: the pages of a first load, a list that stops short, a reload that failed. */\n.ss-tree__list-status {\n  padding: 2px var(--spacing-md) var(--spacing-xs);\n  color: var(--text-muted);\n  font-size: 11px;\n}\n.ss-tree__section-head > .ss-tree__section-action {\n  margin-top: var(--spacing-xs);\n}\n/* The section titles dock (1.2.0, the author's RC3 test, 2026-10-08: the Snippets section was out of sight below a long Data\n   Extension list until the others were collapsed). Each sticks to the top of the sidebar's scroll while its section scrolls\n   by, below the titles before it, and to the bottom while its section is further down, above the titles after it, so every\n   title is always in sight. Each title is one height (--ss-dock-h, the height the title had already), and\n   UI._dockSectionTitles gives each the number of titles above and below it, so they stack without a gap or an overlap,\n   whatever the sidebar's state when the tree is drawn. The background covers the rows that scroll under them: the sidebar's\n   own --bg-elevated is a see-through grey over the app's --bg-app, so the title lays the same two on each other. */\n.ss-tree__dock {\n  --ss-dock-h: 30px;\n  position: sticky;\n  z-index: 2;\n  /* Less the scroll's own padding, which sticky offsets start inside: rows showed through that strip above the top title. */\n  top: calc(var(--ss-dock-h) * var(--ss-dock-above, 0) - var(--spacing-xs));\n  bottom: calc(var(--ss-dock-h) * var(--ss-dock-below, 0) - var(--spacing-xs));\n  box-sizing: border-box;\n  height: var(--ss-dock-h);\n  background: linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-app);\n}\n/* The Data Views title is its own toggle, with no head around it: its hover lays --bg-hover over the same two, as the hover's\n   see-through grey alone let the rows under it show through (the author's RC10 test, 2026-10-09). */\n.ss-tree__dock.ss-tree__section-toggle:hover {\n  background: linear-gradient(var(--bg-hover), var(--bg-hover)), linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-app);\n}\n/* The line under a snippet's name in its dialog: what is saved, and who sees it. */\n.ss-snippet-note {\n  margin: var(--spacing-sm) 0;\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n}\n/* The SQL a new snippet saves, in the dialog that asks for its name: monospace, its lines kept, as tall as a dozen of them\n   before it scrolls. */\n.ss-snippet-preview {\n  max-height: 14em;\n  margin: 0;\n  padding: var(--spacing-sm);\n  overflow: auto;\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  background: var(--bg-app);\n  color: var(--text-primary);\n  font-family: var(--font-mono);\n  font-size: 12px;\n  white-space: pre;\n  user-select: text;\n  -webkit-user-select: text;\n}\n/* The line above the Data Extension tree that gives the totals and says to search. */\n/* A note of the Data Extensions section, such as the one on SQL Studio installed in a child, has the hint's look and a class of its own,\n   so the hint stays the line above a tree. */\n.ss-tree__hint,\n.ss-tree__note {\n  padding: 2px var(--spacing-md) var(--spacing-xs);\n  color: var(--text-muted);\n  font-size: 11px;\n}\n/* A folder of the Data Extension tree reads heavier than the Data Extensions beside it, which have no count. */\n.ss-tree__folder--de > .ss-tree__name {\n  font-weight: 600;\n}\n/* The made-up group of the Data Extensions in no loaded folder reads in italics, so it does not pass\n   for a real folder of that name. */\n.ss-tree__folder--made-up > .ss-tree__name {\n  font-style: italic;\n}\n/* The number of Data Extensions below a folder, at the right end of its row. */\n.ss-tree__count {\n  flex: 0 0 auto;\n  color: var(--text-muted);\n  font-size: 11px;\n}\n/* The \"Show N more\" button under a folder's first Data Extensions, in line with their names. It is\n   a .ss-tree__link too, which comes later in this file, hence the two classes. */\n.ss-tree__link.ss-tree__more {\n  display: block;\n  padding: 3px var(--spacing-sm) 3px 26px;\n  text-align: left;\n}\n/* Inline text link inside a sidebar/Save As hint row (Retry on a failed\n   Data Extension list load, Reload in the list-loaded footer). */\n.ss-tree__link {\n  display: inline;\n  border: none;\n  background: none;\n  padding: 0;\n  color: var(--color-primary);\n  cursor: pointer;\n  font: inherit;\n}\n.ss-tree__link:hover {\n  text-decoration: underline;\n}\n/* Shared DE name prefix, replacing the old SHARED badge. */\n.ss-tree__ent-prefix {\n  color: var(--text-muted);\n}\n/* A parent Business Unit Data Extension's folder path, on its own line under its row, in line with the name. */\n.ss-tree__path {\n  padding: 0 var(--spacing-sm) 3px 26px;\n  color: var(--text-muted);\n  font-size: 11px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n/* The \"Parent BU\" heading above the parent's shared and synchronized Data Extensions in a search. */\n.ss-tree__group-title {\n  padding: var(--spacing-sm) var(--spacing-md) 2px;\n  color: var(--text-secondary);\n  font-size: 11px;\n  font-weight: 700;\n  text-transform: uppercase;\n  letter-spacing: 0.03em;\n}\n.ss-sidebar-overlay-bg {\n  display: none;\n}\n\n.ss-main {\n  display: flex;\n  flex-direction: column;\n  flex: 1 1 auto;\n  min-width: 0;\n  min-height: 0;\n}\n\n/* -------------------------------------------------------------------- */\n/* 4. Buttons and form controls                                          */\n/* -------------------------------------------------------------------- */\n/* Neutral dialog/modal button: used for\n   Cancel and other non-primary actions in modals and dropdown panels. */\n.ss-btn {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  gap: var(--spacing-xs);\n  height: 28px;\n  padding: 0 var(--spacing-md);\n  border: 1px solid transparent;\n  border-radius: var(--border-radius-sm);\n  background: var(--modal-btn-neutral-bg);\n  color: var(--modal-btn-neutral-fg);\n  cursor: pointer;\n  white-space: nowrap;\n  line-height: 1;\n  transition: background-color var(--transition-fast);\n}\n.ss-btn:hover {\n  background: var(--modal-btn-neutral-hover);\n}\n.ss-btn:disabled {\n  opacity: 0.35;\n  cursor: not-allowed;\n}\n.ss-btn--primary {\n  background: var(--color-action);\n  border-color: var(--color-action);\n  color: var(--color-action-fg);\n}\n.ss-btn--primary:hover {\n  background: var(--color-action-hover);\n  border-color: var(--color-action-hover);\n}\n.ss-btn--icon {\n  width: 28px;\n  padding: 0;\n}\n.ss-btn--sm {\n  height: 24px;\n  padding: 0 var(--spacing-sm);\n  font-size: var(--font-size-sm);\n}\n.ss-btn--link {\n  border-color: transparent;\n  background: transparent;\n  color: var(--color-primary);\n  text-decoration: underline;\n}\n.ss-btn--link:hover {\n  background: transparent;\n  color: var(--color-primary-hover);\n}\n/* A button's display would show it through the hidden attribute: Save to DE's \"Reload the list\" showed under Name in every form\n   (round 5 org test A16, 2026-10-21), where it belongs only under a taken name that could not be checked. */\n.ss-btn[hidden] {\n  display: none;\n}\n\n.ss-field {\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n  margin-bottom: var(--spacing-md);\n}\n.ss-label {\n  font-size: var(--font-size-sm);\n  font-weight: 600;\n  color: var(--text-secondary);\n}\n.ss-hint {\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n}\n/* The History dialog's line on where its entries are kept, between the search box and the list. */\n.ss .ss-history__where {\n  margin: 6px 0 8px;\n}\n.ss-input, .ss-select, .ss-textarea {\n  height: 30px;\n  padding: 0 var(--spacing-sm);\n  border: 1px solid var(--border-color-strong);\n  border-radius: var(--border-radius-sm);\n  background: var(--bg-surface-raised);\n  color: var(--text-primary);\n  width: 100%;\n}\n.ss-textarea {\n  height: auto;\n  padding: var(--spacing-sm);\n  resize: vertical;\n  font-family: var(--font-mono);\n}\n/* A focused field is marked in the action colour, the colour of a chosen card and of Save, so that red only marks an error: in the dark\n   theme the primary colour is the danger colour, and a focused field looked like an invalid one (the author's decision on 1.3.0 RC4,\n   2026-10-11). It is the border and the keyboard ring of every text field, select and textarea, whatever its class. Checkboxes and\n   radios have the action ring too: as first built they kept the primary ring, and a focused checkbox still looked wrong in the dark\n   theme (the author's RC5 test, 2026-10-12: \"checkboxes are still red focus\"). Buttons, rows and links keep the primary ring of\n   .ss :focus-visible, by the author's decision of 2026-10-12, as a red ring on Cancel reads as discarding what the view holds. A primary\n   button such as Save keeps its own action ring (.ss-btn--primary). An invalid field keeps its danger border while it has the focus. */\n.ss-input:focus, .ss-select:focus, .ss-textarea:focus {\n  border-color: var(--color-action);\n}\n.ss input:not([type=\"button\"]):not([type=\"submit\"]):focus-visible,\n.ss select:focus-visible,\n.ss textarea:focus-visible {\n  outline-color: var(--color-action);\n}\n.ss-radio-group {\n  display: flex;\n  flex-direction: column;\n  gap: var(--spacing-sm);\n}\n/* Three equal cards in one row (Save As update type). */\n.ss-radio-group--row {\n  flex-direction: row;\n}\n.ss-radio-group--row .ss-radio-option {\n  flex: 1 1 0;\n}\n.ss-radio-option {\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  padding: var(--spacing-sm);\n  cursor: pointer;\n  transition: border-color var(--transition-fast), outline-color var(--transition-fast);\n}\n.ss-radio-option.is-selected {\n  border-color: var(--color-action);\n  outline: 2px solid var(--color-action);\n  outline-offset: -1px;\n}\n.ss-radio-option strong {\n  display: block;\n}\n.ss-radio-option span {\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n}\n\n/* -------------------------------------------------------------------- */\n/* 5. Sidebar tree and search                                            */\n/* -------------------------------------------------------------------- */\n.ss-tree__row {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  padding: 3px var(--spacing-sm);\n  cursor: pointer;\n  border-radius: var(--border-radius-sm);\n  white-space: nowrap;\n  overflow: hidden;\n}\n.ss-tree__row:hover {\n  background: var(--bg-hover);\n}\n/* A table row holds its toggle and its actions side by side, so no control sits inside another. The\n   toggle, which opens and closes the fields, fills the row and has the row's padding, so its arrow and\n   name sit where a folder row has them and a click anywhere on the name's side of the row hits it. The\n   row does not clip, so the toggle's focus outline shows in full, as a focused row's did: the toggle cuts\n   the name short itself.\n   The actions, Insert name and Insert table query (SELECT with all fields), sit at the right end of the row. They take\n   no width of their own: hidden, they leave the whole row to the name, and shown, while the row is\n   hovered or the keyboard's focus is on its toggle or on one of them, they lie over the end of the row on\n   its own background (the sidebar's, made opaque, with the hover tint on a hovered row). So a long name\n   is cut only while they show, and nothing in the row moves. Their left edge fades, so what they cover\n   fades out instead of breaking off (the mask's colour only gives its opacity). Hidden, they stay in the\n   tab order and take no click. */\n.ss-tree__row--table {\n  position: relative;\n  padding: 0;\n  overflow: visible;\n}\n.ss-tree__toggle {\n  display: flex;\n  flex: 1 1 auto;\n  align-items: center;\n  gap: 4px;\n  min-width: 0;\n  padding: 3px var(--spacing-sm);\n  border-radius: var(--border-radius-sm);\n  overflow: hidden;\n}\n.ss-tree__actions {\n  position: absolute;\n  top: 0;\n  right: 0;\n  bottom: 0;\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  padding: 0 var(--spacing-xs) 0 var(--spacing-md);\n  /* The row's own corners, as the row does not clip them. */\n  border-top-right-radius: inherit;\n  border-bottom-right-radius: inherit;\n  background: linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-app);\n  -webkit-mask-image: linear-gradient(to right, transparent, var(--bg-app) var(--spacing-md));\n  mask-image: linear-gradient(to right, transparent, var(--bg-app) var(--spacing-md));\n  opacity: 0;\n  pointer-events: none;\n}\n.ss-tree__row:hover > .ss-tree__actions,\n.ss-field-item:hover > .ss-tree__actions {\n  background: linear-gradient(var(--bg-hover), var(--bg-hover)), linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-app);\n}\n.ss-tree__row:hover > .ss-tree__actions,\n.ss-tree__toggle:focus-visible ~ .ss-tree__actions,\n.ss-field-item:hover > .ss-tree__actions,\n.ss-field-row:focus-visible ~ .ss-tree__actions,\n.ss-tree__actions:focus-within {\n  opacity: 1;\n  pointer-events: auto;\n}\n/* One action: the toolbar icon-button style, scaled to 24px for the sidebar tree. */\n.ss-tree__action {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  flex: 0 0 auto;\n  width: 24px;\n  height: 24px;\n  padding: 0;\n  border: none;\n  border-radius: var(--border-radius-sm);\n  background: transparent;\n  color: var(--text-secondary);\n  cursor: pointer;\n  transition: background-color var(--transition-fast), color var(--transition-fast);\n}\n.ss-tree__action:hover {\n  background: var(--toolbar-button-hover);\n  color: var(--color-primary);\n}\n/* An action that is off, such as Join to the query while the query has no table: dimmed, with its title saying why. */\n.ss-tree__action:disabled {\n  opacity: 0.4;\n  cursor: default;\n}\n.ss-tree__action:disabled:hover {\n  background: transparent;\n  color: var(--text-secondary);\n}\n.ss-tree__caret {\n  flex: 0 0 auto;\n  width: 14px;\n  text-align: center;\n  color: var(--text-secondary);\n  background: none;\n  border: none;\n  padding: 0;\n  cursor: pointer;\n}\n.ss-tree__name {\n  flex: 1 1 auto;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n/* Object-kind marker: DE, SHARED, VIEW, QUERY. */\n.ss-type-badge {\n  flex: 0 0 auto;\n  font-size: 10px;\n  font-weight: 700;\n  text-transform: uppercase;\n  letter-spacing: 0.02em;\n  color: var(--color-primary);\n  border: 1px solid currentColor;\n  border-radius: 2px;\n  padding: 0 3px;\n}\n/* A badge in a folder tree row: smaller type and less space around it, so the name keeps the room. */\n.ss-type-badge--compact {\n  font-size: 9px;\n  letter-spacing: 0;\n  padding: 0 2px;\n}\n.ss-tree__children {\n  padding-left: var(--spacing-lg);\n}\n.ss-tree__fields {\n  padding-left: var(--spacing-xl);\n}\n/* A field holds its row and its Insert name button side by side, as a table row holds its toggle and its\n   actions: the button lies over the end of the row while the field is hovered or the keyboard's focus is\n   on the row or on the button, and takes no width while hidden. The hover tint is the holder's, so it\n   stays while the pointer is on the button. */\n.ss-field-item {\n  position: relative;\n  border-radius: var(--border-radius-sm);\n}\n.ss-field-item:hover {\n  background: var(--bg-hover);\n}\n.ss-field-row {\n  display: flex;\n  align-items: baseline;\n  gap: 6px;\n  padding: 2px var(--spacing-sm);\n  cursor: pointer;\n  border-radius: var(--border-radius-sm);\n  overflow: hidden;\n}\n/* A field row is shorter than a table row: its button fits it. */\n.ss-field-item .ss-tree__action {\n  width: 20px;\n  height: 20px;\n}\n.ss-field-row__name {\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.ss-field-row__type {\n  flex: 0 0 auto;\n  color: var(--text-secondary);\n  font-size: 11px;\n  font-family: var(--font-mono);\n}\n/* The primary key's mark: the SLDS key icon, as tall as the field's text, in the warning text colour, which reads at\n   4.5:1 on the sidebar in both themes. */\n.ss-field-row__key {\n  display: inline-flex;\n  flex: 0 0 auto;\n  align-self: center;\n  color: var(--warning-text);\n}\n.ss-field-row__key .ss-icon {\n  width: 12px;\n  height: 12px;\n}\n.ss-tree__empty, .ss-tree__loading {\n  padding: var(--spacing-md);\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n}\n/* A hint line in a dialog's list (\"Loading...\", \"Could not load: ...\"), padded as the list's empty and loading rows are. */\n.ss-list > .ss-hint {\n  padding: var(--spacing-md);\n}\n\n/* -------------------------------------------------------------------- */\n/* 6. Toolbar and problems strip                                         */\n/* -------------------------------------------------------------------- */\n/* Toolbar, sidebar tree and tab labels are controls, not text: a drag or a select-all never paints\n   them. The query, the grid, the Status messages and the run summary stay selectable. */\n.ss-toolbar,\n.ss-sidebar__tree,\n.ss-tab {\n  -webkit-user-select: none;\n  user-select: none;\n}\n\n.ss-toolbar {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n  height: var(--toolbar-height);\n  padding: 0 var(--spacing-sm);\n  background: var(--toolbar-bg);\n  border-bottom: 1px solid var(--border-color);\n  flex: 0 0 auto;\n  flex-wrap: nowrap;\n  min-width: 0;\n  overflow: visible;\n}\n.ss-icon {\n  width: 16px;\n  height: 16px;\n  flex: 0 0 auto;\n  fill: currentColor;\n}\n/* Toolbar buttons: transparent by default, icon (16px) + label. Run is the one filled/primary button. */\n.ss-toolbar__button {\n  display: inline-flex;\n  align-items: center;\n  gap: 5px;\n  min-height: 32px;\n  padding: var(--spacing-xs) 10px;\n  border: none;\n  border-radius: var(--border-radius-sm);\n  background: transparent;\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n  font-weight: 500;\n  white-space: nowrap;\n  cursor: pointer;\n  transition: background-color var(--transition-fast), color var(--transition-fast);\n}\n.ss-toolbar__button:hover {\n  background: var(--toolbar-button-hover);\n  color: var(--color-primary);\n}\n.ss-toolbar__button.is-active,\n.ss-toolbar__button[aria-expanded=\"true\"] {\n  background: var(--toolbar-button-active);\n  color: var(--color-primary);\n}\n.ss-toolbar__button:disabled {\n  opacity: 0.35;\n  cursor: not-allowed;\n}\n/* .is-unavailable is a disabled toolbar button that stays focusable and says why it does nothing (aria-disabled), as Document while the\n   query cannot be drawn. It looks as :disabled does, with no hover highlight (the author's RC2 test, 2026-10-16: the greyed-out Document\n   button was not grey, as the rule was written for .ss-btn and the toolbar's buttons are .ss-toolbar__button). Its icon and label fade,\n   not the button: the button's opacity would fade its focus ring too, from 4.8:1 to 1.6:1 on the light toolbar and from 3.8:1 to 1.5:1\n   on the dark one, and a disabled button takes no focus, so it never showed one (the review of RC3, 2026-10-16). On a transparent\n   button the two look the same. */\n.ss-toolbar__button.is-unavailable {\n  cursor: not-allowed;\n}\n.ss-toolbar__button.is-unavailable > * {\n  opacity: 0.35;\n}\n.ss-toolbar__button:disabled:hover,\n.ss-toolbar__button.is-unavailable:hover {\n  background: transparent;\n  color: var(--text-secondary);\n}\n.ss-toolbar__button--primary {\n  background: var(--color-action);\n  color: var(--color-action-fg);\n}\n.ss-toolbar__button--primary:hover {\n  background: var(--color-action-hover);\n  color: var(--color-action-fg);\n}\n/* Focus rings on primary controls use --color-action too: amber in dark mode, blue in light mode, same as their fill. */\n.ss-toolbar__button--primary:focus-visible,\n.ss-btn--primary:focus-visible {\n  outline-color: var(--color-action);\n}\n.ss-toolbar__button--icon-only {\n  padding: var(--spacing-xs);\n  min-width: 32px;\n  justify-content: center;\n}\n/* Run while a run is in flight: a spinner in place of the play icon, at full\n   strength rather than the faded disabled look, so it reads as busy. */\n.ss-toolbar__button--primary.is-running:disabled,\n.ss-toolbar__button--primary.is-running:disabled:hover {\n  opacity: 1;\n  cursor: progress;\n  background: var(--color-action);\n  color: var(--color-action-fg);\n}\n/* Validate while Marketing Cloud Engagement checks the query: busy, not faded. */\n.ss-toolbar__button.is-running:disabled {\n  opacity: 1;\n  cursor: progress;\n}\n.ss-toolbar__button.is-running > svg {\n  display: none;\n}\n.ss-toolbar__button.is-running::before {\n  content: '';\n  width: 14px;\n  height: 14px;\n  box-sizing: border-box;\n  border: 2px solid currentColor;\n  border-right-color: transparent;\n  border-radius: 50%;\n  animation: ss-spin 0.8s linear infinite;\n  flex: 0 0 auto;\n}\n\n/* Monaco's hovers and suggestion details can sit outside .ss, so these rules are not scoped\n   to it. Tables there inherit the hover's colour and size, even in quirks mode, and read as a\n   compact list rather than bold oversized headers. */\n.monaco-hover table,\n.suggest-details table {\n  border-collapse: collapse;\n  margin: 4px 0;\n  color: inherit;\n  font-size: inherit;\n  line-height: inherit;\n}\n.monaco-hover th,\n.monaco-hover td,\n.suggest-details th,\n.suggest-details td {\n  padding: 1px 16px 1px 0;\n  text-align: left;\n  vertical-align: top;\n}\n.monaco-hover th,\n.suggest-details th {\n  font-weight: 600;\n  opacity: 0.7;\n  border-bottom: 1px solid rgba(128, 128, 128, 0.35);\n}\n\n/* Off-site links end with the arrow mateuszdabrowski.pl uses. Inline-block keeps the link's\n   underline off it. Monaco's hovers and suggestion details can sit outside .ss. */\n.monaco-hover a::after,\n.suggest-details a::after,\n.ss a[target=\"_blank\"]:not(.ss-btn):not(.ss-toolbar__brand)::after {\n  content: '\\2197';\n  display: inline-block;\n  margin-left: 0.3em;\n  font-size: 0.85em;\n  opacity: 0.6;\n  text-decoration: none;\n}\n\n/* The suggestion details panel and its list (Monaco's suggest widget, set up by Editor._watchSuggestDetails in\n   sqlstudio.js). The widget and the panel sit inside .ss, so the tokens reach them. The script says where the panel\n   is against the list with data-ss-details on both: right, left or below. */\n/* The border-box rule of the reset above reaches Monaco's own boxes. It sizes the panel by its content, so the panel\n   gets Monaco's content-box back, and its two border lines no longer cut off the last 2px of its text. */\n.ss .suggest-details {\n  box-sizing: content-box;\n}\n/* The tie between the focused row and the panel: the row's band (the theme's editorSuggestWidget.selectedBackground,\n   the same blue as --focus-band) goes on over the panel's header strip, and the panel has no border on the side that\n   faces the list. Monaco lays the panel 1px over the list's border on that side, so with no border of its own the\n   panel covers it, and the row and the strip meet with no line between them. At the list's left, Monaco stops the\n   panel 1px short of that border, so the panel moves 1px over it. */\n.ss .suggest-details-container[data-ss-details=\"right\"] .suggest-details {\n  border-left-width: 0;\n}\n.ss .suggest-details-container[data-ss-details=\"left\"] .suggest-details {\n  position: relative;\n  left: 1px;\n  border-right-width: 0;\n}\n.ss .suggest-details-container[data-ss-details=\"below\"] .suggest-details {\n  border-top-width: 0;\n}\n/* The card: Monaco keeps the panel at the list's top, wherever the focused row is, so the rest of the panel takes a\n   light tint of the band's blue, and the whole panel reads as the focused row's own. */\n.ss .suggest-details > .monaco-scrollable-element {\n  background: var(--focus-card);\n}\n/* The close button sits on the header strip in every panel, so it takes the strip's text colour. The selectors are as\n   long as Monaco's own, which load later and would win a tie. */\n.ss .suggest-details > .monaco-scrollable-element > .body > .header > .codicon-close,\n.ss .suggest-details > .monaco-scrollable-element > .body > .header > .codicon-close::before {\n  color: var(--focus-band-fg);\n}\n/* The header strip of any other item: Monaco's own header line, with the item's detail at full opacity, or, for an\n   item with none, the first line of its text, which runs under the close button to the panel's edge. */\n.ss .suggest-details:not(.no-type):not(.ss-join-details) > .monaco-scrollable-element > .body > .header {\n  color: var(--focus-band-fg);\n  background: var(--focus-band);\n}\n.ss .suggest-details:not(.no-type):not(.ss-join-details) > .monaco-scrollable-element > .body > .header > .type {\n  opacity: 1;\n}\n.ss .suggest-details.no-type:not(.ss-join-details) > .monaco-scrollable-element > .body > .docs.markdown-docs {\n  margin-right: 0;\n}\n.ss .suggest-details.no-type:not(.ss-join-details) > .monaco-scrollable-element > .body > .docs.markdown-docs > .rendered-markdown > p:first-child {\n  margin: -4px -5px 0;\n  padding: 4px 29px 4px 5px;\n  color: var(--focus-band-fg);\n  background: var(--focus-band);\n}\n/* A code block in any panel has the editor's own background, so its tokens read as they do in the editor. */\n.ss .suggest-details .rendered-markdown > div {\n  margin: 4px 0;\n  padding: 4px 8px;\n  border-radius: var(--border-radius-sm);\n  background: var(--editor-bg);\n}\n/* A recommended join (class set by the script): its label in bold on the first line, the key columns under it,\n   the SQL it writes in a block, and the note last, smaller and in the secondary text colour, which keeps 4.5:1 on\n   the card. The label takes the place of the panel's own header line, which would only repeat the key columns, so\n   the header keeps its close button alone. The label and the key columns are the header strip, out to the panel's\n   edges, the label clear of the close button. */\n.ss .suggest-details.ss-join-details .header > .type {\n  display: none;\n}\n.ss .suggest-details.ss-join-details > .monaco-scrollable-element > .body > .docs.markdown-docs > .rendered-markdown > p:first-child {\n  margin: -4px -5px 0;\n  padding: 4px 25px 2px 5px;\n  color: var(--focus-band-fg);\n  background: var(--focus-band);\n}\n.ss .suggest-details.ss-join-details > .monaco-scrollable-element > .body > .docs.markdown-docs > .rendered-markdown > p:nth-child(2) {\n  margin: 0 -5px 6px;\n  padding: 0 5px 6px;\n  color: var(--focus-band-fg);\n  font-size: var(--font-size-sm);\n  background: var(--focus-band);\n}\n.ss .suggest-details.ss-join-details .rendered-markdown > div {\n  margin: 6px 0;\n  padding: 6px 8px;\n}\n.ss .suggest-details.ss-join-details .rendered-markdown > div ~ p {\n  margin: 6px 0 0;\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n  line-height: 1.5;\n}\n\n/* Run summary parts that open a breakdown (UI.showHint): after a short hover, on focus, or pinned\n   by a click. */\n.ss-run-summary__hint {\n  text-decoration: underline dotted;\n  text-underline-offset: 3px;\n  cursor: help;\n}\n.ss-run-summary__hint:focus-visible {\n  outline: 2px solid var(--color-action);\n  outline-offset: 2px;\n}\n/* Temp DE when it links to Contact Builder: a click goes there instead of pinning the hint. It keeps the summary's own colour and\n   dotted underline, as the other parts with a hover do, so it does not read as a second red link beside Delete results. */\n.ss a.ss-run-summary__link {\n  cursor: pointer;\n  color: inherit;\n}\n/* The run summary's card (UI.showHint), with the quick tip's look. Only the card: as first written for every .ss-hint, the rule hid the\n   hint lines of the dialogs too, such as History's line on where it is kept and \"Could not load: ...\" (the author's RC12 test, 2026-10-09). */\n.ss-hint[role=\"tooltip\"] {\n  display: none;\n  position: absolute;\n  z-index: 150;\n  max-width: 380px;\n  padding: 10px 12px;\n  border: 1px solid var(--tooltip-border);\n  border-radius: var(--border-radius-sm);\n  background: var(--tooltip-bg);\n  box-shadow: var(--shadow-tooltip);\n  font-size: var(--font-size-xs);\n  color: var(--text-secondary);\n}\n.ss .ss-hint__title {\n  margin: 0 0 4px;\n  font-weight: 600;\n  color: var(--text-primary);\n}\n.ss .ss-hint__title:not(:first-child) {\n  margin-top: 10px;\n}\n/* The run's total split between calls through the API and through WSProxy, above the two tables. */\n.ss .ss-hint__split {\n  margin: 0 0 6px;\n  color: var(--text-primary);\n}\n.ss .ss-hint__line {\n  margin: 2px 0;\n}\n.ss-hint__table {\n  border-collapse: collapse;\n  width: 100%;\n}\n.ss-hint__table td {\n  padding: 2px 0;\n  vertical-align: top;\n}\n.ss-hint__table td + td {\n  padding-left: 16px;\n  text-align: right;\n  white-space: nowrap;\n  color: var(--text-primary);\n}\n/* The Status tab's first line during a run. */\n.ss-status-run-note {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  padding: var(--spacing-sm) var(--spacing-md);\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n  border-bottom: 1px solid var(--border-color);\n}\n\n/* Update notice: a small outlined pill next to the theme toggle. */\n.ss-update-badge {\n  margin-right: var(--spacing-sm);\n  padding: 2px 10px;\n  border: 1px solid var(--color-action);\n  border-radius: 12px;\n  background: transparent;\n  color: var(--color-action);\n  font-size: 12px;\n  font-weight: 600;\n  white-space: nowrap;\n  cursor: pointer;\n}\n.ss-update-badge:hover {\n  background: var(--color-action);\n  color: var(--color-action-fg);\n}\n.ss .ss-update-list {\n  margin: var(--spacing-sm) 0;\n  padding-left: 18px;\n  list-style: disc;\n}\n/* A link that looks like a button takes the button's text colour: `.ss a` gave it the link red, on the neutral grey and on the\n   amber of a primary button alike, in the update dialog's \"All changes\" and \"Update guide\" (the author, 2026-10-05). A link-style\n   button keeps the link colour it asks for. */\n.ss a.ss-btn {\n  text-decoration: none;\n  color: var(--modal-btn-neutral-fg);\n}\n.ss a.ss-btn.ss-btn--primary {\n  color: var(--color-action-fg);\n}\n.ss a.ss-btn.ss-btn--link {\n  color: var(--color-primary);\n}\n.ss .ss-update-list li {\n  margin: 4px 0;\n}\n\n/* Spinner. One turn takes 0.8 s: SPINNER_TURN_MS in sqlstudio.js must match. */\n@keyframes ss-spin {\n  to { transform: rotate(360deg); }\n}\n.ss-spinner {\n  display: inline-block;\n  width: 12px;\n  height: 12px;\n  box-sizing: border-box;\n  border: 2px solid currentColor;\n  border-right-color: transparent;\n  border-radius: 50%;\n  animation: ss-spin 0.8s linear infinite;\n  flex: 0 0 auto;\n}\n@media (prefers-reduced-motion: reduce) {\n  .ss-spinner,\n  .ss-toolbar__button.is-running::before {\n    animation: none;\n  }\n}\n\n/* Theme toggle icon: Diagramforce's\n   moon/sun swap, translated from df- to ss- and scoped to .ss. */\n.ss svg.ss-toolbar__icon--theme,\n.ss svg.ss-toolbar__icon--theme * {\n  /* Diagramforce draws the moon and sun as wire icons; the generic `.ss svg { fill }` rule must not apply. */\n  fill: none;\n  stroke: currentColor;\n  stroke-width: 2;\n  stroke-linecap: round;\n  stroke-linejoin: round;\n}\n.ss-toolbar__icon--theme {\n  width: 18px;\n  height: 18px;\n  fill: none;\n  stroke: currentColor;\n  stroke-width: 2;\n  stroke-linecap: round;\n  stroke-linejoin: round;\n}\n.ss[data-theme=\"dark\"] .ss-icon-sun { display: none; }\n.ss[data-theme=\"dark\"] .ss-icon-moon { display: inline; }\n.ss[data-theme=\"light\"] .ss-icon-sun { display: inline; }\n.ss[data-theme=\"light\"] .ss-icon-moon { display: none; }\n/* The system icon's right half is solid, which the wire-icon rule above would clear. */\n.ss svg.ss-toolbar__icon--theme .ss-icon-system__half { fill: currentColor; }\n.ss .ss-icon-system { display: none; }\n.ss[data-theme-choice=\"system\"] .ss-icon-sun,\n.ss[data-theme-choice=\"system\"] .ss-icon-moon { display: none; }\n.ss[data-theme-choice=\"system\"] .ss-icon-system { display: inline; }\n\n/* Help menu: Diagramforce's\n   ss-toolbar__menu, absolute under its button rather than the centred\n   dropdown-manager system (History keeps that; see section 9). */\n.ss-toolbar__dropdown {\n  position: relative;\n}\n.ss-toolbar__menu {\n  display: none;\n  position: absolute;\n  top: 100%;\n  right: 0;\n  margin-top: 4px;\n  min-width: 180px;\n  background: var(--toolbar-bg);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-md);\n  box-shadow: var(--shadow-md);\n  padding: 4px 0;\n  max-height: calc(100dvh - 64px);\n  overflow-y: auto;\n  z-index: 200;\n}\n.ss-toolbar__dropdown--open > .ss-toolbar__menu {\n  display: block;\n}\n.ss-toolbar__menu-item {\n  display: block;\n  width: 100%;\n  padding: 6px 14px;\n  border: none;\n  background: transparent;\n  color: var(--text-secondary);\n  font-weight: 500;\n  font-size: var(--font-size-sm);\n  font-family: var(--font-family);\n  text-align: left;\n  text-decoration: none;\n  cursor: pointer;\n  white-space: nowrap;\n}\n.ss-toolbar__menu-item:hover {\n  background: var(--toolbar-button-hover);\n  color: var(--text-primary);\n}\n.ss-toolbar__menu-item--icon {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n}\n.ss-toolbar__menu-icon {\n  flex-shrink: 0;\n  opacity: 0.7;\n}\n.ss-toolbar__menu-separator {\n  border-top: 1px solid var(--border-color);\n  margin: 4px 0;\n}\n/* The Document menu (Save as's neighbour): it opens at its button's left edge, not the right, and it carries a line of text, the trust\n   line that says what leaves the browser, which wraps inside the menu's width. */\n.ss-toolbar__menu--start {\n  left: 0;\n  right: auto;\n}\n.ss-toolbar__menu--document {\n  width: 300px;\n}\n.ss-toolbar__menu-note {\n  margin: 0;\n  padding: 6px 14px 8px;\n  color: var(--text-secondary);\n  font-size: var(--font-size-xs);\n  line-height: 1.45;\n  white-space: normal;\n}\n\n.ss-toolbar__divider {\n  width: 1px;\n  height: 20px;\n  background: var(--border-color);\n  margin: 0 var(--spacing-xs);\n}\n.ss-toolbar__spacer {\n  flex: 1 1 auto;\n}\n/* Save and Disconnect, shown only while the tab on screen has a Query Activity open. */\n.ss-toolbar__group {\n  display: inline-flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n}\n.ss-toolbar__group[hidden] {\n  display: none;\n}\n/* Lint findings list, now inside the Status tab of the bottom panel (see\n   .ss-status-panel below); the whole panel scrolls as one unit, so the\n   list itself carries no height cap of its own. */\n/* The Status tab's Show filter: the size of the small buttons next to it. */\n.ss-select--sm {\n  width: auto;\n  height: 24px;\n  padding-top: 0;\n  padding-bottom: 0;\n  font-size: var(--font-size-sm);\n}\n/* The Status tab's findings filter is as wide as the option it shows, not its longest one: \"Show: all\" takes 88 px where \"Show: errors\n   and warnings\" took 189, which kept Delete results whole beside the stale mark in a 744 px header (a 1,024 px window with the\n   sidebar open, the second review of 1.2.1, 2026-10-10). A browser without field-sizing keeps the longest option's width. */\n.ss-results-header .ss-select--sm {\n  field-sizing: content;\n}\n.ss-problem-hidden-note {\n  padding: 3px var(--spacing-md);\n  border-top: 1px solid var(--border-color);\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n}\n.ss-problem {\n  display: flex;\n  gap: var(--spacing-sm);\n  padding: 3px var(--spacing-md);\n  cursor: pointer;\n  border-top: 1px solid var(--border-color);\n  font-size: var(--font-size-sm);\n  align-items: baseline;\n  flex-wrap: wrap;\n}\n.ss-problem:hover {\n  background: var(--bg-hover);\n}\n.ss-problem__loc {\n  color: var(--text-secondary);\n  font-family: var(--font-mono);\n  flex: 0 0 auto;\n}\n.ss-problem__id {\n  color: var(--text-secondary);\n  flex: 0 0 auto;\n}\n/* From a basis of 0: a message longer than the row wraps beside its badge, where from its own width it went whole onto a line of its\n   own, as MCE013's did (the author's RC3 test of 1.3.0, 2026-10-11). Below 160 px it still goes under the badge. */\n.ss-problem__message {\n  flex: 1 1 0;\n  min-width: 160px;\n}\n/* The finding's docs link, after its message: one line with its off-site arrow. */\n.ss-problem__docs {\n  flex: 0 0 auto;\n  white-space: nowrap;\n}\n/* One-click fix button on a lint row:\n   the neutral small button style, pushed to the row's right edge. A\n   \"changes results\" fix keeps the same neutral look plus a small accent\n   dot; the actual \"changes results\" wording lives only in the title\n   tooltip, never as visible row text. */\n.ss-problem__fix {\n  flex: 0 0 auto;\n  margin-left: auto;\n}\n.ss-problem__fix--changes-results::before {\n  content: '';\n  display: inline-block;\n  width: 6px;\n  height: 6px;\n  margin-right: var(--spacing-xs);\n  border-radius: 50%;\n  background: var(--brand-amber);\n}\n.ss[data-theme=\"light\"] .ss-problem__fix--changes-results::before {\n  background: var(--warning-color);\n}\n/* Beside Fix all, in the panel header: how many fixes it leaves, with the dot their buttons carry. */\n.ss-fix-review-note {\n  display: inline-flex;\n  align-items: center;\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n  white-space: nowrap;\n}\n.ss-fix-review-note::before {\n  content: '';\n  display: inline-block;\n  width: 6px;\n  height: 6px;\n  margin-right: var(--spacing-xs);\n  border-radius: 50%;\n  background: var(--brand-amber);\n}\n.ss[data-theme=\"light\"] .ss-fix-review-note::before {\n  background: var(--warning-color);\n}\n\n/* -------------------------------------------------------------------- */\n/* 7. Editor pane and split resizer                                       */\n/* -------------------------------------------------------------------- */\n.ss-split {\n  display: flex;\n  flex-direction: column;\n  flex: 1 1 auto;\n  min-height: 0;\n}\n/* The resizable column: the query tab strip (fixed height) above the editor pane, which fills\n   whatever is left. The split resizer/applyInitialSplit set this\n   element's height, not .ss-editor-pane's, so the strip's own height never eats into the ratio\n   the user dragged. */\n.ss-editor-column {\n  display: flex;\n  flex-direction: column;\n  flex: 0 0 auto;\n  height: 300px;\n  min-height: 120px;\n}\n.ss-editor-pane {\n  position: relative;\n  flex: 1 1 auto;\n  min-height: 0;\n}\n.ss-editor-container {\n  /* Plain wrapper only: it deliberately does not carry the \"monaco-editor\"\n     class, which would tie with this rule's specificity against Monaco's\n     own editor.main.css (loaded later) and lose the position:absolute. */\n  position: absolute;\n  inset: 0;\n}\n.ss-split-resizer {\n  height: 6px;\n  cursor: row-resize;\n  background: var(--bg-elevated);\n  border-top: 1px solid var(--border-color);\n  border-bottom: 1px solid var(--border-color);\n  flex: 0 0 auto;\n}\n.ss-split-resizer:hover {\n  background: var(--toolbar-button-active);\n}\n\n/* Query tab strip: 4 fixed tabs, always visible with their state, styled\n   after Diagramforce's css/tabs.css. The strip shares the editor's background. The tabs sit in a tinted\n   tray, as Diagramforce's ungrouped tray: an inactive tab shows the tray through it, and the active tab\n   is taller, takes the editor's background and outline, and runs into the editor with no line between. */\n.ss-querytabs {\n  display: flex;\n  align-items: center;\n  height: 36px;\n  padding: 0 4px;\n  background: var(--editor-bg);\n  flex: 0 0 auto;\n}\n.ss-querytabs__tray {\n  display: flex;\n  align-items: stretch;\n  gap: 2px;\n  flex: 1 1 auto;\n  min-width: 0;\n  height: 28px;\n  box-sizing: border-box;\n  padding-right: 3px;\n  border-radius: var(--border-radius-sm);\n  background: color-mix(in srgb, var(--text-muted) 9%, transparent);\n}\n.ss-querytab {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  flex: 1 1 0;\n  min-width: 0;\n  height: 28px;\n  box-sizing: border-box;\n  padding: 4px 10px;\n  border: 1px solid transparent;\n  border-bottom: none;\n  border-radius: var(--border-radius-sm) var(--border-radius-sm) 0 0;\n  background: transparent;\n  color: var(--text-muted);\n  font-size: var(--font-size-sm);\n  font-weight: 500;\n  white-space: nowrap;\n  cursor: pointer;\n  position: relative;\n  overflow: hidden;\n  /* A narrow tab drops the run time first, then the row count, and keeps its icon and name (below). */\n  container-type: inline-size;\n  transition: background var(--transition-fast), color var(--transition-fast);\n}\n.ss-querytab:hover {\n  background: color-mix(in srgb, var(--text-muted) 14%, transparent);\n  color: var(--text-secondary);\n}\n.ss-querytab.is-active {\n  align-self: flex-start;\n  height: 32px;\n  background: var(--editor-bg);\n  color: var(--text-primary);\n  border-color: var(--border-color);\n  font-weight: 600;\n  box-shadow: inset 0 2.5px 0 color-mix(in srgb, var(--text-muted) 30%, transparent);\n  z-index: 1;\n}\n.ss-querytab.is-active:hover {\n  background: color-mix(in srgb, var(--text-primary) 7%, var(--editor-bg));\n}\n/* The state icon at the left edge: a query glyph while idle, a spinner while the run is in flight,\n   a check once done, an error mark after a failure. */\n.ss-querytab__icon {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  width: 12px;\n  height: 12px;\n  flex: 0 0 auto;\n}\n.ss-querytab__icon .ss-icon {\n  width: 12px;\n  height: 12px;\n}\n.ss-querytab__icon--idle {\n  opacity: 0.6;\n}\n.ss-querytab__icon--done {\n  color: var(--brand-green);\n}\n.ss-querytab__icon--failed {\n  color: var(--color-danger);\n}\n.ss-querytab__label {\n  flex: 0 1 auto;\n  min-width: 3em;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  text-align: left;\n}\n/* An idle, never-run tab is muted: its glyph and label fade further. */\n.ss-querytab.is-empty:not(.is-active) .ss-querytab__label {\n  opacity: 0.75;\n}\n.ss-querytab__time {\n  flex: 0 0 auto;\n  font-weight: 500;\n  color: var(--text-muted);\n  font-variant-numeric: tabular-nums;\n}\n/* Unsaved changes to the tab's Query Activity: grey, apart from the orange dot of an unseen finish. */\n.ss-querytab__unsaved {\n  width: 6px;\n  height: 6px;\n  border-radius: 50%;\n  background: var(--text-muted);\n  flex: 0 0 auto;\n}\n.ss-querytab__meta {\n  margin-left: auto;\n  padding-left: 8px;\n  flex: 0 1 auto;\n  min-width: 0;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  font-weight: 500;\n  color: var(--text-muted);\n  font-variant-numeric: tabular-nums;\n}\n.ss-querytab__meta--failed {\n  color: var(--danger-text);\n}\n@container (max-width: 300px) {\n  .ss-querytab__time {\n    display: none;\n  }\n}\n@container (max-width: 190px) {\n  .ss-querytab__meta {\n    display: none;\n  }\n}\n/* A tab that finished or failed while another one was on screen, until it is opened. */\n.ss-querytab__dot {\n  width: 6px;\n  height: 6px;\n  border-radius: 50%;\n  background: var(--color-action);\n  flex: 0 0 auto;\n}\n.ss-editor-fallback {\n  width: 100%;\n  height: 100%;\n  border: none;\n  resize: none;\n  padding: var(--spacing-md);\n  font-family: var(--font-mono);\n  background: var(--editor-bg);\n  color: var(--editor-fg);\n}\n.ss-banner {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  padding: 6px var(--spacing-md);\n  background: var(--tint-warning);\n  color: var(--warning-text);\n  border-bottom: 1px solid var(--border-color);\n  font-size: var(--font-size-sm);\n  flex: 0 0 auto;\n}\n.ss-banner--error {\n  background: var(--tint-danger);\n  color: var(--danger-text);\n}\n.ss-banner__close {\n  margin-left: auto;\n  border: none;\n  background: none;\n  cursor: pointer;\n  color: inherit;\n}\n\n/* -------------------------------------------------------------------- */\n/* 8. Results grid, tabs, inspector                                       */\n/* -------------------------------------------------------------------- */\n.ss-results-pane {\n  display: flex;\n  flex-direction: column;\n  flex: 1 1 auto;\n  min-height: 120px;\n}\n/* Bottom panel header: the Status/Results tabs on the left, the run\n   summary next to them (shown on either tab), then the page filter and\n   Export CSV, shown only while Results is active (UI.setActiveTab). */\n.ss-results-header {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  height: var(--panel-header-height);\n  padding: 0 var(--spacing-md);\n  border-bottom: 1px solid var(--border-color);\n  background: var(--bg-elevated);\n  flex: 0 0 auto;\n  /* Lets the cost beside Export CSV shorten when the header has little room (.ss-export-cost, below). */\n  container-type: inline-size;\n}\n.ss-tabs {\n  display: flex;\n  align-items: center;\n  gap: 2px;\n  flex: 0 0 auto;\n}\n.ss-tab {\n  display: inline-flex;\n  align-items: center;\n  gap: 6px;\n  height: 26px;\n  padding: 0 var(--spacing-sm);\n  border: none;\n  border-radius: var(--border-radius-sm);\n  background: transparent;\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n  font-weight: 600;\n  cursor: pointer;\n}\n.ss-tab:hover {\n  background: var(--toolbar-button-hover);\n}\n.ss-tab[aria-selected=\"true\"] {\n  background: var(--toolbar-button-active);\n  color: var(--color-primary);\n}\n.ss-tab__counts {\n  display: inline-flex;\n  align-items: center;\n  gap: 6px;\n}\n.ss-tab__count {\n  display: inline-flex;\n  align-items: center;\n  gap: 3px;\n  font-size: 11px;\n  font-weight: 600;\n}\n.ss-tab__count::before {\n  content: '';\n  display: inline-block;\n  width: 6px;\n  height: 6px;\n  border-radius: 50%;\n  background: currentColor;\n}\n.ss-tab__count--error {\n  color: var(--danger-text);\n}\n.ss-tab__count--warning {\n  color: var(--warning-text);\n}\n.ss-tab__count--info {\n  color: var(--info-text);\n}\n.ss-run-summary {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n/* The link takes no padding of its own: the summary's gap already spaces it, and since the WSProxy calls got their own\n   number (\"4 API calls · 2 WSProxy\") the summary is 7 px too long for a 1,280 px window with the sidebar open, which\n   the padding of a link button cut off. */\n.ss-run-summary__delete {\n  flex: 0 0 auto;\n  padding-left: 0;\n  padding-right: 0;\n}\n/* \"Edited since this run\" (UI.syncStaleMark): the query in the editor is no longer the one whose rows are on screen. It is the header's own\n   item, before the run summary, and never shrinks: inside the summary it was cut off with it, as in a 1,024 px window with the sidebar\n   open, where the page filter and Export CSV leave the summary 139 px. The summary opens with the dot that parts the two, so a header too\n   narrow for the summary (640 px, below) keeps the mark with no dot after it. The gap matches the summary's own. */\n.ss-stale-mark {\n  flex: 0 0 auto;\n  color: var(--text-stale);\n  font-size: var(--font-size-sm);\n  white-space: nowrap;\n  cursor: default;\n}\n.ss-stale-mark[hidden] {\n  display: none;\n}\n.ss-stale-mark:focus-visible {\n  outline: 2px solid var(--color-action);\n  outline-offset: 2px;\n}\n.ss-stale-mark:not([hidden]) + .ss-run-summary {\n  margin-left: calc(var(--spacing-xs) - var(--spacing-sm));\n}\n.ss-stale-mark:not([hidden]) + .ss-run-summary::before {\n  content: '\\00B7';\n}\n/* The page filter keeps its 180 px: in a tight header the run summary, which ends in an ellipsis, gives up room first,\n   as the cost beside Export CSV (below) takes some. */\n.ss-results-filter {\n  flex: 0 0 auto;\n}\n/* Beside Export CSV: what a click costs, said before the click (UI._syncExportCost). It never shrinks or wraps, so the\n   button stays on screen and the run summary gives up its room first. A header with little room shows the short form,\n   and with less still, nothing. The full text then stays for assistive technology (clipped out of sight, not removed)\n   and in the button's title. The widths are the header's own (its container), as the sidebar takes room from it. */\n.ss-export-cost {\n  position: relative;\n  flex: 0 0 auto;\n  color: var(--text-muted);\n  font-size: var(--font-size-sm);\n  white-space: nowrap;\n}\n.ss-export-cost__short {\n  display: none;\n}\n/* In a header of 1,100 px or less, as at 1,280 px with the sidebar open, the run summary's row count, which the Results tab\n   shows too, and Temp DE, a convenience, give way, so the two call counts and Delete results stay whole. */\n@container (max-width: 1100px) {\n  .ss-run-summary__rows,\n  .ss-run-summary__temp {\n    display: none;\n  }\n}\n/* While the stale mark shows, the same two give way from 1,240 px, as the mark takes the room that kept Delete results whole at the\n   header of a 1,440 px window (1,160 px with the sidebar open). In a header of 1,040 px or less the mark drops \"since this run\" and\n   keeps \"· Edited\", with the tip and the label unchanged, which keeps Delete results whole at the header of a 1,280 px window. */\n@container (max-width: 1240px) {\n  .ss-run-summary.is-stale .ss-run-summary__rows,\n  .ss-run-summary.is-stale .ss-run-summary__temp {\n    display: none;\n  }\n}\n@container (max-width: 1040px) {\n  .ss-stale-mark__more {\n    display: none;\n  }\n}\n@container (max-width: 640px) {\n  .ss-export-cost__full {\n    position: absolute;\n    width: 1px;\n    height: 1px;\n    overflow: hidden;\n    clip: rect(0 0 0 0);\n  }\n  .ss-export-cost__short {\n    display: inline;\n  }\n}\n@container (max-width: 540px) {\n  .ss-export-cost {\n    position: absolute;\n    width: 1px;\n    height: 1px;\n    overflow: hidden;\n    clip: rect(0 0 0 0);\n  }\n}\n/* Export CSV shows an export's progress itself (UI._syncExportButton): a spinner in place of the download icon, and\n   \"Exporting 1,200 of 2,715…\" in place of the label. The label is two layers in one grid cell, the text and a hidden copy of\n   its widest form (.ss-export-btn__sizer), so the button is as wide as the widest text and the header does not move on each\n   update. Tabular numbers make \"1,200\" as wide as \"2,715\". The button is disabled meanwhile, and keeps full strength as\n   Run does while it runs, so it reads as busy rather than as unavailable. */\n.ss-export-btn__label {\n  display: inline-grid;\n  font-variant-numeric: tabular-nums;\n}\n.ss-export-btn__label > * {\n  grid-area: 1 / 1;\n}\n.ss-export-btn__sizer {\n  visibility: hidden;\n}\n.ss-export-btn.is-exporting > svg {\n  display: none;\n}\n.ss-export-btn.is-exporting:disabled,\n.ss-export-btn.is-exporting:disabled:hover {\n  opacity: 1;\n  cursor: progress;\n  background: var(--modal-btn-neutral-bg);\n}\n/* Save to DE, beside Export CSV (UI._syncSaveButton). The header has room for its label only when it is wider than 1,280 px, which\n   is a window of about 1,560 px with the sidebar open. Below that it is the icon alone, 24 px wide, which keeps the run summary's\n   Delete results, the cost and Export CSV whole at 1,280 px with the sidebar open (the label stays for assistive technology, clipped\n   out of sight, and in the title). A header of 640 px or less has no room for the run summary, which was already cut to nothing,\n   so it goes, with the spacer that pushed the controls right, and the button and Export CSV fit as before. */\n.ss-save-btn {\n  position: relative;\n  flex: 0 0 auto;\n}\n@container (max-width: 1280px) {\n  .ss-save-btn {\n    width: 24px;\n    padding: 0;\n  }\n  .ss-save-btn__label {\n    position: absolute;\n    width: 1px;\n    height: 1px;\n    overflow: hidden;\n    clip: rect(0 0 0 0);\n  }\n}\n@container (max-width: 640px) {\n  .ss-results-header .ss-run-summary,\n  .ss-results-header .ss-toolbar__spacer {\n    display: none;\n  }\n}\n/* Where an export's progress is announced to a screen reader (aria-live), out of sight. */\n.ss-export-status {\n  position: absolute;\n  width: 1px;\n  height: 1px;\n  overflow: hidden;\n  clip: rect(0 0 0 0);\n  white-space: nowrap;\n}\n/* Status tab content: the lint findings list (.ss-problem, above), then\n   the error panel and the notice lines below it. The whole panel scrolls\n   as one unit; .ss-empty-state (shared with the grid) covers the \"no\n   problems\" case. */\n.ss-status-panel {\n  flex: 1 1 auto;\n  min-height: 0;\n  overflow-y: auto;\n}\n/* An MCE or validation error (red left border, the message, a Details\n   disclosure with the raw response); lives in Status, never in place of\n   the grid. */\n.ss-error-panel {\n  margin: var(--spacing-md);\n  padding: var(--spacing-md);\n  border-left: 3px solid var(--color-danger);\n  background: var(--tint-danger);\n  border-radius: 0 var(--border-radius-sm) var(--border-radius-sm) 0;\n}\n.ss-error-panel__message {\n  white-space: pre-wrap;\n  color: var(--text-primary);\n}\n/* An error about SQL the editor no longer holds (UI._setStaleClasses): muted on the soft hatch of stale rows, its border no longer red,\n   so it stays readable while the query is fixed and does not read as the answer to the query on screen (the author's choice for 1.3.0,\n   2026-10-11). */\n.ss-error-panel.is-stale {\n  border-left-color: var(--border-color-strong);\n  background-color: transparent;\n  background-image: repeating-linear-gradient(-45deg, var(--stale-hatch) 0, var(--stale-hatch) 6px, transparent 6px, transparent 12px);\n}\n.ss-error-panel.is-stale .ss-error-panel__message,\n.ss-error-panel.is-stale .ss-error-panel__hint {\n  color: var(--text-stale);\n}\n.ss-error-panel__hint {\n  margin-top: var(--spacing-xs);\n  white-space: pre-wrap;\n  color: var(--text-secondary);\n}\n/* The MD docs link after a hint, to the section of the MCE SQL Errors article (serverErrorAdvice): one line with its off-site arrow. */\n.ss-error-panel__docs {\n  white-space: nowrap;\n}\n.ss-error-panel details {\n  margin-top: var(--spacing-sm);\n}\n.ss-error-panel summary {\n  cursor: pointer;\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n}\n.ss-error-panel pre {\n  margin-top: var(--spacing-xs);\n  padding: var(--spacing-sm);\n  background: var(--bg-elevated);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  font-family: var(--font-mono);\n  font-size: var(--font-size-xs);\n  white-space: pre-wrap;\n  word-break: break-word;\n  max-height: 30vh;\n  overflow-y: auto;\n}\n/* Each outcome notice (0 rows returned, sort rejected, setup results) is one muted line, with\n   nothing to dismiss: the next run or Validate in the tab replaces it. */\n.ss-notice {\n  margin: var(--spacing-xs) var(--spacing-md) 0;\n  padding: 2px 0 2px var(--spacing-sm);\n  border-left: 2px solid var(--border-color-strong);\n  color: var(--text-secondary);\n  font-size: var(--font-size-sm);\n}\n.ss-notice:last-child {\n  margin-bottom: var(--spacing-sm);\n}\n/* Validate's acceptance of a query the editor no longer holds (UI.syncValidateStale), for the moment before the typing pauses and the line\n   goes: muted on the soft hatch of stale rows, as a stale error panel is. */\n.ss-notice.is-stale {\n  color: var(--text-stale);\n  background-image: repeating-linear-gradient(-45deg, var(--stale-hatch) 0, var(--stale-hatch) 6px, transparent 6px, transparent 12px);\n}\n/* Results tab content: the grid and pager, hidden while Status is\n   active. */\n.ss-results-panel {\n  display: flex;\n  flex-direction: column;\n  flex: 1 1 auto;\n  min-height: 0;\n}\n.ss-grid-scroll {\n  flex: 1 1 auto;\n  min-width: 0;\n  overflow: auto;\n  position: relative;\n}\n.ss-grid {\n  border-collapse: collapse;\n  table-layout: fixed;\n  font-size: var(--font-size-sm);\n}\n.ss-grid thead th {\n  position: sticky;\n  top: 0;\n  z-index: 2;\n  /* The same tint as before, laid over the app background so the sticky header is opaque:\n     --bg-elevated alone is 8% grey, and scrolled rows showed through it. */\n  background: linear-gradient(var(--bg-elevated), var(--bg-elevated)), var(--bg-app);\n  border-bottom: 1px solid var(--border-color-strong);\n  border-right: 1px solid var(--border-color);\n  padding: 0;\n  text-align: left;\n}\n.ss-grid th button.ss-grid__sort {\n  width: 100%;\n  display: flex;\n  align-items: center;\n  gap: 4px;\n  padding: 4px var(--spacing-sm);\n  border: none;\n  background: transparent;\n  cursor: pointer;\n  font-weight: 600;\n  overflow: hidden;\n  white-space: nowrap;\n  text-overflow: ellipsis;\n}\n/* Active sort column gets the --color-action accent. */\n.ss-grid__sort.is-sorted {\n  color: var(--color-action);\n}\n.ss-grid__resize-handle {\n  position: absolute;\n  right: 0;\n  top: 0;\n  bottom: 0;\n  width: 6px;\n  cursor: col-resize;\n}\n.ss-grid td {\n  padding: 3px var(--spacing-sm);\n  border-bottom: 1px solid var(--border-color);\n  border-right: 1px solid var(--border-color);\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  max-width: 480px;\n  cursor: default;\n}\n.ss-grid tbody tr:hover td {\n  background: var(--bg-hover);\n}\n/* Rows of a query the editor no longer holds (UI.syncStaleMark): the body text and the column headers go muted, on a soft hatch. The\n   colour, not opacity, as --text-stale keeps 4.5:1 on both themes, on a hovered row too. The NULL and (empty) cells, which are secondary\n   text, take it too. As first built only the body text went muted, the colour (empty) cells already have, and a result of empty cells\n   looked unchanged (the author's RC1 test of 1.2.1, 2026-10-10). The hatch is the table body's own background, one pattern across its\n   cells. A hovered row covers it with an opaque hover colour, as the light theme's hover tint over a stripe read at 4.3:1. */\n.ss-grid-scroll.is-stale .ss-grid td,\n.ss-grid-scroll.is-stale .ss-grid th button.ss-grid__sort {\n  color: var(--text-stale);\n}\n.ss-grid-scroll.is-stale .ss-grid tbody {\n  background-image: repeating-linear-gradient(-45deg, var(--stale-hatch) 0, var(--stale-hatch) 6px, transparent 6px, transparent 12px);\n}\n.ss-grid-scroll.is-stale .ss-grid tbody tr:hover td {\n  background: linear-gradient(var(--bg-hover), var(--bg-hover)), var(--bg-app);\n}\n.ss-grid__cell--null {\n  color: var(--text-secondary);\n  font-style: italic;\n}\n.ss-grid__cell--empty {\n  color: var(--text-secondary);\n  font-style: italic;\n}\n.ss-grid__spacer-row td {\n  border: none;\n  padding: 0;\n}\n/* Cell popover: replaces the old\n   inspector pane. Positioned absolutely within .ss (see\n   UI.openCellPopover), closes on Escape or a click outside. */\n.ss-cell-popover {\n  position: absolute;\n  z-index: 120;\n  width: 280px;\n  max-width: 90vw;\n  background: var(--bg-surface);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-md);\n  box-shadow: var(--shadow-dropdown);\n  padding: var(--spacing-sm);\n}\n.ss-cell-popover__value {\n  white-space: pre-wrap;\n  word-break: break-word;\n  font-family: var(--font-mono);\n  background: var(--bg-elevated);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  padding: var(--spacing-sm);\n  margin-bottom: var(--spacing-sm);\n  max-height: 40vh;\n  overflow-y: auto;\n}\n/* Pager, one row under the grid: page\n   size select on the left, prev/range/next centred, \"Page [n] of N\" on the\n   right. No first/last or Go buttons. */\n.ss-pager {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: var(--spacing-sm);\n  padding: var(--spacing-sm) var(--spacing-md);\n  border-top: 1px solid var(--border-color);\n  flex: 0 0 auto;\n  font-size: var(--font-size-sm);\n}\n.ss-pager__left,\n.ss-pager__center,\n.ss-pager__right {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  flex: 1 1 0;\n}\n.ss-pager__center {\n  justify-content: center;\n}\n.ss-pager__right {\n  justify-content: flex-end;\n}\n.ss-pager__range {\n  white-space: nowrap;\n  color: var(--text-secondary);\n}\n.ss-pager__page-input {\n  width: 56px;\n  text-align: center;\n}\n.ss-pager__page-input:focus {\n  border-color: var(--color-action);\n}\n.ss-pager__page-of {\n  color: var(--text-secondary);\n  white-space: nowrap;\n}\n.ss-message-item {\n  padding: var(--spacing-sm);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  margin-bottom: var(--spacing-sm);\n}\n.ss-message-item--error {\n  border-color: var(--color-danger);\n  background: var(--tint-danger);\n}\n.ss-message-item--warning {\n  border-color: var(--warning-color);\n  background: var(--tint-warning);\n}\n.ss-message-item--info {\n  background: var(--bg-elevated);\n}\n.ss-empty-state {\n  padding: var(--spacing-xl);\n  text-align: center;\n  color: var(--text-secondary);\n}\n.ss-empty-state--running {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: var(--spacing-sm);\n}\n.ss-empty-state--running p {\n  margin: 0;\n}\n.ss-empty-state__title {\n  color: var(--text-primary);\n  font-weight: 500;\n}\n/* A finished run whose rows did not load: what happened, the error's own text, where the rows are, and the button that\n   reads them again. */\n.ss-empty-state--unread {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: var(--spacing-sm);\n}\n.ss-empty-state--unread p {\n  margin: 0;\n  max-width: 70ch;\n}\n.ss-unread-page__error {\n  color: var(--text-primary);\n  white-space: pre-wrap;\n}\n.ss-unread-page__detail {\n  font-size: var(--font-size-sm);\n}\n.ss-unread-page__button {\n  display: inline-flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n}\n\n/* -------------------------------------------------------------------- */\n/* 9. Dialogs, dropdown managers and modal                                */\n/* -------------------------------------------------------------------- */\n/* Above the anchored panels (.ss-dropdown-mount, 101): a dialog opened from one, such as History's Clear all or Open's question on\n   unsaved changes, drew under the panel where the two met (2026-10-09). */\n.ss-modal-overlay {\n  position: absolute;\n  inset: 0;\n  background: rgba(0, 0, 0, 0.45);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  z-index: 110;\n  padding: var(--spacing-lg);\n}\n.ss-modal {\n  background: var(--bg-surface);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-md);\n  box-shadow: var(--shadow-md);\n  width: 100%;\n  max-width: 480px;\n  max-height: 100%;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n}\n.ss-modal--wide {\n  max-width: 640px;\n}\n.ss-modal__header {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  padding: var(--spacing-md) var(--spacing-lg);\n  border-bottom: 1px solid var(--border-color);\n}\n.ss-modal__title {\n  font-size: var(--font-size-md);\n  font-weight: 700;\n  flex: 1 1 auto;\n}\n.ss-modal__close {\n  border: none;\n  background: none;\n  cursor: pointer;\n  font-size: 16px;\n  color: var(--text-secondary);\n  padding: 4px;\n  border-radius: var(--border-radius-sm);\n}\n.ss-modal__close:hover {\n  background: var(--bg-hover);\n  color: var(--color-primary);\n}\n.ss-modal__body {\n  padding: var(--spacing-sm) var(--spacing-lg);\n  overflow-y: auto;\n  flex: 1 1 auto;\n}\n.ss-modal__status {\n  margin: var(--spacing-sm) 0 0;\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n}\n.ss-modal__status:empty {\n  display: none;\n}\n.ss-modal__footer {\n  display: flex;\n  justify-content: flex-end;\n  gap: var(--spacing-sm);\n  padding: var(--spacing-md) var(--spacing-lg);\n  border-top: 1px solid var(--border-color);\n  flex: 0 0 auto;\n}\n\n/* Dropdown managers (History, Runs, Settings, Help): anchored under their\n   toolbar button, not centred. Plain anchored, with --shadow-dropdown. */\n.ss-dropdown-scrim {\n  position: absolute;\n  inset: 0;\n  z-index: 100;\n  background: transparent;\n}\n.ss-dropdown-mount {\n  position: absolute;\n  z-index: 101;\n}\n/* --toolbar-bg, not --bg-surface: History\n   keeps its own toolbar button and anchored panel, but uses the same menu\n   surface as the Help ss-toolbar__menu. */\n.ss-dropdown-panel {\n  background: var(--toolbar-bg);\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-md);\n  box-shadow: var(--shadow-dropdown);\n  width: 300px;\n  max-height: 70vh;\n  display: flex;\n  flex-direction: column;\n  overflow: hidden;\n}\n.ss-dropdown-panel--wide {\n  width: 420px;\n}\n/* Open: the width its rows had as a centred dialog (.ss-modal--wide). UI.openDropdown caps it at the app's width less 16px. */\n.ss-dropdown-panel--xwide {\n  width: 640px;\n}\n/* About dialog: Diagramforce's df-about layout,\n * translated to ss-. .ss-about is the flex column all its children sit in;\n * .ss-about__separator is the thin full-width rule (there are exactly two:\n * before the links row and before the licence line), and .ss-about__meta /\n * __signed-in / __license are plain centred text rows, not bordered\n * individually, so the muted signed-in line can sit directly under the\n * links row with no rule between them. */\n.ss-about {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  text-align: center;\n  gap: var(--spacing-md);\n  padding: var(--spacing-sm) 0;\n}\n.ss .ss-about__name {\n  margin: 0;\n  font-size: 20px;\n  font-weight: 700;\n  color: var(--text-primary);\n}\n.ss .ss-about__tagline {\n  margin: 2px 0 0;\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n}\n.ss .ss-about__info {\n  margin: 0;\n  max-width: 440px;\n  font-size: 13px;\n  line-height: var(--line-height);\n  color: var(--text-secondary);\n}\n/* Label and value rows, left-aligned in a quiet panel. */\n.ss-about__details {\n  display: grid;\n  grid-template-columns: max-content 1fr;\n  gap: 6px var(--spacing-md);\n  width: 100%;\n  margin: 0;\n  padding: 10px 14px;\n  box-sizing: border-box;\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  background: var(--bg-elevated);\n  text-align: left;\n  font-size: var(--font-size-xs);\n}\n.ss-about__details dt {\n  color: var(--text-muted);\n}\n.ss-about__details dd {\n  margin: 0;\n  color: var(--text-secondary);\n  overflow-wrap: anywhere;\n}\n.ss-about__links {\n  display: flex;\n  flex-wrap: wrap;\n  justify-content: center;\n  gap: var(--spacing-sm);\n}\n.ss-about__pill {\n  padding: 4px 12px;\n  border: 1px solid var(--border-color);\n  border-radius: 14px;\n  color: var(--color-primary);\n  font-size: var(--font-size-xs);\n  text-decoration: none;\n}\n.ss-about__pill:hover {\n  background: var(--bg-hover);\n}\n.ss-about__link {\n  color: var(--color-primary);\n  text-decoration: none;\n}\n.ss-about__link:hover {\n  text-decoration: underline;\n}\n.ss .ss-about__credits {\n  margin: 0;\n  font-size: var(--font-size-xs);\n  color: var(--text-muted);\n  text-align: center;\n}\n.ss .ss-about__credits p {\n  margin: 0 0 2px;\n}\n.ss-about__license {\n  width: 100%;\n  padding-top: var(--spacing-md);\n  border-top: 1px solid var(--border-color);\n  font-size: var(--font-size-xs);\n  color: var(--text-muted);\n}\n.ss .ss-about__license p {\n  margin: 0;\n}\n.ss .ss-about__license p + p {\n  margin-top: 2px;\n}\n/* Write SQL with Claude (Help menu): one section, as Diagramforce's Diagram with AI has. The link and the download button share one\n   colour, the primary hue a step toward the text colour (as the lists' links have). It reads at 8.48:1 on the dark theme's dialog,\n   where the primary colour reads at 4.36:1, and at 9.28:1 in the light theme. The note's muted text reads at 6.93:1 and 5.05:1, the\n   failure line's at 7.59:1 and 6.19:1. The link is underlined at rest, as it has to read as a link and not as the body text above\n   it. The button is a wire button in that colour, so the dialog's one filled button is Close. */\n.ss-skill {\n  --skill-link: color-mix(in srgb, var(--color-primary) 50%, var(--text-primary));\n  display: flex;\n  flex-direction: column;\n  gap: var(--spacing-sm);\n  padding: var(--spacing-xs) 0;\n}\n.ss .ss-skill__title {\n  font-size: var(--font-size-md);\n  font-weight: 600;\n  color: var(--text-primary);\n}\n.ss .ss-skill__blurb,\n.ss .ss-skill__steps {\n  font-size: 13px;\n  line-height: var(--line-height);\n  color: var(--text-secondary);\n}\n.ss .ss-skill code {\n  padding: 0 4px;\n  border-radius: 4px;\n  background: var(--bg-elevated);\n  font-family: var(--font-mono);\n  font-size: var(--font-size-sm);\n  color: var(--text-primary);\n}\n/* Advice, never a warning: the store knows only this browser's downloads. */\n.ss .ss-skill__note {\n  font-size: var(--font-size-sm);\n  line-height: var(--line-height);\n  color: var(--text-muted);\n}\n.ss .ss-skill__status {\n  margin-top: 0;\n  color: var(--danger-text);\n}\n.ss-skill__actions {\n  display: flex;\n  flex-wrap: wrap;\n  align-items: center;\n  justify-content: space-between;\n  gap: var(--spacing-sm) var(--spacing-md);\n  margin-top: var(--spacing-xs);\n}\n.ss .ss-skill__view {\n  font-size: 13px;\n  color: var(--skill-link);\n  text-decoration: underline;\n}\n.ss .ss-skill__view:hover {\n  text-decoration: none;\n}\n/* The width of the idle label and of the busy one, so the button does not move when it turns to \"Downloading…\". */\n.ss .ss-skill__download {\n  min-width: 132px;\n  border-color: var(--skill-link);\n  background: transparent;\n  color: var(--skill-link);\n}\n.ss .ss-skill__download:hover {\n  background: var(--bg-hover);\n}\n.ss .ss-skill__download.is-busy {\n  cursor: progress;\n  background: transparent;\n}\n/* A list of rows in a dialog: the Open and History lists, and the list pickers below. The kind badge, a link in the list (Retry on a\n   failed load) and the focus ring keep their hue, a step toward the text colour. In the dark theme the primary colour read at 3.80:1 on\n   the raised surface behind Open's rows, 2.79:1 on a hovered row there, and 3.08:1 on the tip's surface behind a picker's rows. The mix\n   reads at 7.41:1 and 6.01:1 there, 5.03:1 or more on a hovered row, and 8.18:1 or more in the light theme. A hovered link keeps the\n   colour and is underlined. */\n.ss-list {\n  position: relative;\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  max-height: 320px;\n  overflow-y: auto;\n}\n.ss-list-row {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-md);\n  padding: var(--spacing-sm) var(--spacing-md);\n  border-bottom: 1px solid var(--border-color);\n  cursor: pointer;\n}\n.ss-list-row:last-child {\n  border-bottom: none;\n}\n.ss-list-row:hover {\n  background: var(--bg-hover);\n}\n/* The highlighted row of any list (.is-active, under the arrow keys of Open's and History's search and the pickers') is the picker's\n   highlight: a light veil of the text colour (6%) and a 3px bar in the action colour, on the list's own surface (the author's RC5 test,\n   2026-10-12). The primary colour is red in the dark theme, which read as an error. The pointer moving over a row highlights it, so a\n   hovered row has this look too. */\n.ss-list .ss-list-row.is-active {\n  background: color-mix(in srgb, var(--text-primary) 6%, transparent);\n  box-shadow: inset 3px 0 0 var(--color-action);\n}\n/* \"Searching...\" under Open's list while the Backend answers, or why the latest request failed: a quiet line in the muted text colour\n   (.ss-hint), outside the list, which scrolls. Inside it, as first built, it was the list's last line, out of view below rows that\n   filled the list (the review of 2026-10-12). It keeps its one line when it is empty, so the panel keeps its height as it comes and\n   goes. It stays empty while a pick loads, as the box over the list says Opening (.ss-list-opening, below), and says why a pick failed\n   to open. */\n.ss-list-status {\n  min-height: calc(var(--font-size-sm) * var(--line-height));\n  margin: var(--spacing-xs) 0 0;\n  padding: 0 var(--spacing-md);\n  line-height: var(--line-height);\n}\n/* Open's list in a frame, which the box of Opening \"name\"... lies over (.ss-list-opening). The box is beside the list, not in it, as the list\n   scrolls and is greyed out: it stays in the middle of the frame and keeps its own colours. */\n.ss-list-frame {\n  position: relative;\n}\n/* Open while it loads a pick (the author's RC8 test, 2026-10-12: \"grey out open results with a spinner and line in it's center so that\n   it's clear it's time to wait for the load\"). RC8 had only a line under the list that said Opening, and the list went on answering:\n   a click was still a click, and the arrows still moved the highlight.\n   - The list is greyed out: its rows stay where they are, at 40% of their strength, so the list plainly looks off in both themes, and\n     the highlighted row keeps its bar. It takes no pointer events, which the rows inherit: no hover veil and no click. The wheel does\n     not scroll it either.\n   - The frame keeps a height that holds the box, as the list can be hidden while it holds nothing.\n   - The cursor says to wait, as the list under it takes no pointer. */\n.ss-list-frame.is-opening {\n  min-height: 56px;\n  cursor: progress;\n}\n.ss-list-frame.is-opening > .ss-list {\n  opacity: 0.4;\n  pointer-events: none;\n}\n/* The status region over the list. It is empty, and invisible, until a pick is loading, and then it holds the box in its middle. It\n   takes no pointer, so the frame has the cursor. */\n.ss-list-opening {\n  position: absolute;\n  inset: 0;\n  z-index: 1;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  box-sizing: border-box;\n  padding: var(--spacing-sm);\n  pointer-events: none;\n}\n/* The box of Opening \"name\"... after a spinner. It has the quick tip's surface (.ss-tip): the surface, border, shadow and text colour,\n   a step off the greyed-out rows under it, so its text reads at 4.5:1 or more in both themes whatever row lies under it (the tip's text\n   colour on its surface is 11:1 or more in the dark theme and 16:1 or more in the light one). A long name wraps inside the box. */\n.ss-list-opening__box {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-sm);\n  max-width: 100%;\n  box-sizing: border-box;\n  padding: var(--spacing-sm) var(--spacing-md);\n  border: 1px solid var(--tooltip-border);\n  border-radius: var(--border-radius-sm);\n  background: var(--tooltip-bg);\n  box-shadow: var(--shadow-tooltip);\n  color: var(--tooltip-fg);\n  line-height: var(--line-height);\n}\n.ss-list-opening__text {\n  min-width: 0;\n  overflow-wrap: anywhere;\n}\n/* Open's search with its Reload button at the right, which has the look of the sidebar's (.ss-tree__action). The search takes the room. */\n.ss-open-search {\n  display: flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n  margin-bottom: var(--spacing-xs);\n}\n.ss-open-search .ss-input {\n  flex: 1 1 auto;\n  min-width: 0;\n}\n.ss-list .ss-type-badge,\n.ss-list .ss-tree__link {\n  color: color-mix(in srgb, var(--color-primary) 50%, var(--text-primary));\n}\n/* No row of a list has the keyboard focus: the rows are options of a listbox, and the search above them keeps the focus (Open's and\n   History's rows took it until 1.3.0, and a picker's chosen row until RC6, where the chosen target became a summary). The one thing\n   in a list that Tab reaches is the Retry link of a list that could not load, and its ring is this mix. */\n.ss-list :focus-visible {\n  outline-color: color-mix(in srgb, var(--color-primary) 50%, var(--text-primary));\n}\n/* The list picker (.ss-list--picker): the lists that a Data Extension or a folder is chosen from have this look, one for all of them\n   (the author's RC3 and RC4 tests of 1.3.0, 2026-10-11, where the Existing list had it and the others kept the dialog's own background,\n   a red tint and a red bar). They are the Save to DE overlay's Existing list and Folder list, and Save As's target list. It is the look\n   of the app's quick tip (.ss-tip): the tip's surface, border, shadow and text colour, a step off the dialog behind it. Open and History\n   keep the look above, as their lists fill their panel and are not popups. They take only the highlight's look (.is-active, above),\n   with the keys of the pickers (the author's RC5 test, 2026-10-12).\n   - A hovered row and the highlighted one (.is-active, under the arrow keys) are a light veil of the text colour. A stronger veil, or a\n     tint under it, takes the muted text on the tip's surface below 4.5:1 in one of the themes.\n   - The highlighted row has a bar in the action colour. The primary colour is red in the dark theme, which read as an error.\n   - The chosen row (.is-selected) is framed in the action colour, as the selected option cards are (.ss-radio-option), and has no tint:\n     the red tint read as an error as well. The frame is a shadow, joined with the bar on a chosen row that is highlighted, so the\n     outline stays free. As first built the frame was an outline, which took the focus ring's place on the chosen row, which Tab\n     reached then. Tab reaches no row now.\n   - The Retry link's focus ring is the badge's mix, above: the primary colour reads at 3.08:1 on the tip's surface in the dark theme\n     and 2.58:1 on the veil of a hovered row, and the mix at 6.01:1 and 5.03:1.\n   - The list is positioned (every .ss-list is, above), so that an option's offsetTop is its place in the list, which the keys scroll\n     to (targetCombobox, saveFolderPicker). The Folder list's popup places itself with position: absolute, further down.\n   - The look is the look of a list that is open. A target picker's box (is-closed, set on each draw) has none of it while no list of\n     matches is on show: the search is empty, or Escape closed the matches, or the Data Extensions load, or could not load, or the\n     prompt asks for a search. The box is then plain text on the dialog, with a border that stays but does not show, so the box does\n     not change its size, and the chosen Data Extension is a summary (chosenTargetSummary) and no row. As first built, in RC5, the\n     closed box kept the tip's surface and held the chosen row in its frame, a button. In the author's RC6 test (2026-10-12) a click on\n     a Data Extension of the matches chose it, and the closed box then looked like an open dropdown of one option, whose only row\n     did nothing when clicked (\"Clicking with mouse on DE to save into does nothing\"). */\n.ss-list--picker {\n  border-color: var(--tooltip-border);\n  background: var(--tooltip-bg);\n  box-shadow: var(--shadow-tooltip);\n  color: var(--tooltip-fg);\n}\n.ss-list--picker.is-closed {\n  border-color: transparent;\n  background: transparent;\n  box-shadow: none;\n  color: inherit;\n}\n/* The summary of a picker's chosen target while no list of matches is on show (chosenTargetSummary), as text on the dialog: the caption\n   in the secondary text colour, the name in bold in the dialog's text colour, and the line of its folder and key as a row has it. The\n   badge keeps its hue from the list above (.ss-list .ss-type-badge). The texts read at 4.5:1 or more on the dialog in both themes (the\n   secondary text 8.37:1 in the dark theme and 5.72:1 in the light one, and the badge is checked in the scenario). */\n.ss-list__summary {\n  padding: var(--spacing-xs) var(--spacing-md) var(--spacing-sm);\n}\n.ss-list__caption {\n  font-size: 11px;\n  color: var(--text-secondary);\n}\n.ss-list__summary-name {\n  margin-top: 2px;\n  font-weight: 700;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.ss-list__summary-meta {\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.ss-list--picker .ss-list-row {\n  border-bottom-color: color-mix(in srgb, var(--tooltip-border) 50%, transparent);\n}\n.ss-list--picker .ss-list-row:hover,\n.ss-list--picker .ss-list-row.is-active {\n  background: color-mix(in srgb, var(--text-primary) 6%, transparent);\n}\n.ss-list--picker .ss-list-row.is-active {\n  box-shadow: inset 3px 0 0 var(--color-action);\n}\n.ss-list--picker .ss-list-row.is-selected {\n  box-shadow: inset 0 0 0 2px var(--color-action);\n}\n.ss-list--picker .ss-list-row.is-selected.is-active {\n  box-shadow: inset 3px 0 0 var(--color-action), inset 0 0 0 2px var(--color-action);\n}\n.ss-list-row__main {\n  flex: 1 1 auto;\n  min-width: 0;\n  overflow: hidden;\n}\n.ss-list-row__title {\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.ss-list-row__meta {\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.ss-list-row__sql {\n  font-family: var(--font-mono);\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.ss-check-target {\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  padding: var(--spacing-md);\n  margin-top: var(--spacing-sm);\n}\n.ss-check-target table {\n  width: 100%;\n  border-collapse: collapse;\n  font-size: var(--font-size-sm);\n}\n.ss-check-target th, .ss-check-target td {\n  text-align: left;\n  padding: 3px var(--spacing-sm);\n  border-bottom: 1px solid var(--border-color);\n}\n\n/* -------------------------------------------------------------------- */\n/* 10. Toasts                                                            */\n/* -------------------------------------------------------------------- */\n/* Centred just below the toolbar, where the user is looking after pressing a\n   toolbar button, not in a corner. The column lets clicks through between toasts. */\n.ss-toasts {\n  position: absolute;\n  top: calc(var(--toolbar-height) + var(--spacing-md));\n  left: 50%;\n  transform: translateX(-50%);\n  display: flex;\n  flex-direction: column;\n  align-items: stretch;\n  gap: var(--spacing-sm);\n  z-index: 200;\n  width: min(480px, calc(100% - 32px));\n  pointer-events: none;\n}\n.ss-toast {\n  pointer-events: auto;\n  display: flex;\n  align-items: flex-start;\n  gap: var(--spacing-sm);\n  padding: var(--spacing-sm) var(--spacing-md);\n  border-radius: var(--border-radius-sm);\n  border: 1px solid var(--border-color);\n  background: var(--bg-surface-raised);\n  box-shadow: var(--shadow-md);\n}\n.ss-toast--success {\n  border-color: var(--brand-green);\n}\n.ss-toast--error {\n  border-color: var(--color-danger);\n}\n.ss-toast--warning {\n  border-color: var(--warning-color);\n}\n.ss-toast__body {\n  flex: 1 1 auto;\n  font-size: var(--font-size-sm);\n}\n.ss-toast__close {\n  border: none;\n  background: none;\n  cursor: pointer;\n  color: var(--text-secondary);\n}\n\n/* -------------------------------------------------------------------- */\n/* 11. Misc: badges, scrollbars, focus, responsive                       */\n/* -------------------------------------------------------------------- */\n.ss-badge {\n  display: inline-flex;\n  align-items: center;\n  gap: 3px;\n  padding: 1px 6px;\n  border-radius: 10px;\n  font-size: 11px;\n  font-weight: 600;\n  background: var(--bg-elevated);\n  color: var(--text-secondary);\n}\n.ss-badge--error {\n  background: var(--tint-danger);\n  color: var(--danger-text);\n}\n.ss-badge--warning {\n  background: var(--tint-warning);\n  color: var(--warning-text);\n}\n.ss-badge--info {\n  background: var(--tint-info);\n  color: var(--info-text);\n}\n\n.ss * ::-webkit-scrollbar {\n  width: 10px;\n  height: 10px;\n}\n.ss ::-webkit-scrollbar-thumb {\n  background: var(--border-color-strong);\n  border-radius: 6px;\n}\n.ss ::-webkit-scrollbar-track {\n  background: transparent;\n}\n\n@media (max-width: 1023px) {\n  .ss-sidebar {\n    position: absolute;\n    top: 0;\n    bottom: 0;\n    right: 0;\n    z-index: 50;\n    box-shadow: var(--shadow-md);\n  }\n  .ss-sidebar.is-collapsed {\n    display: none;\n  }\n  .ss-sidebar-overlay-bg {\n    display: block;\n    position: absolute;\n    inset: 0;\n    background: rgba(0, 0, 0, 0.3);\n    z-index: 40;\n  }\n}\n\n/* Narrow windows: toolbar buttons drop their labels (icon only) except the primary Run button,\n   so the single-row toolbar never wraps. Titles carry the label for tooltips. */\n@media (max-width: 1100px) {\n  .ss .ss-toolbar__button--secondary > span { display: none; }\n  .ss .ss-toolbar__button--secondary { padding: 4px 6px; }\n}\n@media (max-width: 900px) {\n  .ss .ss-toolbar__button:not(.ss-toolbar__button--primary) > span { display: none; }\n  .ss .ss-toolbar__button:not(.ss-toolbar__button--primary) { padding: 4px 6px; }\n}\n\n/* Menu links look like menu buttons (Diagramforce): text colour, not link colour. */\n.ss a.ss-toolbar__menu-item {\n  color: var(--text-secondary);\n  text-decoration: none;\n}\n.ss a.ss-toolbar__menu-item:hover {\n  color: var(--text-primary);\n}\n\n/* -------------------------------------------------------------------- */\n/* 12. Save to DE                                                        */\n/* -------------------------------------------------------------------- */\n/* The overlay (SaveToDe in sqlstudio.js) needs the width of a table of fields. */\n.ss-modal--xwide {\n  max-width: 1080px;\n}\n/* A toast's link has a line of its own, as wide as its words, so the off-site arrow stays beside them, in the toast's own text colour\n   rather than the link red (the author's RC7 test, 2026-10-09: the red link wrapped and left its arrow on a line alone). */\n.ss .ss-toast__link {\n  display: table;\n  margin-top: 2px;\n  color: var(--text-primary);\n  text-decoration: underline;\n  white-space: nowrap;\n}\n.ss .ss-toast__link:hover {\n  color: var(--color-primary);\n}\n/* The line beside Close while the rows move: the Data Extension is made, and the window can close. */\n.ss-save__moving {\n  flex: 1 1 auto;\n  margin: 0;\n  align-self: center;\n  font-size: var(--font-size-sm);\n  color: var(--text-primary);\n}\n.ss-save__moving:empty {\n  display: none;\n}\n/* The warnings under the fields table (saveFieldWarnings): a field with no length, a length too short for the values on screen. */\n.ss-save__warnings {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n  margin-top: var(--spacing-xs);\n}\n.ss-save__warnings:empty {\n  display: none;\n}\n/* The line under a failed move's message: the Data Extension's fields are set, so the form's are locked. */\n.ss-save__locked {\n  margin-top: 4px;\n}\n.ss-save__moving-line {\n  display: block;\n}\n.ss-save__top {\n  display: grid;\n  grid-template-columns: repeat(3, minmax(0, 1fr));\n  gap: var(--spacing-md);\n}\n/* The folder picker: the input, and under it the list of folders that opens over the fields table. It is a list picker (.ss-list--picker)\n   and its rows are the other lists' (.ss-list-row): the active one (the arrow keys) is marked by a bar and the chosen one by a frame, as\n   they are there. This rule places it over the table. */\n.ss-combo {\n  position: relative;\n}\n.ss-combo__popup {\n  position: absolute;\n  top: 100%;\n  left: 0;\n  right: 0;\n  z-index: 10;\n  margin-top: 2px;\n  overscroll-behavior: contain;\n}\n.ss-combo__option {\n  padding: 5px var(--spacing-md);\n  line-height: 1.4;\n}\n.ss-combo__list:not(:empty) + .ss-combo__note {\n  border-top: 1px solid color-mix(in srgb, var(--tooltip-border) 50%, transparent);\n}\n/* Beside the other two fields the list is wider than its input, to the left, so a long path shows whole. */\n@media (min-width: 801px) {\n  .ss-combo__popup {\n    left: auto;\n    width: 520px;\n  }\n  /* Save As's Folder is a field of its own, as wide as the dialog's other fields, so its list is as wide as the input. */\n  .ss-combo--full .ss-combo__popup {\n    left: 0;\n    width: auto;\n  }\n}\n/* Save As's Folder is the last field, so the dialog's body scrolls to show its list when it opens, with room under it (scroll-margin). */\n.ss-combo--full .ss-combo__popup {\n  scroll-margin-bottom: var(--spacing-md);\n}\n.ss-save__notice:empty {\n  display: none;\n}\n.ss-save__note {\n  margin: 0 0 var(--spacing-sm);\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n}\n.ss-save__table-wrap {\n  max-height: 36vh;\n  overflow: auto;\n  border: 1px solid var(--border-color);\n  border-radius: var(--border-radius-sm);\n  margin-bottom: var(--spacing-md);\n}\n.ss-save__table {\n  width: 100%;\n  border-collapse: collapse;\n  font-size: var(--font-size-sm);\n}\n.ss-save__table th {\n  position: sticky;\n  top: 0;\n  z-index: 1;\n  padding: 4px;\n  text-align: left;\n  font-weight: 600;\n  color: var(--text-secondary);\n  background: var(--bg-elevated);\n  border-bottom: 1px solid var(--border-color);\n}\n.ss-save__table td {\n  padding: 3px 4px;\n  vertical-align: top;\n}\n.ss-save__table tr.has-error td {\n  background: var(--tint-danger);\n}\n/* The column's name on the line of its inputs: one line as tall as an input (26px) keeps the text at their middle, and the cell stays\n   at the top, so a line of error under an input leaves it where it is (the author's RC13 test, 2026-10-09). */\n.ss-save__source {\n  max-width: 150px;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  line-height: 26px;\n  color: var(--text-secondary);\n}\n.ss-save__table .ss-input,\n.ss-save__table .ss-select {\n  height: 26px;\n}\n.ss-save__number {\n  width: 72px;\n  text-align: right;\n}\n/* Key and Null: the box at the middle of its column, under its centred heading, and at the middle of the line of the inputs. */\n.ss .ss-save__table .ss-save__check {\n  text-align: center;\n}\n.ss-save__check-box {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  height: 26px;\n}\n.ss-save__check-box > input {\n  margin: 0;\n}\n.ss-save__error {\n  margin-top: 2px;\n  font-size: 11px;\n  color: var(--danger-text);\n}\n.ss-save__error:empty {\n  display: none;\n}\n/* The line under Name while Marketing Cloud Engagement is asked whether a Data Extension the list holds is still there (SaveToDe._checkTakenName):\n   neutral, as no refusal is made until it answers. */\n.ss-save__checking {\n  margin-top: 2px;\n  font-size: 11px;\n}\n.ss .ss-input.is-invalid {\n  border-color: var(--color-danger);\n}\n.ss-save__group {\n  margin-bottom: var(--spacing-sm);\n}\n.ss-save__line {\n  display: flex;\n  flex-wrap: wrap;\n  align-items: center;\n  gap: var(--spacing-sm);\n}\n.ss-save__line .ss-select,\n.ss-save__line .ss-input {\n  width: auto;\n}\n.ss-save__inline {\n  display: inline-flex;\n  align-items: center;\n  gap: var(--spacing-xs);\n}\n.ss-save__cost,\n.ss-save__fix {\n  margin: var(--spacing-xs) 0 0;\n  font-size: var(--font-size-sm);\n  color: var(--text-secondary);\n}\n.ss-save__cost:empty,\n.ss-save__fix:empty {\n  display: none;\n}\n/* The line on what the save does, under the overlay's title, with the gap a field group has before the Name. */\n.ss-modal__body > [data-save=\"hint\"] {\n  margin-bottom: var(--spacing-md);\n}\n/* The cost sits in the footer, left of Cancel and Save, as Export CSV's label sits by its button (the author's RC12 test, 2026-10-09).\n   While a save runs it is empty, and the line on the move takes its place. */\n.ss-modal__footer > .ss-save__cost {\n  flex: 1 1 auto;\n  margin: 0;\n  align-self: center;\n}\n.ss-save__fix {\n  color: var(--danger-text);\n}\n.ss-save__link {\n  display: inline-block;\n  margin-top: var(--spacing-xs);\n  color: var(--color-primary);\n}\n.ss-save__primary .ss-spinner {\n  margin-right: var(--spacing-xs);\n}\n/* The choice at the top of the overlay (New or Existing Data Extension, 1.3.0) and the update type's cards of the Existing choice are\n   Save As's radio cards. A card is dimmed while its radio is off: the choice while a save runs, the update types until a target and its\n   fields are there, and Update when its key fields have no column. */\n.ss-save__choice {\n  margin-bottom: var(--spacing-md);\n}\n.ss-radio-option.is-disabled {\n  opacity: 0.6;\n  cursor: not-allowed;\n}\n.ss-radio-option .ss-save__card-note {\n  display: block;\n  margin-top: 2px;\n  color: var(--warning-text);\n}\n.ss-radio-option .ss-save__card-note:empty {\n  display: none;\n}\n/* The list of Data Extensions to save into: a list picker (.ss-list--picker) in a box that leaves room for the mapping below it. */\n.ss-save__targets {\n  max-height: 200px;\n  margin-top: var(--spacing-xs);\n}\n.ss-save__targets-note {\n  margin: var(--spacing-xs) 0 0;\n}\n/* The mapping of columns to fields: the field a column goes to, as plain text when its name matched, else a list with Leave out. */\n.ss-save__map .ss-select {\n  width: 100%;\n  max-width: 360px;\n}\n.ss-save__matched,\n.ss-save__ftype {\n  display: block;\n  line-height: 26px;\n  white-space: nowrap;\n}\n.ss-save__ftype {\n  color: var(--text-secondary);\n}\n.ss-save__fix.is-neutral {\n  color: var(--text-secondary);\n}\n/* The lint errors that stopped a save of Save As or of the Save to DE overlay (lintErrorsBox), between the dialog's body and its buttons so they\n   are in view whatever the body's scroll. A long list scrolls inside the box. */\n.ss-save__gate {\n  flex: 0 1 auto;\n  max-height: 160px;\n  overflow-y: auto;\n  margin: 0 var(--spacing-lg) var(--spacing-sm);\n  font-size: var(--font-size-sm);\n}\n.ss-save__gate-title {\n  font-weight: 700;\n}\n.ss-save__gate-list {\n  margin: var(--spacing-xs) 0 0;\n  padding-left: 18px;\n}\n.ss-save__gate-id {\n  margin-right: var(--spacing-xs);\n}\n@media (max-width: 800px) {\n  .ss-save__top {\n    grid-template-columns: minmax(0, 1fr);\n  }\n}\n";
 
 
 /* ========================================================= sqlstudio.js == */
@@ -30926,6 +34083,9 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
 
     var MONACO_TIMEOUT_MS = 15000;
     var LINT_DEBOUNCE_MS = 400;
+    /* A text longer than this takes Validate's stale look on an edit with no comparison as a query, which the typing pause makes
+     * (UI.syncValidateStale): Tools.sameQuery tokenizes both texts, some 30 ms for 100 KB, which every key would pay. */
+    var VALIDATE_STALE_QUICK_CHARS = 20000;
     /* A click on Save As's or Save to DE's Save button that comes this soon after the click that stopped it for lint errors is the second
      * click of a double click, not an answer to the errors, which have not been read yet: it is ignored (the author's decision, 2026-10-15). */
     var SAVE_GATE_CLICK_GAP_MS = 600;
@@ -31018,7 +34178,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
     run's rows end it as soon as they appear. After it the run asks isrunning, as a run without a task ID does. */
     var TASK_ROW_WAIT_MS = 5 * 60 * 1000;
     /* The app's own version: a build test keeps it equal to the Backend's appVersion. */
-    var APP_VERSION = '1.4.1';
+    var APP_VERSION = '1.4.2';
     /* The public repository's release manifest, written at each release. Checked once a day. */
     var UPDATE_CHECK_URL = 'https://raw.githubusercontent.com/MateuszDabrowski/sqlstudio/main/latest.json';
     var UPDATE_CHECK_EVERY_MS = 24 * 60 * 60 * 1000;
@@ -31174,7 +34334,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
              * QueryRunner.prototype._finish/_failFinalize and UI._validateOnly): replayed by
              * QueryTabs.switchTo so a tab's own error panel and notices come back on reopening it,
              * instead of showing whatever tab was last looked at. */
-            statusError: null,       /* { message, details, gate, hint, about } | null, gate being 'run' or 'save' for a lint gate's panel */
+            statusError: null,       /* { message, details, gate, hint, about, docs } | null, gate being 'run' or 'save' for a lint gate's panel */
             statusNotices: [],       /* string[] */
             /* The editor's text when the Validate whose acceptance (VALIDATE_ACCEPTED_NOTICE) came was clicked, and the text Format left (FORMAT_DONE_NOTICE).
              * Each line goes when the text no longer matches its record (UI.syncValidateNotice, UI.syncFormatNotice), so a Format right
@@ -33785,6 +36945,44 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         },
 
         /**
+         * @method confirmDataExtension
+         * @description Asks Marketing Cloud Engagement whether a Data Extension of the list is still there, for the Save to DE overlay's
+         * refusal of a name the list holds (SaveToDe._checkTakenName). The list is the day's cache, and a Data Extension deleted since stays
+         * on it. The cheapest read of one by its key is getDataExtensionDetails with all four extras left out: one SOAP Retrieve with a filter
+         * on the CustomerKey, which answers the key in `missing` when nothing has it. Never rejects: a call that fails, a Backend without the
+         * action and an answer that names the key in neither list are 'unknown'.
+         * @param {Object} table - a schema table entry of the Business Unit's own, with its key
+         * @returns {Promise<string>} 'exists', 'gone' or 'unknown'
+         */
+        confirmDataExtension: function (table) {
+            var key = String(table && table.key || '');
+            if (!key) return Promise.resolve('unknown');
+            var lower = key.toLowerCase();
+            var names = function (list) { return (list || []).map(function (k) { return String(k && k.key !== undefined ? k.key : k).toLowerCase(); }); };
+            return Api.call('getDataExtensionDetails', { keys: [key], skipExtras: DE_LIST_EXTRAS.slice() }).then(function (res) {
+                if (names(res && res.missing).indexOf(lower) !== -1) return 'gone';
+                return names(res && res.items).indexOf(lower) !== -1 ? 'exists' : 'unknown';
+            }, function () { return 'unknown'; });
+        },
+
+        /**
+         * @method dropDataExtension
+         * @description Takes a Data Extension that is gone from Marketing Cloud Engagement out of the list, as the check of a taken name found
+         * it (confirmDataExtension): the sidebar, completion, hover and the lint stop knowing it, the list's cache is written again, and the
+         * lint of the open query runs again. The reverse of addCreatedDataExtension.
+         * @param {Object} table - the schema table entry, as the list holds it
+         */
+        dropDataExtension: function (table) {
+            var at = this.deList.indexOf(table);
+            if (at === -1) return;
+            this.deList.splice(at, 1);
+            this._rebuildIndex();
+            this._scheduleDeListSave();
+            UI.renderSidebarTree();
+            this._relintForList();
+        },
+
+        /**
          * @method _readExtrasStore
          * @description What the browser's store (ss.deExtras) holds of the extras Marketing Cloud Engagement refused, read once:
          * names, those an error named, and unnamed, those left out by an error that named none, each with the time it was stored.
@@ -35000,8 +38198,11 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             scheduleSaveTabs();
             UI.renderOpenedQueryBadge();
             /* "Format: done." is about the layout, so any change to the text takes it away (UI.syncFormatNotice). Validate's acceptance is
-             * about the query, and the rows' stale mark about the query too: both are judged once the typing pauses (_syncSoon). */
+             * about the query, and the rows' stale mark about the query too: both are judged once the typing pauses (_syncSoon). Validate's
+             * result takes its stale look at once, whichever way the text changed (UI.syncValidateStale): a page whose timers are slow, as a
+             * hidden one's are, left the previous query's answer looking current (round 6 org test, 2026-10-22). */
             UI.syncFormatNotice();
+            UI.syncValidateStale();
             this._syncSoon();
             /* Save As's stop for lint errors was made for a text: an edit takes it away (the author's decision, 2026-10-15). */
             if (UI._saveAsEdited) UI._saveAsEdited();
@@ -35311,7 +38512,12 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 isParentBusinessUnit: isParentBusinessUnit(),
                 isSqlStudio: true
             };
-            if (isRunTarget === true) options.isRunTarget = true;
+            /* A Run writes into a temporary Data Extension that SQL Studio creates, whatever the opened Query Activity's target is, so an
+             * output name MCE cannot create stays an error there (MCE015, round 2 org test D20). */
+            if (isRunTarget === true) {
+                options.isRunTarget = true;
+                options.writesToTemporary = true;
+            };
             return {
                 schema: Schema.getIndex(),
                 targetKey: state.openedQuery ? state.openedQuery.targetKey : null,
@@ -35445,6 +38651,9 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             /* Each name keeps its ENT. prefix, and Tools.lookupTable tells the parent's shared X from the child's own X. A table
              * whose field load failed is linted without its fields, and not asked for again on each pass (Schema.autoFields). */
             var neededFields =Object.keys(referenced).map(function (n) { return Tools.lookupTable(Schema.byName, n); }).filter(function (t) { return !!t && !t.fields && !Schema.hasFieldLoadFailed(t); });
+            /* The opened Query Activity's target is read too: its primary key is what MCE104 compares the query's keys with. */
+            var openedTarget = state.openedQuery ? documentTargetTable(state.openedQuery) : null;
+            if (openedTarget && !openedTarget.fields && !Schema.hasFieldLoadFailed(openedTarget) && neededFields.indexOf(openedTarget) === -1) neededFields.push(openedTarget);
             var run = function () {
                 /* The text changed while fields were loading: a newer lint pass is already
                  * scheduled for it, and these findings would carry stale offsets. */
@@ -35468,7 +38677,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         /**
          * @method _applyMarkers
          * @description Converts lint findings into Monaco markers (mapping severity to
-         * Monaco's MarkerSeverity) and applies them under the 'sfmc-lint'
+         * Monaco's MarkerSeverity) and applies them under the 'sqlstudio-lint'
          * marker owner.
          * @param {Array} findings
          */
@@ -35479,16 +38688,18 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 warning: this.monaco.MarkerSeverity.Warning,
                 info: this.monaco.MarkerSeverity.Info
             };
+            var monacoNS = this.monaco;
             var markers = findings.filter(function (f) { return isShownAtStatusLevel(f.severity); }).map(function (f) {
                 return {
                     severity: sevMap[f.severity] || sevMap.info,
-                    message: f.message + (f.docs ? '' : ''),
-                    code: f.id,
-                    source: 'sfmc-lint',
+                    message: f.message,
+                    /* The rule's id links its docs in the editor's hover, as the Status row's docs link does (1.4.2). */
+                    code: f.docs ? { value: f.id, target: monacoNS.Uri.parse(f.docs) } : f.id,
+                    source: 'SQL Studio',
                     startLineNumber: f.line, startColumn: f.col, endLineNumber: f.endLine, endColumn: f.endCol
                 };
             });
-            this.monaco.editor.setModelMarkers(this.model, 'sfmc-lint', markers);
+            this.monaco.editor.setModelMarkers(this.model, 'sqlstudio-lint', markers);
         },
 
         /* Formats the selection when there is one, else the whole editor,
@@ -35700,8 +38911,9 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             for (var tk in lang.tokenizer) if (Object.prototype.hasOwnProperty.call(lang.tokenizer, tk)) extended.tokenizer[tk] = lang.tokenizer[tk];
             /* Prepend a rule so _Subscribers-style data-view identifiers get
              * their own token type; the original root rules still run for
-             * everything else. */
-            extended.tokenizer.root = [[/@[a-zA-Z_]\w*/, 'variable.sql'], [/_[a-zA-Z_][\w]*/, 'type.identifier.sql']].concat(lang.tokenizer.root || []);
+             * everything else. The PRECISION of the type DOUBLE PRECISION takes the keyword colour after DOUBLE alone, as Format writes it
+             * in upper case there: Marketing Cloud Engagement reads Precision as a plain name elsewhere (round 8 org test B03). */
+            extended.tokenizer.root = [[/@[a-zA-Z_]\w*/, 'variable.sql'], [/_[a-zA-Z_][\w]*/, 'type.identifier.sql'], [/(double)(\s+)(precision)(?![\w@#$])/, ['keyword', 'white', 'keyword']]].concat(lang.tokenizer.root || []);
             monacoNS.languages.setMonarchTokensProvider('sfmc-sql', extended);
             var conf = {};
             var baseConf = base.conf || {
@@ -35710,7 +38922,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             };
             for (var ck in baseConf) if (Object.prototype.hasOwnProperty.call(baseConf, ck)) conf[ck] = baseConf[ck];
             /* No line comment, so Cmd/Ctrl+/ writes a block comment, as Monaco does for a language without one: Marketing Cloud
-             * Engagement's save loses everything after a line comment (the author's org, items 60 to 62), and MCE100 reports each. */
+             * Engagement's save treats a line comment as never closed (the author's org, items 60 to 62), and MCE100 reports each. */
             conf.comments = { blockComment: ['/*', '*/'] };
             monacoNS.languages.setLanguageConfiguration('sfmc-sql', conf);
         };
@@ -35915,15 +39127,21 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
      * @returns {string} markdown
      */
     function docsLink(url) {
-        var label = 'Docs';
-        if (/^https:\/\/mateuszdabrowski\.pl\//.test(url)) {
-            label = 'MD docs';
-        } else if (/^https:\/\/(learn|docs)\.microsoft\.com\//.test(url)) {
-            label = 'MS T-SQL docs';
-        } else if (/^https:\/\/(help|developer)\.salesforce\.com\//.test(url)) {
-            label = 'SF docs';
-        };
-        return '[' + label + '](' + url + ')';
+        return '[' + docsLabel(url) + '](' + url + ')';
+    };
+
+    /**
+     * @function docsLabel
+     * @description The label of a docs link, by who wrote the page: MD docs for the author's articles, MS T-SQL docs for Microsoft's
+     * reference and SF docs for Salesforce's, as the hovers, the suggestions and the hints of Status show them.
+     * @param {string} url
+     * @returns {string}
+     */
+    function docsLabel(url) {
+        if (/^https:\/\/mateuszdabrowski\.pl\//.test(url)) return 'MD docs';
+        if (/^https:\/\/(learn|docs)\.microsoft\.com\//.test(url)) return 'MS T-SQL docs';
+        if (/^https:\/\/(help|developer)\.salesforce\.com\//.test(url)) return 'SF docs';
+        return 'Docs';
     };
 
     /**
@@ -37555,7 +40773,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
      * the selection's scope, as isRunStale compares). The panel then greys, as stale rows do (the author's choice for 1.3.0,
      * 2026-10-11): an error left from an earlier query read as the answer to the one pasted since. Tools.sameQuery drops every comment,
      * which is right for a Validate error, as Validate keeps the line breaks and a line comment changes nothing it checks. It is not
-     * right for a run's: the save of the Query Activity that a run starts with reads a line comment as hiding the text after it (the
+     * right for a run's: the save of the Query Activity that a run starts with treats a line comment as never closed (the
      * author's org, 2026-10-15, items 60 to 62), so a run's error is also stale when a line comment the run's SQL held is not in the
      * editor's text as one. Fix all turned a -- comment into a block comment, which sameQuery reads as no change, and the error of the
      * run that the line comment broke stayed as if its query was still there (the author's RC2 test, 2026-10-16). The line comments are
@@ -37709,7 +40927,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
      * it. A save has neither: MCE refuses a Query Activity that reads its own target with Append or Overwrite exactly at the save
      * (MCE050, the author's org, 2026-10-15), the save has no alias dialog, and MCE refuses an unnamed or duplicate output name there
      * (MCE010 and MCE011). A save also accepts some queries that fail later, when an automation runs the Query Activity unwatched
-     * (MCE100, MCE102, MCE086), so only a stop before the save catches them.
+     * (MCE100, MCE102, MCE086, MCE105), so only a stop before the save catches them.
      * @param {Array<Object>} findings
      * @returns {Array<Object>}
      */
@@ -37730,6 +40948,19 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
      * @returns {Array<Object>} the findings
      */
     function saveLintErrors(sql, target) {
+        return saveBlockingFindings(saveLintFindings(sql, target));
+    };
+
+    /**
+     * @function saveLintFindings
+     * @description Every finding of the lint of a text as a save would write it (saveLintErrors keeps the errors that stop the save): in the
+     * editor's context, and with the target and the action of the Query Activity it is saved as when they are given. Save As also reads
+     * the warnings of it that depend on the target and the action (MCE104), which stop nothing.
+     * @param {string} sql - the text that would be saved
+     * @param {{key: ?string, name: ?string, action: ?string}} [target] - the target and the action of the save, as saveLintErrors takes them
+     * @returns {Array<Object>} the findings, none when the lint throws
+     */
+    function saveLintFindings(sql, target) {
         var context = Editor.lintContext();
         if (target) {
             context.targetKey = target.key || null;
@@ -37742,7 +40973,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         } catch (e) {
             /* ignore */
         };
-        return saveBlockingFindings(findings);
+        return findings;
     };
 
     /**
@@ -38628,11 +41859,12 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
      * @param {string} text
      * @param {*} [details]
      */
-    QueryRunner.prototype.addMessage = function (kind, text, details) {
+    QueryRunner.prototype.addMessage = function (kind, text, details, docs) {
         this.messages.push({
             kind: kind,
             text: text,
-            details: details || null
+            details: details || null,
+            docs: docs || null
         });
     };
 
@@ -39038,8 +42270,8 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             if (!res.valid) {
                 (res.errors && res.errors.length ? res.errors : ['Marketing Cloud Engagement rejected this query.']).forEach(function (msg) { self.addMessage('error', msg); });
                 self._markServerErrors(sql, res.errors || [], self.currentRunOffset);
-                var runHint = serverErrorHint(sql, res.errors || []);
-                if (runHint) self.addMessage('hint', runHint);
+                var runAdvice = serverErrorAdvice(sql, res.errors || []);
+                if (runAdvice.hint) self.addMessage('hint', runAdvice.hint, null, runAdvice.docs);
                 self._failFinalize();
                 return;
             };
@@ -39267,8 +42499,8 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 self._create(sql, columns, hasRetriedSession, columnTypes);
                 return;
             };
-            var startHint = serverErrorHint(sql, [err.message, typeof err.details === 'string' ? err.details : JSON.stringify(err.details || '')], true);
-            if (startHint) self.addMessage('hint', startHint);
+            var startAdvice = serverErrorAdvice(sql, [err.message, typeof err.details === 'string' ? err.details : JSON.stringify(err.details || '')], true);
+            if (startAdvice.hint) self.addMessage('hint', startAdvice.hint, null, startAdvice.docs);
             self._fail('error', 'Could not start the query: ' + err.message, err.details, err);
         });
     };
@@ -39582,6 +42814,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             if (attempt !== self.attempt) return;
             if (self._isWaitingForRenewal(err)) return;
             if (tab.state.activeRun) tab.state.activeRun.finishedAt = Date.now();
+            self._addFetchHint(err);
             self._fail('error', 'Could not fetch results: ' + err.message, err.details, err);
         });
     };
@@ -39680,8 +42913,8 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
          * StatusMessage about the start call, "QueryDefinition perform called successfully" (the
          * author's org, 2026-09-29). Only an ErrorMsg says why, so without one there is no reason to
          * quote, and the explanation says what SQL Studio knows instead. */
-        var hint = serverErrorHint(self.currentRunSql, [errorMsg || 'Automation failed due to system error'], true);
-        if (hint) self.addMessage('hint', hint);
+        var advice = serverErrorAdvice(self.currentRunSql, [errorMsg || 'Automation failed due to system error'], true, true);
+        if (advice.hint) self.addMessage('hint', advice.hint, null, advice.docs);
         self._fail('error', errorMsg
             ? 'The query failed while it ran in Marketing Cloud Engagement: ' + errorMsg
             : 'The query failed while it ran in Marketing Cloud Engagement, which gives no reason (status ' + (status || 'unknown') + ').');
@@ -39754,6 +42987,20 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
     };
 
     /**
+     * @method _addFetchHint
+     * @description Adds what SQL Studio knows about a failed read of the first page (serverErrorHint) under "Could not fetch results:". A
+     * run whose query outputs a binary value finished, and then MCE answered "Internal Server Error" to the read (the author's org, round
+     * 2 org test C16, 2026-10-21): the hint names the binary value and its fix (MCE099).
+     * @param {Error} err - what the read failed with
+     */
+    QueryRunner.prototype._addFetchHint = function (err) {
+        /* With the words Status shows, so that a hint about the read of the rows (the entry for "Could not fetch results: Internal Server
+         * Error") is never given for a start or a save that MCE answered with "Internal Server Error". */
+        var advice = serverErrorAdvice(this.currentRunSql, ['Could not fetch results: ' + (err && err.message ? err.message : '')], true);
+        if (advice.hint) this.addMessage('hint', advice.hint, null, advice.docs);
+    };
+
+    /**
      * @method _fetch
      * @description Fetches page 1 of the finished run's results and applies them. A run whose last poll, a
      * count-only one included, counted 0 rows or could not count them reads it with restOnly, whichever path
@@ -39780,6 +43027,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 self._keepRunWithoutPage(err);
                 return;
             };
+            self._addFetchHint(err);
             self._fail('error', 'Could not fetch results: ' + err.message, err.details, err);
         });
     };
@@ -41715,7 +44963,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             showStatusError/addStatusNotice's callers only ever runs for the active tab, so this
             just re-feeds what was stashed on incoming.state back through them. */
             UI.clearRunOutcome();
-            if (savedError) UI.showStatusError(savedError.message, savedError.details, savedError.gate, savedError.hint, savedError.about);
+            if (savedError) UI.showStatusError(savedError.message, savedError.details, savedError.gate, savedError.hint, savedError.about, savedError.docs);
             for (var i = 0; i < savedNotices.length; i++) UI.addStatusNotice(savedNotices[i]);
             /* The tab's text may have changed while it was in the background (another window's save, adoptOtherWindowChanges), where no edit
              * event ran: the lines about its query are judged on arrival. The stale mark was, in renderRunSummary above. */
@@ -45320,7 +48568,8 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 tab.runner._markServerErrors(sql, res.errors || [], target.offset);
                 /* Named as Validate's: the panel sits under the last run's summary, which a Validate leaves as it was, so the error read
                  * as the run's (the author's JSON checks, 2026-10-09). A failed run says so in that summary itself. */
-                UI.showStatusError('Validate: ' + (res.errors || []).join('\n'), null, false, serverErrorHint(sql, res.errors || []), validateAbout);
+                var validateAdvice = serverErrorAdvice(sql, res.errors || []);
+                UI.showStatusError('Validate: ' + (res.errors || []).join('\n'), null, false, validateAdvice.hint, validateAbout, validateAdvice.docs);
                 UI.setActiveTab('status');
                 UI.revealStatusError();
                 Toast.show((res.errors || [])[0] || 'Validation failed.', 'error');
@@ -45556,6 +48805,15 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 h('span', { class: 'ss-problem__id' }, f.id),
                 h('span', { class: 'ss-problem__message' }, f.message)
             ];
+            /* The page that explains the finding, labelled as the hovers label it: from 1.4.2 a section of the author's MCE SQL Errors
+             * article for most of MCE's own answers. A click or Enter on it opens the page and does not reach the row, which jumps. */
+            if (f.docs) {
+                var stopRow = function (ev) { ev.stopPropagation(); };
+                rowChildren.push(h('a', {
+                    class: 'ss-problem__docs', href: f.docs, target: '_blank', rel: 'noopener noreferrer',
+                    onclick: stopRow, onkeydown: stopRow
+                }, docsLabel(f.docs)));
+            };
             var fix = f.fixes && f.fixes[0];
             if (fix) {
                 rowChildren.push(h('button', {
@@ -45685,7 +48943,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
      * validate call still runs either way), and 'save' a "Save anyway" link
      * that saves the opened Query Activity with the gate skipped (the author's
      * decision, 2026-10-15). */
-    UI.showStatusError = function (message, details, gate, hint, about) {
+    UI.showStatusError = function (message, details, gate, hint, about, docs) {
         var panel = this.el.statusErrorPanel;
         clearNode(panel);
         /* Only a lint gate offers its anyway link: its panel follows the findings as they change. */
@@ -45700,7 +48958,8 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             details: details || null,
             gate: gate,
             hint: hint || null,
-            about: about || null
+            about: about || null,
+            docs: (hint && docs) || null
         };
         var messageEl = h('div', { class: 'ss-error-panel__message' }, message);
         if (gate) {
@@ -45714,7 +48973,8 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         };
         panel.appendChild(messageEl);
         /* What SQL Studio knows about it, after Marketing Cloud Engagement's own words (user decision, 2026-09-28). */
-        if (hint) panel.appendChild(h('div', { class: 'ss-error-panel__hint' }, hint));
+        /* The section of the MCE SQL Errors article about the answer, labelled as a hover labels the author's article (docsLabel). */
+        if (hint) panel.appendChild(h('div', { class: 'ss-error-panel__hint' }, docs ? [hint + ' ', h('a', { class: 'ss-error-panel__docs', href: docs, target: '_blank', rel: 'noopener noreferrer' }, docsLabel(docs))] : hint));
         if (details) {
             var det = document.createElement('details');
             var summary = document.createElement('summary');
@@ -46620,18 +49880,54 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
     };
 
     /**
+     * @function isValidateAcceptanceCurrent
+     * @description Whether the active tab's editor still holds the query Validate accepted. The text the editor held when Validate was
+     * clicked is compared as a query (Tools.sameQuery), so a Format, a comment or a change of case keeps the line, and an edit that changes
+     * the query ends it. Both ways round, as the whole text has to be the same query: sameQuery alone finds a run's statement among others,
+     * and a statement added after the one Validate accepted is SQL it did not check.
+     * @returns {boolean}
+     */
+    function isValidateAcceptanceCurrent() {
+        var accepted = state.validateAcceptedText;
+        var text = Editor.getValue();
+        return typeof accepted === 'string' && Tools.sameQuery(accepted, text) && Tools.sameQuery(text, accepted);
+    };
+
+    /**
      * @method syncValidateNotice
-     * @description Takes Validate's acceptance out of Status when the query is no longer the one Validate accepted. The text the editor held
-     * when Validate was clicked is compared as a query (Tools.sameQuery), so a Format, a comment or a change of case leaves the line, and an
-     * edit that changes the query takes it. Both ways round, as the whole text has to be the same query: sameQuery alone finds a run's
-     * statement among others, and a statement added after the one Validate accepted is SQL it did not check.
+     * @description Takes Validate's acceptance out of Status when the query is no longer the one Validate accepted (isValidateAcceptanceCurrent).
      */
     UI.syncValidateNotice = function () {
         if (state.statusNotices.indexOf(VALIDATE_ACCEPTED_NOTICE) === -1) return;
-        var accepted = state.validateAcceptedText;
-        var text = Editor.getValue();
-        if (typeof accepted === 'string' && Tools.sameQuery(accepted, text) && Tools.sameQuery(text, accepted)) return;
+        if (isValidateAcceptanceCurrent()) return;
         this.removeStatusNotice(VALIDATE_ACCEPTED_NOTICE);
+    };
+
+    /**
+     * @method syncValidateStale
+     * @description Gives Validate's result the stale look of a run's error as the text changes, with no wait for the typing pause: a Validate
+     * refusal's panel greys (isErrorStale, the class UI._setStaleClasses puts on a run's), and the acceptance line mutes, until the text is the
+     * query Validate checked again, which takes it back. The acceptance line still goes once the typing pauses (syncValidateNotice), so a typed
+     * word and an undo in between lose nothing. It runs on every edit, however the text changed (typing, paste, a fix, a restored query), and
+     * costs two comparisons of the text at most, only while Validate's result is on screen. A text past VALIDATE_STALE_QUICK_CHARS takes the
+     * stale look on an edit with no comparison, and the typing pause compares it (syncEditedState). A run's error is judged at the pause, with
+     * the rows.
+     * @param {boolean} [isPause] - true from the typing pause, which compares a long text too
+     */
+    UI.syncValidateStale = function (isPause) {
+        var tab = QueryTabs.active();
+        if (!tab) return;
+        var about = state.statusError && state.statusError.about;
+        var hasPanel = !!about && about.isRun !== true && !!this.el.statusErrorPanel;
+        var hasLine = state.statusNotices.indexOf(VALIDATE_ACCEPTED_NOTICE) !== -1 && !!this.el.statusNotices;
+        if (!hasPanel && !hasLine) return;
+        var isQuick = !isPause && Editor.getValue().length > VALIDATE_STALE_QUICK_CHARS;
+        if (hasPanel) this.el.statusErrorPanel.classList.toggle('is-stale', isQuick || isErrorStale(tab));
+        if (!hasLine) return;
+        var isStale = isQuick || !isValidateAcceptanceCurrent();
+        Array.prototype.forEach.call(this.el.statusNotices.children, function (line) {
+            if (line.textContent === VALIDATE_ACCEPTED_NOTICE) line.classList.toggle('is-stale', isStale);
+        });
     };
 
     /**
@@ -46649,11 +49945,12 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
     /**
      * @method syncEditedState
      * @description What follows the active tab's query being edited, once the typing pauses (Editor._syncSoon): the rows' stale mark, and
-     * Validate's acceptance in Status.
+     * Validate's acceptance in Status, with the stale look of what stays of Validate's result, compared as a query however long the text.
      */
     UI.syncEditedState = function () {
         this.syncStaleMark(true);
         this.syncValidateNotice();
+        this.syncValidateStale(true);
     };
 
     /* Results tab label carries the row count once a run has results:
@@ -46745,6 +50042,8 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         var msgs = runner.messages || [];
         var errors = msgs.filter(function (m) { return m.kind === 'error'; });
         var hints = msgs.filter(function (m) { return m.kind === 'hint'; }).map(function (m) { return m.text; });
+        /* The section of the MCE SQL Errors article that the first hint with one names. */
+        var hintDocs = msgs.filter(function (m) { return m.kind === 'hint' && !!m.docs; }).map(function (m) { return m.docs; })[0] || null;
         /* Explanations belong under the error they explain. Without one, they are ordinary notices. */
         var notices = msgs.filter(function (m) {
             return m.kind === 'warning' || m.kind === 'info' || (m.kind === 'hint' && !errors.length);
@@ -46762,6 +50061,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 details: details,
                 gate: hasRunAnywayLink ? 'run' : null,
                 hint: hints.length ? hints.join(' ') : null,
+                docs: hints.length ? hintDocs : null,
                 /* The lint gate's panel follows the findings, so it is about no SQL. */
                 about: hasRunAnywayLink ? null : errorAbout(runner.currentRunSql, runner.currentRunIsFragment, runner.currentRunContext, true)
             };
@@ -46776,7 +50076,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             /* No notification for the tab on screen: its Status panel opens with the error, and a
             notification only covered the tab strip (user decision, 2026-09-29). A tab in the
             background still gets one, from QueryTabs.onTabChanged. */
-            this.showStatusError(errorPayload.message, errorPayload.details, errorPayload.gate, errorPayload.hint, errorPayload.about);
+            this.showStatusError(errorPayload.message, errorPayload.details, errorPayload.gate, errorPayload.hint, errorPayload.about, errorPayload.docs);
             this.revealStatusError();
         } else {
             this.clearStatusError();
@@ -46900,9 +50200,9 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
 
     /**
      * @function lineCommentPlaces
-     * @description The line comments of a query, as lint's MCE100 reports them, sorted by what they hide: leading (only comments before
+     * @description The line comments of a query, as lint's MCE100 reports them, sorted by their place: leading (only comments before
      * them), hiding (query text after them) and closing (only comments after them). Marketing Cloud Engagement's save of a Query Activity
-     * loses everything after a line comment (the author's org, 2026-10-15, items 60 to 62), which the answers to a failed save and to a run
+     * treats a line comment as never closed (the author's org, 2026-10-15, items 60 to 62), which the answers to a failed save and to a run
      * with no reason cannot say themselves. The hints name MCE100 only for a query lint reports, as parenQueryHintTail names MCE077. A
      * text of comments alone holds no query and gets none.
      * @param {string} sql
@@ -46973,16 +50273,185 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         return 'Lint reports it as MCE077, and its message says how to write it.';
     };
 
+    /**
+     * @function callsSearchInTextCall
+     * @description Tells whether a query calls LEFT, RIGHT or SUBSTRING with a CHARINDEX or PATINDEX and a minus among its arguments,
+     * the calls that get a negative length for a value without the character, as LEFT(x, CHARINDEX('@', x) - 1) does, which fails a
+     * run with no reason (the article session's org test S03, 2026-10-20). Lint's MCE103 reports the shapes it can tell apart. The hint
+     * only needs the calls, so a CHARINDEX and a minus anywhere inside the parentheses count, and a guarded call too. A call with no
+     * minus, as SUBSTRING(x, CHARINDEX('@', x) + 1, LEN(x)), gets no length below 0 from a position, so it does not count.
+     * @param {string} sql
+     * @returns {boolean}
+     */
+    function callsSearchInTextCall(sql) {
+        try {
+            var code = Tools.tokenize(String(sql || '')).filter(function (t) { return t.type !== 'comment' && t.type !== 'whitespace'; });
+            for (var i = 0; i + 1 < code.length; i++) {
+                var name = code[i];
+                if (name.quote || !/^(LEFT|RIGHT|SUBSTRING)$/.test(name.upper || '') || code[i + 1].type !== 'punct' || code[i + 1].value !== '(') continue;
+                var searches = false;
+                var subtracts = false;
+                for (var j = i + 2; j < code.length && code[j].depth > code[i + 1].depth; j++) {
+                    if (!code[j].quote && (code[j].upper === 'CHARINDEX' || code[j].upper === 'PATINDEX')) searches = true;
+                    if (code[j].type === 'operator' && code[j].value === '-') subtracts = true;
+                };
+                if (searches && subtracts) return true;
+            };
+        } catch (e) {
+            return false;
+        };
+        return false;
+    };
+
+    /**
+     * @function codeTokensOf
+     * @description The tokens of a query without its blanks and comments, for the checks the hints make of what a query calls. A text that
+     * does not tokenize gives none.
+     * @param {string} sql
+     * @returns {Array<Object>}
+     */
+    function codeTokensOf(sql) {
+        try {
+            return Tools.tokenize(String(sql || '')).filter(function (t) { return t.type !== 'comment' && t.type !== 'whitespace'; });
+        } catch (e) {
+            return [];
+        };
+    };
+
+    /**
+     * @function holdsTrimFrom
+     * @description Tells whether a query holds a TRIM(... FROM ...) or an IS [NOT] DISTINCT FROM, the two forms whose FROM the query check
+     * reads as the start of a table list (MCE066). The name it then calls unknown is the word after that FROM, whatever it is: TRIM(BOTH
+     * '-' FROM OrderId) got "OrderId is not a known data extension" (round 2 org test A26, 2026-10-21).
+     * @param {string} sql
+     * @returns {boolean}
+     */
+    function holdsTrimFrom(sql) {
+        var code = codeTokensOf(sql);
+        for (var i = 0; i < code.length; i++) {
+            if (code[i].type === 'keyword' && code[i].upper === 'FROM' && code[i].isDistinctFrom) return true;
+            if (code[i].quote || code[i].upper !== 'TRIM' || !code[i + 1] || code[i + 1].value !== '(') continue;
+            for (var j = i + 2; j < code.length && code[j].depth > code[i + 1].depth; j++) {
+                if (code[j].depth === code[i + 1].depth + 1 && code[j].type === 'keyword' && code[j].upper === 'FROM') return true;
+            };
+        };
+        return false;
+    };
+
+    /**
+     * @function dividesByNonLiteral
+     * @description Tells whether a query has a / or a % whose divisor is not a number literal other than 0, in parentheses or with a sign
+     * or not: the divisions that can meet a divisor of 0. SubscriberID % 2 cannot, and was named as a division by zero for a run that
+     * failed on an impossible date (round 2 org test C11, 2026-10-21).
+     * @param {string} sql
+     * @returns {boolean}
+     */
+    function dividesByNonLiteral(sql) {
+        var code = codeTokensOf(sql);
+        for (var i = 0; i < code.length; i++) {
+            if (code[i].type !== 'operator' || (code[i].value !== '/' && code[i].value !== '%')) continue;
+            /* Signs and opening parentheses in any order before the number: -2, (2), (-2) and -(2). */
+            var k = i + 1;
+            var opened = 0;
+            while (code[k] && ((code[k].type === 'operator' && (code[k].value === '-' || code[k].value === '+')) || (code[k].type === 'punct' && code[k].value === '('))) {
+                if (code[k].value === '(') opened++;
+                k++;
+            };
+            var isLiteral = !!code[k] && code[k].type === 'number' && Number(code[k].value) !== 0 && isFinite(Number(code[k].value));
+            if (isLiteral) {
+                var closed = 0;
+                while (closed < opened && code[k + 1 + closed] && code[k + 1 + closed].type === 'punct' && code[k + 1 + closed].value === ')') closed++;
+                if (closed === opened) continue;
+            };
+            return true;
+        };
+        return false;
+    };
+
+    /**
+     * @function multipliesValues
+     * @description Tells whether a query multiplies: a * between two operands, which is no star of a select list, of COUNT(*) or of
+     * s.*. SubscriberID * 1000000000 failed a run with no reason (round 2 org test C06, 2026-10-21).
+     * @param {string} sql
+     * @returns {boolean}
+     */
+    function multipliesValues(sql) {
+        var code = codeTokensOf(sql);
+        for (var i = 1; i + 1 < code.length; i++) {
+            if (code[i].type !== 'operator' || code[i].value !== '*') continue;
+            var before = code[i - 1];
+            var after = code[i + 1];
+            var isOperandBefore = before.type === 'identifier' || before.type === 'number' || before.type === 'string' || before.type === 'variable' ||
+                (before.type === 'punct' && before.value === ')') || (before.type === 'keyword' && (before.upper === 'END' || before.upper === 'NULL'));
+            var isOperandAfter = !(after.type === 'punct' && (after.value === ',' || after.value === ')')) && !(after.type === 'keyword' && after.upper === 'FROM');
+            if (isOperandBefore && isOperandAfter) return true;
+        };
+        return false;
+    };
+
+    /**
+     * @function callsDateFromParts
+     * @description The first call a query makes of a function that builds a date from its parts, which fails the run for a date that does
+     * not exist, as 30 February (round 2 org test C11, 2026-10-21: DATEFROMPARTS(2026, 2, 28 + SubscriberID % 2)).
+     * @param {string} sql
+     * @returns {string} its name in upper case, or '' when the query calls none
+     */
+    function callsDateFromParts(sql) {
+        var code = codeTokensOf(sql);
+        for (var i = 0; i + 1 < code.length; i++) {
+            if (!code[i].quote && /^(DATEFROMPARTS|DATETIMEFROMPARTS|DATETIME2FROMPARTS|SMALLDATETIMEFROMPARTS|DATETIMEOFFSETFROMPARTS)$/.test(code[i].upper || '') && code[i + 1].value === '(') return code[i].upper;
+        };
+        return '';
+    };
+
+    /**
+     * @function callsStringAggWithoutMax
+     * @description Tells whether a query calls STRING_AGG with no MAX in its value, no CAST or CONVERT to NVARCHAR(MAX): the result is an
+     * NVARCHAR(4000), and a list past 4,000 characters failed the run, where the same list with the value converted to NVARCHAR(MAX) ran
+     * at 5,444 (round 2 org tests C14 and C15b, 2026-10-21). MCE091 reports it.
+     * @param {string} sql
+     * @returns {boolean}
+     */
+    function callsStringAggWithoutMax(sql) {
+        var code = codeTokensOf(sql);
+        for (var i = 0; i + 1 < code.length; i++) {
+            if (code[i].quote || code[i].upper !== 'STRING_AGG' || code[i + 1].value !== '(') continue;
+            var depth = code[i + 1].depth + 1;
+            var hasMax = false;
+            for (var j = i + 2; j < code.length && code[j].depth >= depth; j++) {
+                if (code[j].depth === depth && code[j].type === 'punct' && code[j].value === ',') break;
+                if (code[j].upper === 'MAX') hasMax = true;
+            };
+            if (!hasMax) return true;
+        };
+        return false;
+    };
+
+    /**
+     * @function joinedCauses
+     * @description Joins a list with commas and "or" before the last one.
+     * @param {Array<string>} items
+     * @returns {string}
+     */
+    function joinedCauses(items) {
+        return items.length < 2 ? items.join('') : items.slice(0, -1).join(', ') + ' or ' + items[items.length - 1];
+    };
+
+    /* The author's MCE SQL Errors article, whose sections explain each of Marketing Cloud Engagement's error answers (2026-10-21). */
+    var SQL_ERRORS_DOCS = 'https://mateuszdabrowski.pl/docs/salesforce/marketing-cloud-engagement/sql/sql-errors/';
+
     /* What SQL Studio knows about Marketing Cloud Engagement's errors (user decision, 2026-09-28: its own
      * words stay, followed by this where known). Each entry matches the text Marketing Cloud Engagement
      * sent and answers with one hint, or null when the query shows it does not apply. The source of each
      * is in its comment: an org check or SQL Server's documented behaviour. An entry with isAboutQueryText
      * explains how the check read the query's text, and gives way to a note where the text holds several queries
-     * (serverErrorHint). */
+     * (serverErrorHint). docs is the section of the MCE SQL Errors article about the answer, where it has one, which the
+     * hint links as an MD docs link (serverErrorAdvice): the read of the rows that failed with Internal Server Error has none. */
     var MCE_ERROR_HINTS = [
         {
             /* Org check, 2026-09-28: a comment before SELECT passed once and failed once; WITH is refused. */
             test: /Select must be the first word/i,
+            docs: SQL_ERRORS_DOCS + '#only-select-queries-are-valid',
             isAboutQueryText: true,
             /**
              * @function hint
@@ -47002,11 +50471,11 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                     var startTail = parenQueryHintTail(sql, true, '');
                     return startTail ? 'Marketing Cloud Engagement refuses a query that starts with a parenthesis, even one around a SELECT. ' + startTail : 'Marketing Cloud Engagement refuses a query that starts with a parenthesis. Start it with SELECT.';
                 };
-                /* The author's org, 2026-10-15 (item 61): the save of a Query Activity loses everything after a line comment, so one before SELECT
-                 * hides the whole query. The query check, which Validate asks and Run asks first, takes a line comment, so its answer is
+                /* The author's org, 2026-10-15 (item 61): the save of a Query Activity treats a line comment as never closed, so one before SELECT
+                 * turns the whole query into a comment. The query check, which Validate asks and Run asks first, takes a line comment, so its answer is
                  * never about one, and keeps the hint it had (the review of MCE100, 2026-10-15). */
                 var leading = isAfterSave ? lineCommentPlaces(sql).leading : [];
-                if (leading.length) return 'This query starts with a line comment, and Marketing Cloud Engagement\'s save loses everything after one, so it reads no query.' + lineCommentHintTail(leading);
+                if (leading.length) return 'This query starts with a line comment, which Marketing Cloud Engagement\'s save treats as never closed, so no query is left.' + lineCommentHintTail(leading);
                 if (tokens[0] && tokens[0].type === 'comment') return 'This query starts with a comment. Marketing Cloud Engagement\'s check sometimes refuses one there, so move it below SELECT and validate again.';
                 return null;
             }
@@ -47014,6 +50483,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         {
             /* Seen on the org: the check wraps the query in a derived table named Qry. */
             test: /No column name was specified for column/i,
+            docs: SQL_ERRORS_DOCS + '#no-column-name-was-specified',
             isAboutQueryText: true,
             hint: 'Marketing Cloud Engagement runs every query inside another one, named Qry, so every column needs a name. FOR JSON or FOR XML on the query itself gives a column without one (MCE070), and so does an expression without AS.'
         },
@@ -47021,6 +50491,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             /* Seen on the org: the check reads a FROM inside an expression, a table function with arguments and a SELECT in parentheses
              * after FROM ( as a table name it does not know. A parent Business Unit refuses the Ent. prefix in the same words. */
             test: /is not a known data extension/i,
+            docs: SQL_ERRORS_DOCS + '#not-a-known-data-extension-or-system-data-view',
             isAboutQueryText: true,
             /**
              * @function hint
@@ -47047,18 +50518,22 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 if (/(^|\s)(sys|INFORMATION_SCHEMA)\.\S+$/i.test(name)) return 'Marketing Cloud Engagement refuses SQL Server\'s system views, sys. and INFORMATION_SCHEMA. names (MCE063). Read a Data View or a Data Extension instead.';
                 if (name.indexOf('(') !== -1) return 'Marketing Cloud Engagement\'s check reads a table function with arguments, such as OPENJSON or STRING_SPLIT, as a Data Extension name and refuses it (MCE063, MCE067). Read the value with a subquery instead.';
                 if (/^N?'|^NULL$/i.test(name)) {
-                    if (/\bTRIM\s*\(|\bIS\s+(NOT\s+)?DISTINCT\s+FROM\b/i.test(sql)) return 'The check read the FROM inside TRIM(... FROM ...) or IS DISTINCT FROM as the start of a table list (MCE066). Write it another way, such as LTRIM or an IS NULL test.';
+                    if (holdsTrimFrom(sql)) return 'The check read the FROM inside TRIM(... FROM ...) or IS DISTINCT FROM as the start of a table list (MCE066). Write it another way, such as LTRIM or an IS NULL test.';
                     return 'A Data Extension name goes in square brackets, not quotes: FROM [My Data Extension].';
                 };
                 /* The author's org, 2026-10-11: FROM (VALUES ...) AS v(...) failed in these words, as OPENJSON does. */
                 if (/^VALUES$/i.test(name)) return 'Marketing Cloud Engagement\'s check reads VALUES as a Data Extension name, so it refuses a VALUES table (MCE063). Write the rows as SELECT ... UNION ALL SELECT ..., which lint\'s fix does.';
                 if (/^ent\./i.test(name) && isParentBusinessUnit()) return 'This is the parent Business Unit, which reads its own Data Extensions without Ent. Only a child Business Unit uses Ent. for shared ones (MCE064).';
+                /* The author's org, round 2 org test A26, 2026-10-21: TRIM(BOTH '-' FROM OrderId) got "OrderId is not a known data extension":
+                 * the name is the word after the FROM, a column, whatever it is. */
+                if (holdsTrimFrom(sql)) return 'The check read the FROM inside TRIM(... FROM ...) or IS DISTINCT FROM as the start of a table list, so it takes the word after it for a Data Extension (MCE066). Write it another way, such as LTRIM or an IS NULL test. If that word is a table\'s, check its spelling.';
                 return 'Check the name\'s spelling. A shared Data Extension is found only through Ent., and only from a child Business Unit.';
             }
         },
         {
             /* Seen on the org: the check adds N to every text value itself. */
             test: /Incorrect syntax near/i,
+            docs: SQL_ERRORS_DOCS + '#incorrect-syntax-near',
             isAboutQueryText: true,
             /**
              * @function hint
@@ -47078,6 +50553,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             /* Seen on the org: the check reads the FROM inside an expression as the start of a table list, then objects to the
              * commas after it. */
             test: /Old style JOIN|ANSI JOINs/i,
+            docs: SQL_ERRORS_DOCS + '#old-style-join-syntax-is-not-allowed',
             isAboutQueryText: true,
             /**
              * @function hint
@@ -47097,6 +50573,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         {
             /* The author's org, 2026-10-11: the query's own ORDER BY with no TOP, as the check runs the query inside another one. */
             test: /ORDER BY clause is invalid in views/i,
+            docs: SQL_ERRORS_DOCS + '#order-by-clause-is-invalid-in-views',
             isAboutQueryText: true,
             hint: 'Marketing Cloud Engagement runs every query inside another one, so an ORDER BY needs TOP, OFFSET or FOR XML, the query\'s own ORDER BY included (MCE013). A Data Extension keeps no row order: remove ORDER BY and sort the results in the grid.'
         },
@@ -47104,13 +50581,15 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             /* The author's RC3 test of 1.3.0, 2026-10-11: ;SELECT ... got this, as the check reads a ; as a word it does not allow. A ; inside
              * a text value got it too, 'a;b' (the author's org, item 50, 2026-10-14), while one inside a comment passed (items 52 and 54). */
             test: /';' is a reserved word/i,
+            docs: SQL_ERRORS_DOCS + '#reserved-word-may-not-appear-in-your-query',
             isAboutQueryText: true,
             hint: 'Marketing Cloud Engagement\'s check refuses a ; in the query, at its end and inside a text value too, though not inside a comment. Remove it, or write it in a text as CHAR(59): lint reports it as MCE002, with a fix.'
         },
         {
             /* The author's org, 2026-10-15 (item 61): a line comment on the line before SELECT got this from the save of the Query Activity,
-             * "Could not start the query: Cannot find table 0.", while Validate accepted it. The save loses everything after a line comment. */
+             * "Could not start the query: Cannot find table 0.", while Validate accepted it. The save treats a line comment as never closed. */
             test: /Cannot find table 0/i,
+            docs: SQL_ERRORS_DOCS + '#errors-from-line-comments',
             isAboutQueryText: true,
             /**
              * @function hint
@@ -47125,13 +50604,14 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 if (!isAfterSave) return null;
                 var leading = lineCommentPlaces(sql).leading;
                 if (!leading.length) return null;
-                return 'Marketing Cloud Engagement\'s save loses everything after a line comment, so ' + (leading.length > 1 ? 'the ones' : 'the one') + ' before SELECT hid the whole query.' + lineCommentHintTail(leading);
+                return 'Marketing Cloud Engagement\'s save treats a line comment as never closed, so ' + (leading.length > 1 ? 'the ones' : 'the one') + ' before SELECT turned the whole query into a comment.' + lineCommentHintTail(leading);
             }
         },
         {
             /* The author's org, 2026-10-15 (items 60 and 61): a line comment that ended a line with the rest of the query after it got
              * "The multi-part identifier ... could not be bound." or "Invalid column name" from the save, after Validate accepted it. */
             test: /multi-part identifier[\s\S]*could not be bound|Invalid column name/i,
+            docs: SQL_ERRORS_DOCS + '#errors-from-line-comments',
             isAboutQueryText: true,
             /**
              * @function hint
@@ -47148,99 +50628,190 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 var places = lineCommentPlaces(sql);
                 var hiding = places.leading.concat(places.hiding);
                 if (!hiding.length) return null;
-                return 'A line comment in the query is a likely cause: Marketing Cloud Engagement\'s save loses everything after one, so a name used after it cannot be found.' + lineCommentHintTail(hiding);
+                return 'A line comment in the query is a likely cause: Marketing Cloud Engagement\'s save treats it as never closed, so a name used below it cannot be found.' + lineCommentHintTail(hiding);
             }
         },
         {
             /* The author's org, 2026-10-11: ROW_NUMBER() OVER (...) = 1 in WHERE, the usual way to keep the newest row. */
             test: /Windowed functions can only appear in the SELECT or ORDER BY/i,
+            docs: SQL_ERRORS_DOCS + '#window-function-errors',
             isAboutQueryText: true,
             hint: 'Number the rows in a subquery\'s SELECT, then filter on that number outside it: SELECT x.* FROM (SELECT ..., ROW_NUMBER() OVER (...) AS n FROM ...) AS x WHERE x.n = 1 (MCE076).'
         },
         {
             /* The author's org, 2026-10-11: COUNT(DISTINCT ...) OVER (PARTITION BY ...). */
             test: /DISTINCT is not allowed with the OVER clause/i,
+            docs: SQL_ERRORS_DOCS + '#window-function-errors',
             isAboutQueryText: true,
             hint: 'Count distinct values in a window with two DENSE_RANKs: DENSE_RANK() OVER (PARTITION BY p ORDER BY x) + DENSE_RANK() OVER (PARTITION BY p ORDER BY x DESC) - 1, less one when x can be NULL. Lint\'s MCE076 fix writes it.'
         },
         {
             /* Seen on the org: the check finds text values with a scanner that ignores comments. */
             test: /Error while processing square brackets/i,
+            docs: SQL_ERRORS_DOCS + '#error-while-processing-square-brackets',
             isAboutQueryText: true,
             hint: 'The known cause is an unpaired apostrophe in a comment, which Marketing Cloud Engagement reads as the start of a text value (MCE069).'
         },
         {
             /* Seen on the org: invalid JSON failed the whole query with this and nothing else. */
             test: /Automation failed due to system error/i,
+            docs: SQL_ERRORS_DOCS + '#automation-failed-due-to-system-error',
             /**
              * @function hint
              * @description The line comment cause first when the query holds one, then the JSON cause when the query reads JSON, the
-             * conversion cause when it converts, the division cause when it divides, the overflow cause when it calls DATEADD, else
-             * only what is certain.
+             * conversion cause when it converts, the impossible date cause when it calls DATEFROMPARTS or a like function, the division
+             * cause when it has a / or % whose divisor is not a number literal other than 0, the negative length cause when it calls LEFT,
+             * RIGHT or SUBSTRING with a CHARINDEX or PATINDEX and a minus inside, the STRING_AGG cause when it calls STRING_AGG with
+             * no MAX in its value, the overflow cause when it multiplies or calls DATEDIFF or DATEADD, else only what is certain. The
+             * list of causes seen, for a query that shows none, keeps the same order, with a value longer than its field, which no query
+             * shows, before the overflow, whose examples end the list, and says which failures the Action Log of a Query Activity
+             * names and that, for all but the date and a NULL, it quotes the value, which can be a subscriber's data (round 2 org tests D02,
+             * D11, D13, D15, D17, D22 and E07 to E10, 2026-10-21). A CONVERT or CAST to DATE and a conversion to INT, SMALLINT, TINYINT or
+             * BIT get a reason there (round 6 org test B02 added the last three), and one to BIGINT, DATETIME or DECIMAL none (round 3 and 4,
+             * G04, G11, H01 to H04, and B02), which a query that converts is told with its cause. Both answers add that the entry can take
+             * about 90 seconds and a refresh to appear (G11).
              * @param {string} sql
              * @param {string} text - Marketing Cloud Engagement's messages
              * @param {boolean} isAfterSave - true for the answer of the save or the run, false for the query check's
              * @returns {string}
              */
             hint: function (sql, text, isAfterSave) {
-                /* The four causes failed a run this way on the org: one row
+                /* The causes failed a run this way on the org: one row
                  * with a bad value fails the whole query. A division by zero
                  * fails it as ANSI_WARNINGS is on (the author's org, 2026-10-14),
                  * and so does a number too big for its type, as Unix
                  * milliseconds in DATEADD, whose number is an int (the
-                 * author's org, item 56). */
+                 * author's org, item 56). So do a negative length in LEFT or
+                 * SUBSTRING, as CHARINDEX(...) - 1 for a value without the
+                 * character (the article session's org test S03, 2026-10-20),
+                 * and a value longer than its field: a copy of 4,100
+                 * characters into a Text field of 4,000 (item 41). The last
+                 * has no sign in the query, so only the fallback names it. Round 2 (2026-10-21) added an impossible date from
+                 * DATEFROMPARTS (C11), where a % by a number had been named as a division by zero, an int overflow in a multiplication
+                 * (C06) and in DATEDIFF over more than 68 years in seconds (C12), and STRING_AGG past 4,000 characters (C14). */
                 var readsJson = /\b(JSON_VALUE|JSON_QUERY|OPENJSON)\s*\(/i.test(sql);
                 var converts = /\b(CAST|CONVERT)\s*\(/i.test(sql);
                 var addsToDate = /\bDATEADD\s*\(/i.test(sql);
-                var divides = false;
-                try {
-                    divides = Tools.tokenize(sql).some(function (t) { return t.type === 'operator' && (t.value === '/' || t.value === '%'); });
-                } catch (e) {
-                    divides = false;
-                };
+                var diffsDates = /\bDATEDIFF\s*\(/i.test(sql);
+                var multiplies = multipliesValues(sql);
+                var buildsDate = callsDateFromParts(sql);
+                var aggregatesText = callsStringAggWithoutMax(sql);
+                var cutsText = callsSearchInTextCall(sql);
+                var divides = dividesByNonLiteral(sql);
                 var comments = isAfterSave ? lineCommentPlaces(sql).found : [];
                 var causes = [];
                 if (readsJson) causes.push('JSON_VALUE or JSON_QUERY met a value that is not valid JSON: guard it with CASE WHEN ISJSON(x) = 1 THEN ... END');
                 if (converts) causes.push('CAST or CONVERT met a value that is not a number or a date: TRY_CAST and TRY_CONVERT return NULL for it instead');
+                if (buildsDate) causes.push(buildsDate + ' got a date that does not exist, as 30 February: build it with DATEADD instead, as DATEADD(DAY, n - 1, DATEFROMPARTS(y, m, 1)), which rolls over');
                 if (divides) causes.push('a division met a divisor of 0: NULLIF(divisor, 0) returns NULL for it instead');
-                if (addsToDate) causes.push('a number was too big for its type, as Unix milliseconds in DATEADD, whose number is an int: add the seconds instead');
+                if (cutsText) causes.push('LEFT, RIGHT or SUBSTRING got a negative length, as CHARINDEX(...) - 1 for a value without the character: NULLIF(CHARINDEX(...), 0) - 1 returns NULL instead (MCE103)');
+                if (aggregatesText) causes.push('STRING_AGG made a list past the 4,000 characters its result holds: CAST its value to NVARCHAR(MAX) (MCE091)');
+                if (multiplies || diffsDates || addsToDate) {
+                    /* DATEADD alone keeps the words it had. */
+                    var remedies = [];
+                    if (multiplies) remedies.push('CAST one side of a multiplication to BIGINT');
+                    if (diffsDates) remedies.push('use DATEDIFF_BIG for seconds over more than 68 years');
+                    if (addsToDate) remedies.push('add the seconds instead of Unix milliseconds in DATEADD');
+                    causes.push(addsToDate && !multiplies && !diffsDates ?
+                        'a number was too big for its type, as Unix milliseconds in DATEADD, whose number is an int: add the seconds instead' :
+                        'a number was too big for its type, as an INT stops at 2,147,483,647: ' + joinedCauses(remedies));
+                };
+                /* What the Action Log of a Query Activity run in Automation Studio says depends on the conversion's target type (round 3 org
+                 * tests G04 and G11 and round 4's H01 to H04, 2026-10-21): a CONVERT or CAST to DATE gets "Could not convert date and/or time
+                 * from string data type." and a conversion to INT, SMALLINT, TINYINT or BIT its cause, with the value quoted (round 6 org test
+                 * B02), where BIGINT, DATETIME and DECIMAL get only the system-error line, as a text written into a Date field (D17) or a
+                 * Decimal field (G11) does, and an int overflow too (B05). The entry can take about 90 seconds and a refresh to appear (G11). */
+                var logTail = ' The Action Log can take about 90 seconds and a refresh to show its entry.';
                 var others = causes.length ?
-                    'One row with a bad value fails the whole query. ' + causes.map(function (c, i) { return i ? c : c.charAt(0).toUpperCase() + c.slice(1); }).join('. Or ') + '.' :
-                    'The causes SQL Studio has seen are JSON_VALUE on a value that is not valid JSON, CAST or CONVERT on a value that is not a number or a date, a division by zero, and a number too big for its type, such as Unix milliseconds in DATEADD. Automation Studio\'s Action Log says only "Automation failed due to system error". To find the column that fails, run the query with fewer columns.';
+                    'One row with a bad value fails the whole query. ' + causes.map(function (c, i) { return i ? c : c.charAt(0).toUpperCase() + c.slice(1); }).join('. Or ') + '.' +
+                        (converts ? ' The Action Log of a Query Activity run in Automation Studio gives a reason for a CONVERT or CAST to DATE, "Could not convert date and/or time from string data type.", and for one to INT, SMALLINT, TINYINT or BIT, with the value quoted. For one to BIGINT, DATETIME or DECIMAL it says only "Automation failed due to system error."' : '') + logTail :
+                    'The causes SQL Studio has seen are JSON_VALUE on a value that is not valid JSON, CAST or CONVERT on a value that is not a number or a date, a date that does not exist, a division by zero, a negative length in LEFT, RIGHT or SUBSTRING, a value longer than its field, STRING_AGG past 4,000 characters, and a number too big for its type, such as a multiplication, DATEDIFF in seconds over 68 years or Unix milliseconds in DATEADD. The Action Log of a Query Activity run in Automation Studio says more for some: it names the reason for a CONVERT or CAST to DATE ("Could not convert date and/or time from string data type."), a conversion to INT, SMALLINT, TINYINT or BIT, a NULL in a required field, a value too long and a duplicate key. For all but the date and the NULL it quotes the value, which can be a subscriber\'s data. For a conversion to BIGINT, DATETIME or DECIMAL, a text written into a Date or Decimal field, a division by zero, invalid JSON and an INT overflow, it says only "Automation failed due to system error."' + logTail + ' To find the column that fails, run the query with fewer columns.';
                 /* A line comment is the first cause to look at (the author's org, 2026-10-15, item 61): a run whose query ended with one failed with this
                  * answer, with a line break after it or not, and a comment is a cause no row has to carry. */
-                if (comments.length) return 'The query holds a line comment, and Marketing Cloud Engagement\'s save loses everything after one, which fails a run with no reason.' + lineCommentHintTail(comments) + ' If it is not the comment, ' + others.charAt(0).toLowerCase() + others.slice(1);
+                if (comments.length) return 'The query holds a line comment. One that closes the query passes the save and then fails the run with no reason.' + lineCommentHintTail(comments) + ' If it is not the comment, ' + others.charAt(0).toLowerCase() + others.slice(1);
                 return others;
             }
         },
         {
+            /* The author's org, round 2 org test C16, 2026-10-21: a raw HASHBYTES of a key in the output ran, and fetching the results
+             * failed with MCE's own REST error {"errorcode":0,"message":"Internal Server Error"}, "Could not fetch results: Internal Server
+             * Error" in SQL Studio. The same words can come from other causes, so the hint is for a query that outputs a binary value. */
+            test: /Could not fetch results: Internal Server Error/i,
+            /**
+             * @function hint
+             * @description The binary value as a likely cause, or null for a query whose output holds none (lint's MCE099).
+             * @param {string} sql
+             * @returns {?string}
+             */
+            hint: function (sql) {
+                var found = [];
+                try {
+                    found = Tools.lint(String(sql || ''), {}).filter(function (f) { return f.id === 'MCE099'; });
+                } catch (e) {
+                    found = [];
+                };
+                if (!found.length) return null;
+                return 'The query outputs a binary value (MCE099), and a binary value can stop Marketing Cloud Engagement from returning the rows at all, though the run finished. Write it as hex, CONVERT(VARCHAR(n), x, 2): lint offers the fix "Write it as hex".';
+            }
+        },
+        {
+            /* The author's org, round 2 org test D12, 2026-10-21: a target field that cannot be empty, missing from the query. Save As says
+             * so before the save (requiredRefusal), and Save and Save to DE get MCE's words. */
+            test: /is a required for the Target Data Extension/i,
+            docs: SQL_ERRORS_DOCS + '#field-is-required-for-the-target-data-extension',
+            hint: 'The target Data Extension has a required field with no default value that the query leaves out, and the error names it. Add a column of that name to the query, or save into another target.'
+        },
+        {
             /* The check evaluates a constant JSON_VALUE itself and refuses invalid JSON (seen on the org). */
             test: /JSON text is not properly formatted/i,
-            hint: 'A value is not valid JSON, and one such value fails the whole query. Guard it: CASE WHEN ISJSON(x) = 1 THEN JSON_VALUE(x, \'$.a\') END.'
+            docs: SQL_ERRORS_DOCS + '#json-text-is-not-properly-formatted',
+            /**
+             * @function hint
+             * @description The check and the save evaluate a JSON text written in the query, which only that text can make them refuse
+             * (round 6 org test B04: the query check answered it with the character and its position), so the hint says to correct the
+             * text, where lint's MCE106 reports it before Validate. A guard cannot help a text in the query. A run that failed with this
+             * answer read the text from a field, where one such value fails the whole query, and gets the ISJSON guard.
+             * @param {string} sql
+             * @param {string} text - Marketing Cloud Engagement's messages
+             * @param {boolean} isAfterSave - true for the answer of the save or the run, false for the query check's
+             * @param {boolean} isFromRun - true for the answer of a run that failed while it ran
+             * @returns {string}
+             */
+            hint: function (sql, text, isAfterSave, isFromRun) {
+                if (isFromRun) return 'A value is not valid JSON, and one such value fails the whole query. Guard it: CASE WHEN ISJSON(x) = 1 THEN JSON_VALUE(x, \'$.a\') END.';
+                return 'Marketing Cloud Engagement\'s check read a JSON text written in the query and found it invalid. Correct that text' +
+                    (/\bposition \d+/i.test(text) ? ' at the position the message gives' : '') + '. Lint\'s MCE106 reads such texts before Validate.';
+            }
         },
         {
             /* SQL Server's conversion errors, from here on. */
             test: /Conversion failed when converting date and\/or time/i,
+            docs: SQL_ERRORS_DOCS + '#could-not-convert-date',
             hint: 'A text value that is not a date met a date, through CAST, CONVERT or a comparison with a date. TRY_CONVERT(DATETIME, x) returns NULL for it instead of failing. For a known format, give CONVERT its style number.'
         },
         {
             test: /Conversion failed when converting the [\s\S]*to data type (big|small|tiny)?int/i,
+            docs: SQL_ERRORS_DOCS + '#conversion-failed-when-converting',
             hint: 'A text value that is not a whole number met a number, through CAST, CONVERT or a comparison with a number. TRY_CAST(x AS INT) returns NULL for it instead of failing.'
         },
         {
             test: /Error converting data type n?varchar to (numeric|decimal|float)/i,
+            docs: SQL_ERRORS_DOCS + '#conversion-failed-when-converting',
             hint: 'A text value that is not a number met a decimal number. TRY_CAST(x AS DECIMAL(18, 2)) returns NULL for it instead of failing.'
         },
         {
             test: /out-of-range value/i,
+            docs: SQL_ERRORS_DOCS + '#could-not-convert-date',
             hint: 'A date that does not exist, such as 31 February, or one outside the range of its type was converted. TRY_CONVERT returns NULL for it instead of failing.'
         },
         {
             test: /Divide by zero/i,
+            docs: SQL_ERRORS_DOCS + '#automation-failed-due-to-system-error',
             hint: 'A division by zero. Divide by NULLIF(x, 0), which gives NULL instead of failing.'
         },
         {
             test: /Arithmetic overflow/i,
+            docs: SQL_ERRORS_DOCS + '#automation-failed-due-to-system-error',
             hint: 'A number was too big for its type: INT stops at 2,147,483,647. Use BIGINT or DECIMAL instead.'
         }
     ];
@@ -47250,15 +50821,31 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
      * @description What SQL Studio knows about Marketing Cloud Engagement's error messages (MCE_ERROR_HINTS),
      * shown after Marketing Cloud Engagement's own words: from the query check, a failed start, or a run
      * that failed while it ran. One hint per matching entry, none repeated. A line comment is named as a cause only with
-     * isAfterSave: the query check takes every line comment, and the save of the Query Activity loses everything after
-     * one (the author's org, 2026-10-15, items 60 to 62), so a Validate answer is never about one.
+     * isAfterSave: the query check takes every line comment, and the save of the Query Activity treats one as never closed
+     * (the author's org, 2026-10-15, items 60 to 62), so a Validate answer is never about one.
      * @param {string} sql - the SQL that was checked or run
      * @param {Array<string>} errors - Marketing Cloud Engagement's messages
      * @param {boolean} [isAfterSave] - true for the answer of the start, which saves the Query Activity first, and of a run that
      *   failed while it ran; false or absent for the query check's, from Validate and from the check Run makes first
+     * @param {boolean} [isFromRun] - true for the answer of a run that failed while it ran, where a value read from a field failed it
      * @returns {?string} a hint for the Status tab, or null
      */
-    function serverErrorHint(sql, errors, isAfterSave) {
+    function serverErrorHint(sql, errors, isAfterSave, isFromRun) {
+        return serverErrorAdvice(sql, errors, isAfterSave, isFromRun).hint;
+    };
+
+    /**
+     * @function serverErrorAdvice
+     * @description serverErrorHint's hint, with the section of the MCE SQL Errors article that the first entry that gave a hint names
+     * (MCE_ERROR_HINTS' docs), for the MD docs link beside the hint in Status and in a failed Save's toast.
+     * @param {string} sql - the SQL that was checked or run
+     * @param {Array<string>} errors - Marketing Cloud Engagement's messages
+     * @param {boolean} [isAfterSave] - as serverErrorHint takes it
+     * @param {boolean} [isFromRun] - as serverErrorHint takes it
+     * @returns {{hint: ?string, docs: ?string}} the hint, or null, and the section's URL, or null
+     */
+    function serverErrorAdvice(sql, errors, isAfterSave, isFromRun) {
+        var docs = null;
         var hints = [];
         var text = (errors || []).map(function (e) { return String(e || ''); }).join('\n');
         /* Several queries read as one (Run anyway sends them so): the check's answer is about that mixture, so a hint that explains how it
@@ -47274,14 +50861,18 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             };
             var hint = null;
             try {
-                hint = typeof entry.hint === 'function' ? entry.hint(String(sql || ''), text, isAfterSave === true) : entry.hint;
+                hint = typeof entry.hint === 'function' ? entry.hint(String(sql || ''), text, isAfterSave === true, isFromRun === true) : entry.hint;
             } catch (e) {
                 hint = null;
             };
             if (hint && hints.indexOf(hint) === -1) hints.push(hint);
+            if (hint && !docs && entry.docs) docs = entry.docs;
         });
         if (isReadAsOne) hints.unshift('This text holds ' + queryCount + ' queries, and the check reads them as one query, so what it says may be about neither. Select one query and run it, or validate it, alone.');
-        return hints.length ? hints.join(' ') : null;
+        return {
+            hint: hints.length ? hints.join(' ') : null,
+            docs: hints.length ? docs : null
+        };
     };
 
     /**
@@ -48045,8 +51636,16 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
      */
     function showSaveFailed(err, sql) {
         var said = err && err.message ? err.message : 'No message.';
-        var hint = serverErrorHint(sql, [said], true);
-        Toast.show('Save failed: ' + said + (hint ? ' ' + hint : ''), 'error', hint ? { duration: 15000 } : undefined);
+        var advice = serverErrorAdvice(sql, [said], true);
+        var hint = advice.hint;
+        var options = hint ? { duration: 15000 } : undefined;
+        if (hint && advice.docs) {
+            options.link = {
+                text: docsLabel(advice.docs),
+                href: advice.docs
+            };
+        };
+        Toast.show('Save failed: ' + said + (hint ? ' ' + hint : ''), 'error', options);
     };
 
     /**
@@ -48461,12 +52060,25 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             return;
         };
         var sql = Editor.getValue();
-        var extraction;
-        try { extraction = Tools.extractColumns(sql, Schema.getIndex()); } catch (e) { extraction = {
-            columns: [],
-            issues: []
-        }; }
-        /* fields: the chosen target's fields once they have loaded, for the note on Update (renderUpdateNote). */
+        /**
+         * @function readExtraction
+         * @description The output columns of the text, which the check under the target compares with the target's fields.
+         * @param {string} text
+         * @returns {{columns: Array<?string>, issues: Array<Object>}} no columns when the text does not parse
+         */
+        function readExtraction(text) {
+            try {
+                return Tools.extractColumns(text, Schema.getIndex());
+            } catch (e) {
+                return {
+                    columns: [],
+                    issues: []
+                };
+            };
+        };
+        var extraction = readExtraction(sql);
+        /* fields: the chosen target's fields once they have loaded, for the note on Update (renderUpdateNote) and the refusals
+         * (updateRefusal, requiredRefusal). */
         var picked = {
             target: null,
             updateType: 'Overwrite',
@@ -48605,11 +52217,188 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         };
 
         /**
+         * @function isOutputKnown
+         * @description Tells whether the output columns read from the text are all of them, so that a field missing from them is
+         * missing from the query: the text parses, and every star resolves to the columns known for certain. A star over a table whose
+         * fields have not loaded, or whose field list is a sample, and a text the parser cannot read, give fewer columns than MCE
+         * sees, and a refusal on them could stop a save MCE takes (the review of round 2, 2026-10-21).
+         * @returns {boolean}
+         */
+        function isOutputKnown() {
+            if (!extraction.columns.length) return false;
+            if ((extraction.issues || []).some(function (issue) { return issue.code === 'NO_SELECT' || issue.code === 'STAR_UNRESOLVED'; })) return false;
+            return (extraction.items || []).every(function (item) { return item.kind !== 'star' || !!item._certainColumns; });
+        };
+        /**
+         * @function requiredFieldsLeftOut
+         * @description The fields of the chosen target that cannot be empty and that the query's output leaves out: not nullable and not
+         * part of the primary key, as the check under the target has always read them. The refused ones have no default value and an
+         * output that is known in full (isOutputKnown), as a save into a target whose required field has no column was refused (the
+         * author's org, round 2 org test D12, 2026-10-21). A field with a default value, which the default fills (round 5 org test A11b),
+         * and any field of an output that is not known in full, are noted only.
+         * @param {boolean} isRefused - true for the fields MCE refuses the save for, false for those the check only notes
+         * @returns {Array<Object>} the target's fields, none while they have not loaded
+         */
+        function requiredFieldsLeftOut(isRefused) {
+            if (!picked.target || !picked.fields) return [];
+            var outputNames = {};
+            extraction.columns.forEach(function (c) { if (c) outputNames[c.toLowerCase()] = true; });
+            var isKnown = isOutputKnown();
+            return picked.fields.filter(function (f) {
+                if (f.isNullable || f.isPrimaryKey || outputNames[String(f.name).toLowerCase()]) return false;
+                var isDefaulted = f.defaultValue !== null && f.defaultValue !== undefined && f.defaultValue !== '';
+                return (isKnown && !isDefaulted) === isRefused;
+            });
+        };
+        /**
+         * @function requiredRefusal
+         * @description Why MCE refuses to save the query before it is sent: the target has a required field with no default value that
+         * the output leaves out. Save As of such a query failed with "Error saving the Query field.Field 'EmailAddress' is a required
+         * for the Target Data Extension. Ensure this field is specified in your query text." (the author's org, round 2 org test D12,
+         * 2026-10-21). Like updateRefusal, it has no way past it. Its fields must have loaded.
+         * @returns {string} the sentence that says so, or '' when nothing stops the save
+         */
+        function requiredRefusal() {
+            var left = requiredFieldsLeftOut(true);
+            if (!left.length) return '';
+            var names = left.map(function (f) { return f.name; }).join(', ');
+            return picked.target.name + ' has ' + (left.length === 1 ? 'a required field' : 'required fields') + ' that the query leaves out: ' + names +
+                ', so Marketing Cloud Engagement refuses the save. Add ' + (left.length === 1 ? 'a column for it' : 'a column for each') + ' to the query, or choose another target.';
+        };
+        /**
+         * @function textLengthNotes
+         * @description The output columns that may not fit the Text field of the target they go to: a plain reference to a Text field that
+         * is longer than the target's, and a text literal longer than it. A value too long saves, and then fails the whole run when the
+         * Query Activity runs, with "String or binary data would be truncated" (the author's org, round 2 org test D15, 2026-10-21: 19
+         * characters into a Text field of 10). A note, never a refusal, since the save succeeds. A column is judged only when both
+         * lengths are known (Tools.inferTextLengths), so an expression, a call and a field of a table SQL Studio holds no fields for
+         * are left alone.
+         * @param {Object<string, Object>} targetNames - the target's fields by lower-case name
+         * @returns {string[]} one sentence for each column that may not fit
+         */
+        function textLengthNotes(targetNames) {
+            var lengths = [];
+            try {
+                lengths = Tools.inferTextLengths(sql, Schema.getIndex());
+            } catch (e) {
+                lengths = [];
+            };
+            var notes = [];
+            extraction.columns.forEach(function (column, i) {
+                var known = lengths[i];
+                var field = column ? targetNames[column.toLowerCase()] : null;
+                /* A Text field with no length (null, or 0) holds any length. */
+                if (!known || !field || field.type !== 'Text' || typeof field.length !== 'number' || field.length <= 0 || known.length <= field.length) return;
+                notes.push(known.isLiteral ?
+                    column + ' is a text of ' + fmtNumber(known.length) + ' characters, and the field holds ' + fmtNumber(field.length) + '.' :
+                    column + ' is up to ' + fmtNumber(known.length) + ' characters, and the field holds ' + fmtNumber(field.length) + '.');
+            });
+            return notes;
+        };
+        /**
+         * @function textSourceNotes
+         * @description The output columns whose text can fail the run in the target field they go to, besides a length (textLengthNotes).
+         * Text into a Number or a Decimal field fails the run when one value is not a number: a Text, EmailAddress or Phone field read
+         * as it is, and a text literal the field does not take, which fails every row (Tools.isNumericText by the field's type: abc for
+         * both, 1.5 or 1e3 for a Number field, a blank text or 1e3 for a Decimal field). The Action Log of a Number field names the value, and a
+         * Decimal field's gives only "Automation failed due to system error." (the author's org, round 3 org tests D13 and G11,
+         * 2026-10-21). A STRING_AGG list into a Text field with a length fails the run when the list passes that length (round 3 org
+         * tests G05 and C15b: a list past 4,000 characters failed, and one of 5,444 ran once its value was CAST to NVARCHAR(MAX), so the
+         * length of the field is what a longer list meets). Text into a Date field is read the same way (round 2 org test D17,
+         * 2026-10-21): the session reads dates month first, so '12/31/2026' and '2026-12-31' were written as 31 December 2026 and
+         * '31/12/2026' failed the whole run with only the system-error line. A text literal that Tools.readsAsDate reads as no date fails
+         * every row, and a text field fails the run on one value the session cannot read. A NULL constant into a required field or a
+         * primary key field fails every row, with "Cannot insert a NULL value into a non-nullable column." in the Action Log (round 2 org
+         * tests D11 and D22, a required field with no default value and a key). A required field with a default value gets no note, as
+         * no test wrote a NULL into one (round 5 org test A11b left it out). Notes, never refusals, since the save succeeds. A column is judged by what Tools.inferTextSources and
+         * Tools.inferNullColumns know of it, so an expression, a call and a field of a derived table are left alone.
+         * @param {Object<string, Object>} targetNames - the target's fields by lower-case name
+         * @returns {{toNumber: string[], literals: string[], lists: string[], toDate: string[], dateLiterals: string[], nulls: string[]}} one sentence for each column, by kind
+         */
+        function textSourceNotes(targetNames) {
+            var sources = [];
+            var nullColumns = [];
+            try {
+                sources = Tools.inferTextSources(sql, Schema.getIndex());
+                nullColumns = Tools.inferNullColumns(sql, Schema.getIndex());
+            } catch (e) {
+                sources = [];
+                nullColumns = [];
+            };
+            var notes = {
+                toNumber: [],
+                literals: [],
+                lists: [],
+                toDate: [],
+                dateLiterals: [],
+                nulls: []
+            };
+            extraction.columns.forEach(function (column, i) {
+                var source = sources[i];
+                var field = column ? targetNames[column.toLowerCase()] : null;
+                var isDefaulted = !!field && field.defaultValue !== null && field.defaultValue !== undefined && field.defaultValue !== '';
+                if (column && field && nullColumns[i] && (field.isPrimaryKey || (field.isNullable === false && !isDefaulted))) {
+                    notes.nulls.push(column + ' (' + (field.isPrimaryKey ? 'a primary key field' : 'a required field') + ')');
+                    return;
+                };
+                if (!source || !field) return;
+                var isNumberField = field.type === 'Number' || field.type === 'Decimal';
+                if (field.type === 'Date' && source.kind === 'field') {
+                    notes.toDate.push(column + ' reads the ' + source.type + ' field ' + source.field + ' into a Date field.');
+                } else if (field.type === 'Date' && source.kind === 'literal' && !Tools.readsAsDate(source.text)) {
+                    var dateShown = source.text.length > 30 ? source.text.slice(0, 30) + '...' : source.text;
+                    notes.dateLiterals.push(column + ' is the text "' + dateShown + '".');
+                } else if (isNumberField && source.kind === 'field') {
+                    notes.toNumber.push(column + ' reads the ' + source.type + ' field ' + source.field + ' into a ' + field.type + ' field.');
+                } else if (isNumberField && source.kind === 'literal' && !Tools.isNumericText(source.text, field.type)) {
+                    var shown = source.text.length > 30 ? source.text.slice(0, 30) + '...' : source.text;
+                    /* A text that is a number of the other kind, as 1.5 for a Number field or a blank one for a Decimal field, is no number to it. */
+                    notes.literals.push(column + ' is the text "' + shown + '", ' + (Tools.isNumericText(source.text) ? 'which a ' + field.type + ' field does not take.' : 'which is no number.'));
+                } else if (field.type === 'Text' && typeof field.length === 'number' && field.length > 0 && source.kind === 'stringAgg') {
+                    notes.lists.push(column + ' is a STRING_AGG list, and the field holds ' + fmtNumber(field.length) + ' characters.');
+                };
+            });
+            return notes;
+        };
+        /**
+         * @function repeatedKeyNote
+         * @description The note under the update type when the query can return a key of the chosen target more than once: lint's MCE104 for
+         * this text, this target and this action (the author's org, round 3 org tests G08 to G10, 2026-10-21). It reads the fields of the
+         * target, so it waits for them. A warning for Append and Update, an info for Overwrite, and never a refusal: the finding is no error,
+         * so it does not stop the save either (saveBlockingFindings).
+         * @returns {?{severity: string, text: string}} the finding's severity and message, or null when there is none
+         */
+        function repeatedKeyNote() {
+            if (!picked.target || !picked.fields) return null;
+            var findings = saveLintFindings(sql, { key: picked.target.key, name: picked.target.name, action: picked.updateType });
+            var found = findings.filter(function (f) { return f.id === 'MCE104'; })[0];
+            return found ? { severity: found.severity, text: found.message } : null;
+        };
+
+        /**
+         * @function missingNote
+         * @description The note for the output columns that are not fields of the target: MCE saves the query, runs it and leaves them
+         * out, as it left out a column the target lacks and _Status (round 2 org tests D18 and D20). Round 5 org test A08 showed the note
+         * as an error for _Note, which stops no save, and did not click Save. A name that starts with an underscore can be no field of
+         * any Data Extension, so the note says that MCE leaves it out whatever the target holds (lint's MCE015).
+         * @param {string[]} columns - the output names the target lacks
+         * @returns {string}
+         */
+        function missingNote(columns) {
+            var text = columns.length + ' output column(s) are not on the target, and Marketing Cloud Engagement leaves them out: ' + columns.join(', ') + '.';
+            var underscored = columns.filter(function (c) { return c.charAt(0) === '_'; });
+            if (underscored.length) text += ' A Data Extension field cannot start with an underscore, so ' + underscored.join(', ') + ' can never be on a target (MCE015).';
+            return text;
+        };
+        /**
          * @function renderCheck
          * @description Renders the Save As "check target" table comparing the query's
          * output columns against the chosen target's fields, flagging output
-         * columns missing from the target and required target fields missing
-         * from the output.
+         * columns missing from the target (a warning, missingNote), required target fields missing from the
+         * output (a refusal where the field has no default value, requiredRefusal, and an info that the default
+         * fills the field where it has one), text that may be longer than the target field it goes to
+         * (textLengthNotes), text that can fail in a Number, Decimal or Date field, a STRING_AGG list that can
+         * outgrow a Text field and a NULL into a field that cannot be empty (textSourceNotes).
          */
         function renderCheck() {
             clearNode(checkWrap);
@@ -48626,10 +52415,16 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 clearNode(checkWrap);
                 var targetNames = {};
                 (fields || []).forEach(function (f) { targetNames[f.name.toLowerCase()] = f; });
-                var outputNames = {};
-                extraction.columns.forEach(function (c) { if (c) outputNames[c.toLowerCase()] = c; });
                 var missingInTargetColumns = extraction.columns.filter(function (c) { return c && !targetNames[c.toLowerCase()]; });
-                var missingRequiredFields = (fields || []).filter(function (f) { return !f.isNullable && !f.isPrimaryKey && !outputNames[f.name.toLowerCase()]; });
+                /* A required field the query leaves out is a refusal, unless it has a default value, which fills the field (round 5 org
+                 * test A11b: the save was accepted and the run wrote the default), or the output is not known in full. */
+                var refusedRequired = requiredFieldsLeftOut(true);
+                var leftRequired = requiredFieldsLeftOut(false);
+                var isOutputRead = isOutputKnown();
+                var filledRequired = isOutputRead ? leftRequired : [];
+                var defaultedRequired = isOutputRead ? [] : leftRequired;
+                var tooLong = textLengthNotes(targetNames);
+                var sourceNotes = textSourceNotes(targetNames);
 
                 var table = document.createElement('table');
                 var thead = document.createElement('tr');
@@ -48643,9 +52438,21 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                     table.appendChild(tr);
                 });
                 checkWrap.appendChild(table);
-                if (missingInTargetColumns.length) checkWrap.appendChild(h('div', { class: 'ss-message-item ss-message-item--error' }, missingInTargetColumns.length + ' output column(s) are not on the target: ' + missingInTargetColumns.join(', ')));
-                if (missingRequiredFields.length) checkWrap.appendChild(h('div', { class: 'ss-message-item ss-message-item--warning' }, missingRequiredFields.length + ' required target field(s) are not in the output: ' + missingRequiredFields.map(function (f) { return f.name; }).join(', ')));
-                if (!missingInTargetColumns.length && !missingRequiredFields.length) checkWrap.appendChild(h('div', { class: 'ss-message-item ss-message-item--info' }, 'Every output column matches a target field.'));
+                /* A warning, as MCE saves and leaves such a column out (round 2 org tests D18 and D20), where round 5 org test A08 saw a red
+                 * box that stopped nothing. A name that starts with an underscore can be no field of any target, so MCE leaves it out
+                 * whatever the target holds (MCE015). */
+                if (missingInTargetColumns.length) checkWrap.appendChild(h('div', { class: 'ss-message-item ss-message-item--warning' }, missingNote(missingInTargetColumns)));
+                if (refusedRequired.length) checkWrap.appendChild(h('div', { class: 'ss-message-item ss-message-item--error', role: 'alert' }, requiredRefusal()));
+                if (filledRequired.length) checkWrap.appendChild(h('div', { class: 'ss-message-item ss-message-item--info' }, filledRequired.length + ' required target field(s) are not in the output, and their default value fills them: ' + filledRequired.map(function (f) { return f.name + ' (default ' + f.defaultValue + ')'; }).join(', ')));
+                if (defaultedRequired.length) checkWrap.appendChild(h('div', { class: 'ss-message-item ss-message-item--warning' }, defaultedRequired.length + ' required target field(s) are not in the output: ' + defaultedRequired.map(function (f) { return f.name; }).join(', ')));
+                if (tooLong.length) checkWrap.appendChild(h('div', { class: 'ss-message-item ss-message-item--warning' }, tooLong.length + ' output column(s) may be longer than their target field, and one value that is too long fails the whole run when the Query Activity runs, with "String or binary data would be truncated": ' + tooLong.join(' ')));
+                if (sourceNotes.toNumber.length) checkWrap.appendChild(h('div', { class: 'ss-message-item ss-message-item--warning' }, sourceNotes.toNumber.length + ' output column(s) put text into a Number or Decimal field, and one value that is not a number fails the whole run when the Query Activity runs. The Action Log of Automation Studio names the value for a Number field, and says only "Automation failed due to system error." for a Decimal field: ' + sourceNotes.toNumber.join(' ')));
+                if (sourceNotes.literals.length) checkWrap.appendChild(h('div', { class: 'ss-message-item ss-message-item--warning' }, sourceNotes.literals.length + ' output column(s) put a text into a Number or Decimal field that the field does not take, so every row fails and the run with it: ' + sourceNotes.literals.join(' ')));
+                if (sourceNotes.lists.length) checkWrap.appendChild(h('div', { class: 'ss-message-item ss-message-item--warning' }, sourceNotes.lists.length + ' output column(s) are lists that may be longer than their target field, and a list that passes it fails the whole run when the Query Activity runs: ' + sourceNotes.lists.join(' ')));
+                if (sourceNotes.toDate.length) checkWrap.appendChild(h('div', { class: 'ss-message-item ss-message-item--warning' }, sourceNotes.toDate.length + ' output column(s) put text into a Date field, and one value that the session cannot read as a date fails the whole run when the Query Activity runs, with only "Automation failed due to system error." in the Action Log. Read it in the query with TRY_CONVERT(DATE, x, style), which returns NULL for a value it cannot read: ' + sourceNotes.toDate.join(' ')));
+                if (sourceNotes.dateLiterals.length) checkWrap.appendChild(h('div', { class: 'ss-message-item ss-message-item--warning' }, sourceNotes.dateLiterals.length + ' output column(s) put a text into a Date field that is no date to Marketing Cloud Engagement, whose session reads dates month first, so every row fails and the run with it: ' + sourceNotes.dateLiterals.join(' ')));
+                if (sourceNotes.nulls.length) checkWrap.appendChild(h('div', { class: 'ss-message-item ss-message-item--warning' }, sourceNotes.nulls.length + ' output column(s) put NULL into a field that cannot be empty, so every row fails and the run with it, with "Cannot insert a NULL value into a non-nullable column." in the Action Log: ' + sourceNotes.nulls.join(', ') + '.'));
+                if (!missingInTargetColumns.length && !refusedRequired.length && !defaultedRequired.length) checkWrap.appendChild(h('div', { class: 'ss-message-item ss-message-item--info' }, 'Every output column matches a target field.'));
             }).catch(function (err) {
                 clearNode(checkWrap);
                 checkWrap.appendChild(h('div', { class: 'ss-hint' }, 'Could not load target fields: ' + err.message));
@@ -48674,15 +52481,24 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         }));
         /* Under the update type, as the target's notes are under the target: Update needs a field outside the target's primary key. */
         var updateNote = h('div', { class: 'ss-message-item ss-message-item--warning', role: 'alert', hidden: true }, null);
+        /* Under the update note: the query can return a key of the target more than once (MCE104, repeatedKeyNote). */
+        var keyNote = h('div', { class: 'ss-message-item ss-message-item--warning', role: 'status', hidden: true, 'data-saveas': 'key-note' }, null);
         /**
          * @function updateRefusal
          * @description Why MCE refuses to save the query as it is set, before it is sent: Update into a target whose every field is
          * part of its primary key. Save As of such a query failed with "The Target Data Extension must have at least one
-         * non-primary-key field." (the author's org, 2026-10-14). Its fields must have loaded, as the check under the target reads them.
+         * non-primary-key field." (the author's org, 2026-10-14). So does Update into a target with no primary key field at all, with "The
+         * Target Data Extension must have at least one primary key field." (round 2 org test D05, 2026-10-21). Its fields must have
+         * loaded, as the check under the target reads them.
          * @returns {string} the sentence that says so, or '' when nothing stops the save
          */
         function updateRefusal() {
             if (picked.updateType !== 'Update' || !picked.target || !picked.fields || !picked.fields.length) return '';
+            /* Update into a target with no primary key field failed with "The Target Data Extension must have at least one primary key
+             * field." (the author's org, round 2 org test D05, 2026-10-21). */
+            if (!picked.fields.some(function (f) { return !!f.isPrimaryKey; })) {
+                return 'Update needs a primary key field, and ' + picked.target.name + ' has none, so Marketing Cloud Engagement refuses the save. Choose Overwrite or Append, or another target.';
+            };
             if (!picked.fields.every(function (f) { return !!f.isPrimaryKey; })) return '';
             return 'Update needs a field outside the primary key, and every field of ' + picked.target.name + ' is part of it, so Marketing Cloud Engagement refuses the save. Choose Overwrite or Append, or another target.';
         };
@@ -48695,6 +52511,12 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             var text = updateRefusal();
             updateNote.textContent = text;
             updateNote.hidden = !text;
+            /* Under it, the note for a key the query can return more than once (repeatedKeyNote): a warning with Append and Update, an
+             * info with Overwrite, and it follows the action and the target. */
+            var key = repeatedKeyNote();
+            keyNote.textContent = key ? key.text : '';
+            keyNote.className = 'ss-message-item ss-message-item--' + (key && key.severity === 'info' ? 'info' : 'warning');
+            keyNote.hidden = !key;
         };
 
         /* Query folders are not loaded at boot any more: fetch them the first time this dialog needs them. The Folder is the same
@@ -48797,7 +52619,9 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         /**
          * @function save
          * @description Checks the form and sends the save, once: a click or an Enter while a save is on its way does nothing. A query
-         * MCE would refuse, Update into a target of primary-key fields alone, is not sent, and the note under the update type says why.
+         * MCE would refuse is not sent, Update into a target of primary-key fields alone or with no primary key (updateRefusal, the note
+         * under the update type says why) and a target with a required field the query leaves out (requiredRefusal, the check under the
+         * target says it).
          * Lint errors in the text stop the first click (the author's decision, 2026-10-15): the dialog stays open, lists them above the
          * buttons and the button reads Save anyway, and the next click, while the text, the target and the action are the same, sends it.
          * The answer is read with what was sent, the SQL, the target and the update type, as the dialog can change or close meanwhile,
@@ -48814,7 +52638,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 Toast.show('Choose a target Data Extension.', 'warning');
                 return;
             };
-            var refusal = updateRefusal();
+            var refusal = updateRefusal() || requiredRefusal();
             if (refusal) {
                 Toast.show(refusal, 'warning');
                 return;
@@ -48883,7 +52707,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 labelledField('Name', nameInput),
                 labelledField('Description', descInput),
                 labelledField('Target Data Extension', targetSearch, h('div', null, [targetList, targetNote, checkWrap])),
-                h('div', { class: 'ss-field' }, [h('div', { class: 'ss-label', id: updateTypeLabelId }, 'Update type'), updateTypeGroup, updateNote]),
+                h('div', { class: 'ss-field' }, [h('div', { class: 'ss-label', id: updateTypeLabelId }, 'Update type'), updateTypeGroup, updateNote, keyNote]),
                 h('div', { class: 'ss-field' }, [h('label', { class: 'ss-label', for: folderPicker.input.id }, 'Folder'), folderPicker.el])
             ],
             footer: [
@@ -48893,7 +52717,13 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
         });
         /* Above the buttons, in view whatever the body's scroll. */
         modal.dialog.insertBefore(gateBox.el, modal.dialog.querySelector('.ss-modal__footer'));
-        UI._saveAsEdited = syncGate;
+        /* An edit of the text changes the output the check compares with the target: it is read again, with the check. */
+        UI._saveAsEdited = function () {
+            sql = Editor.getValue();
+            extraction = readExtraction(sql);
+            if (picked.target) renderCheck();
+            syncGate();
+        };
         renderTargetList('');
         /* Rows drawn while the folders load have no path: they are drawn again when the folders come (Schema._loadDeFolders). The
          * Business Unit's own synchronized Data Extensions are marked only then, so one chosen before is no target, and the choice goes
@@ -50867,9 +54697,21 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
     };
 
     /**
+     * @function saveListKey
+     * @description What a Data Extension of the list is known by in the Save to DE overlay's check of a taken name: its key in lower case,
+     * as Marketing Cloud Engagement matches a CustomerKey without regard to case.
+     * @param {Object} table - a schema table entry
+     * @returns {string}
+     */
+    function saveListKey(table) {
+        return String(table.key).toLowerCase();
+    };
+
+    /**
      * @function saveValidate
      * @description Checks a save model as the Backend checks createDataExtension, before any call, and says what is wrong where: the
-     * name (1 to 128 characters, no leading underscore, none taken in this Business Unit), the key (up to 36, never a temporary run
+     * name (1 to 128 characters, no leading underscore, none taken in this Business Unit, as the list shows it, which `taken` hands on for
+     * the overlay to ask Marketing Cloud Engagement about, and `checking` names while it has not answered), the key (up to 36, never a temporary run
      * Data Extension's), each field (a name of 1 to 128 characters that no other field has, a Text length of 1 to 4,000, a Decimal's
      * precision of 1 to 29 and scale of 0 to the smaller of the precision and 8, a default of up to 4,000 characters, and a primary key
      * that is not nullable), the retention (a whole period of 1 to 999) and the send relationship (a chosen field of a type it takes). A
@@ -50877,8 +54719,9 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
      * since the query's columns name what it fills. Once the Data Extension exists, as after a refused move, its name is not
      * checked against the list.
      * @param {Object} model - the save model
-     * @returns {{name: string, key: string, fields: Array<Object>, retention: string, sendable: string, count: number}} an empty
-     * text where nothing is wrong, and in count how many things are
+     * @returns {{name: string, key: string, fields: Array<Object>, retention: string, sendable: string, count: number, taken: ?Object, checking: string}}
+     * an empty text where nothing is wrong, and in count how many things are. A name the list holds is no refusal until Marketing Cloud Engagement
+     * says the Data Extension is there (model.nameChecks): checking is the name while that is not known, which keeps Save off, and no more.
      */
     function saveValidate(model) {
         var errors = {
@@ -50887,18 +54730,34 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             fields: [],
             retention: '',
             sendable: '',
-            count: 0
+            count: 0,
+            taken: null,
+            checking: ''
         };
         var name = model.name.trim();
-        var isTaken = false;
+        var taken = null;
         if (!model.created) {
-            Schema.deList.forEach(function (t) { if (t && !t.isShared && String(t.name).toLowerCase() === name.toLowerCase()) isTaken = true; });
+            Schema.deList.forEach(function (t) { if (!taken && t && !t.isShared && String(t.name).toLowerCase() === name.toLowerCase()) taken = t; });
         };
         if (!name) errors.name = 'Enter a name.';
         else if (name.length > SAVE_NAME_MAX) errors.name = 'A name takes ' + SAVE_NAME_MAX + ' characters at most.';
         else if (name.charAt(0) === '_') errors.name = 'A name cannot start with an underscore.';
         else if (saveHasControl(name)) errors.name = 'A name cannot hold a line break or another control character.';
-        else if (isTaken) errors.name = 'A Data Extension named ' + name + ' is already there.';
+        else if (taken) {
+            /* The name is the list's, which can be a day old: a Data Extension deleted in Marketing Cloud Engagement since is still on it
+             * (the author's org, round 3, 2026-10-21). The overlay asks Marketing Cloud Engagement (SaveToDe._checkTakenName), and the
+             * refusal stands once it says the Data Extension is there, or could not be asked, which the refusal says. While the question is
+             * out the name is no error, as a refusal that went away again read as one (the round 6 org test A15, where it stood for up to
+             * 6 seconds): the overlay says it is checking, and Save stays off. */
+            errors.taken = taken;
+            var check = model.nameChecks && model.nameChecks[saveListKey(taken)];
+            if (check === 'exists' || check === 'unknown') {
+                errors.name = 'A Data Extension named ' + name + ' is already there.';
+                if (check === 'unknown') errors.name += ' SQL Studio could not ask Marketing Cloud Engagement whether it still is, and its list can be a day old.';
+            } else {
+                errors.checking = name;
+            };
+        };
         var key = model.key.trim();
         if (key.length > SAVE_KEY_MAX) errors.key = 'A key takes ' + SAVE_KEY_MAX + ' characters at most.';
         else if (saveHasControl(key)) errors.key = 'A key cannot hold a line break or another control character.';
@@ -51727,14 +55586,30 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
     };
 
     /**
-     * @function saveMoveMessage
-     * @description What a move that failed says of why: Marketing Cloud Engagement's message, and after it, for a move that ran the query again,
-     * the hint a failed Save gets when the query holds a line comment (SaveToDe._settle puts it in the error as hint). The overlay and the toast
-     * both say it, so it is made once.
-     * @param {Object} error - the save's error { message, hint }
+     * @function saveBusyText
+     * @description What a move says when the Backend refused it with RUN_IN_PROGRESS: the query activity it needs still runs a query of the
+     * user's, from another browser tab or window, which this window's QueryTabs.pickSlot cannot know. The Backend's own text says to try
+     * again in a moment, which understates a wait of minutes and names no button, so the Frontend gives its own, with the one step that
+     * fits the place that says it.
+     * @param {number} slot - the query activity the move asked for
+     * @param {string} step - what to do once that query finishes, such as "click Move the rows again", or '' where nothing can be done
      * @returns {string}
      */
-    function saveMoveMessage(error) {
+    function saveBusyText(slot, step) {
+        return 'Your query in another browser tab or window is still running in SQL Studio\'s query activity ' + slot + ', which the move needs.' + (step ? ' Once that query finishes, ' + step + '.' : '');
+    };
+
+    /**
+     * @function saveMoveMessage
+     * @description What a move that failed says of why: Marketing Cloud Engagement's message, and after it, for a move that ran the query again,
+     * the hint a failed Save gets when the query holds a line comment (SaveToDe._settle puts it in the error as hint). A move refused for a busy
+     * query activity (isBusy) says saveBusyText in their place. The overlay and the toast both say it, so it is made once.
+     * @param {Object} error - the save's error { message, hint, isBusy, slot }
+     * @param {string} step - what saveBusyText tells the user to do once the other query finishes, in the place that says it
+     * @returns {string}
+     */
+    function saveMoveMessage(error, step) {
+        if (error.isBusy) return saveBusyText(error.slot, step);
         return error.hint ? saveSentence(error.message) + ' ' + error.hint : error.message;
     };
 
@@ -51893,6 +55768,65 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             }).then(function () {
                 model.checkState = 'done';
                 if (model.view) model.view.refresh();
+            });
+        },
+
+        /**
+         * @method _checkTakenName
+         * @description Asks Marketing Cloud Engagement whether a Data Extension that makes the name taken is still there, before the
+         * refusal "A Data Extension named X is already there." stands. The list is the day's cache, so a Data Extension deleted in
+         * Marketing Cloud Engagement since is still on it, and the overlay refused its name until the list was reloaded (the author's
+         * org, round 3, 2026-10-21). The check is Schema.confirmDataExtension, the cheapest read of one Data Extension by
+         * its key the Backend has (getDataExtensionDetails, one Retrieve, with no extras). It is asked once for each Data Extension
+         * while the name stays taken, and the overlay says it is checking meanwhile, with Save off, and gives no refusal, which stood
+         * for up to 6 seconds and then went in the round 6 org test A15. The answer 'gone' drops the entry from the list
+         * (Schema.dropDataExtension), which ends the refusal, 'exists' keeps it, and 'unknown', a check that could not run, keeps it with a
+         * note and the button that loads the list again (the overlay's nameReload). When the name stops matching, an answer of 'exists' or
+         * 'unknown' is forgotten, so the name typed again is asked for again.
+         * @param {Object} model - a save model, new
+         * @param {Object} errors - from saveValidate: taken is the entry that makes the name taken, or null
+         */
+        _checkTakenName: function (model, errors) {
+            if (!model.nameChecks) model.nameChecks = {};
+            if (!errors.taken) {
+                Object.keys(model.nameChecks).forEach(function (key) { if (model.nameChecks[key] !== 'checking') delete model.nameChecks[key]; });
+                return;
+            };
+            var taken = errors.taken;
+            var id = saveListKey(taken);
+            if (model.nameChecks[id]) return;
+            model.nameChecks[id] = 'checking';
+            Schema.confirmDataExtension(taken).then(function (state) {
+                model.nameChecks[id] = state;
+                if (state === 'gone') Schema.dropDataExtension(taken);
+                if (model.view) model.view.refresh();
+            });
+        },
+
+        /**
+         * @method _reloadForName
+         * @description Loads the Data Extension list again from the button under a taken name that could not be checked, skipping the day's
+         * cache, as the sidebar's Reload does, and draws the form with the new list. The answers of the check are forgotten, so the name
+         * is asked for again if it is still taken. The button is off while the list loads, and a failed load is told in a toast.
+         * @param {Object} model - a save model, new
+         * @param {HTMLElement} button - the overlay's nameReload
+         */
+        _reloadForName: function (model, button) {
+            if (button.disabled) return;
+            button.disabled = true;
+            button.textContent = 'Reloading...';
+            var restore = function () {
+                button.disabled = false;
+                button.textContent = 'Reload the list';
+                model.nameChecks = {};
+                if (model.view) model.view.refresh();
+            };
+            Schema.loadDataExtensionList(true).then(function () {
+                Toast.show('Reloaded the Data Extension list.', 'success');
+                restore();
+            }, function (err) {
+                Toast.show('Could not reload the Data Extension list: ' + ((err && err.message) || 'unknown error'), 'warning');
+                restore();
             });
         },
 
@@ -52203,6 +56137,13 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 fix: h('p', { class: 'ss-save__fix' }, null)
             };
             var nameErr = h('div', { class: 'ss-save__error' }, null);
+            /* Under a name the list holds, while Marketing Cloud Engagement is asked whether the Data Extension is still there: no refusal yet. */
+            var nameChecking = h('div', { class: 'ss-hint ss-save__checking', 'data-save': 'name-checking', 'aria-live': 'polite', hidden: true }, null);
+            /* Under the refusal of a taken name that could not be checked with Marketing Cloud Engagement: loads the list again. */
+            var nameReload = h('button', {
+                class: 'ss-btn ss-btn--link', type: 'button', hidden: true, 'data-save': 'name-reload',
+                onclick: function () { self._reloadForName(model, nameReload); }
+            }, 'Reload the list');
             var keyErr = h('div', { class: 'ss-save__error' }, null);
             var nameInput = h('input', {
                 class: 'ss-input', type: 'text', id: 'ss-save-name', 'data-save': 'name', autocomplete: 'off', spellcheck: 'false',
@@ -52448,6 +56389,11 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                     if (errorNode) errorNode.textContent = message;
                 };
                 mark(nameInput, errors.name, nameErr);
+                /* A name the list holds is checked with Marketing Cloud Engagement before the refusal stands. */
+                self._checkTakenName(model, errors);
+                nameChecking.hidden = !errors.checking;
+                nameChecking.textContent = errors.checking ? 'Checking whether ' + errors.checking + ' is still in Marketing Cloud Engagement...' : '';
+                nameReload.hidden = !(errors.taken && model.nameChecks && model.nameChecks[saveListKey(errors.taken)] === 'unknown');
                 mark(keyInput, errors.key, keyErr);
                 /* Once the Data Extension exists its fields are set, so there is nothing left to warn of. */
                 clearNode(view.warnings);
@@ -52512,7 +56458,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 view.notice,
                 view.hint,
                 h('div', { class: 'ss-save__top' }, [
-                    h('div', { class: 'ss-field' }, [h('label', { class: 'ss-label', for: 'ss-save-name' }, 'Name'), nameInput, nameErr]),
+                    h('div', { class: 'ss-field' }, [h('label', { class: 'ss-label', for: 'ss-save-name' }, 'Name'), nameInput, nameErr, nameChecking, nameReload]),
                     h('div', { class: 'ss-field' }, [h('label', { class: 'ss-label', for: 'ss-save-key' }, 'External key'), keyInput, keyErr]),
                     h('div', { class: 'ss-field' }, [h('label', { class: 'ss-label', for: 'ss-save-folder' }, 'Folder'), folderPicker.el])
                 ]),
@@ -52902,7 +56848,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 if (model.error) {
                     var name = model.error.name || (target ? target.name : '');
                     var url = (target && target.objectId) ? dataExtensionUrl(Session.data && Session.data.stackKey, target.objectId) : null;
-                    var children = [h('div', null, model.error.isUnconfirmed ? saveExistingUnconfirmedText(name, model.error.updateType, model.error) : saveExistingFailedText(name, saveMoveMessage(model.error), model.error.isRefused))];
+                    var children = [h('div', null, model.error.isUnconfirmed ? saveExistingUnconfirmedText(name, model.error.updateType, model.error) : saveExistingFailedText(name, saveMoveMessage(model.error, 'save again'), model.error.isRefused))];
                     if (url) children.push(h('a', { class: 'ss-save__link', href: url, target: '_blank', rel: 'noopener noreferrer' }, 'Open it in Contact Builder'));
                     notices.push(h('div', { class: 'ss-message-item ss-message-item--' + (model.error.isUnconfirmed ? 'warning' : 'error'), role: 'alert', 'data-save': 'error' }, children));
                 };
@@ -53229,7 +57175,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 } else if (model.error.isUnconfirmed) {
                     children.push(h('div', null, saveUnconfirmedText(created.name, model.error)));
                 } else {
-                    children.push(h('div', null, 'The Data Extension ' + created.name + ' was created and kept, but its rows were not moved. ' + saveMoveMessage(model.error)));
+                    children.push(h('div', null, 'The Data Extension ' + created.name + ' was created and kept, but its rows were not moved. ' + saveMoveMessage(model.error, 'click Move the rows again')));
                     /* Its fields are set, so the form's are locked: a Backspace in one went nowhere (the author's RC8 test). */
                     children.push(h('div', { class: 'ss-save__locked', 'data-save': 'locked-note' }, 'Its fields are set now. To change one, save to a new Data Extension instead.'));
                 };
@@ -53252,7 +57198,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             var isMoveAgain = !!created && !save;
             var canMoveAgain = isMoveAgain && model.checkState === 'done' && model.mode !== 'none' && !(model.mode === 'sql' && renamed.length > 0);
             view.cost.textContent = save ? '' : saveCostText(model);
-            var isReady = errors.count === 0 && model.checkState === 'done' && model.mode !== 'none';
+            var isReady = errors.count === 0 && !errors.checking && model.checkState === 'done' && model.mode !== 'none';
             view.fix.textContent = (!save && !isMoveAgain && errors.count > 0) ? 'Fix the marked values to save. ' + errors.count + (errors.count === 1 ? ' value needs' : ' values need') + ' a change.' : '';
             /* The lint errors a click stopped the save for (_stopsForLint), listed above the buttons while the button says anyway. */
             var stopped = save ? [] : this._stoppedErrors(model);
@@ -53306,7 +57252,10 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             if (tab.activeSave) return;
             var isMoveOnly = !!model.created;
             if (model.checkState !== 'done' || model.mode === 'none') return;
-            if (!isMoveOnly && saveValidate(model).count > 0) return;
+            if (!isMoveOnly) {
+                var valid = saveValidate(model);
+                if (valid.count > 0 || valid.checking) return;
+            };
             var owner = { _calls: [] };
             var stage = isMoveOnly ? 'move' : 'create';
             model.error = null;
@@ -53690,7 +57639,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                 var name = save.made ? save.made.name : save.name;
                 var url = save.made ? dataExtensionUrl(Session.data && Session.data.stackKey, save.made.objectId) : null;
                 /* A move that runs the query again (mode sql) sends the query to the slot's Query Activity, and Marketing Cloud Engagement's
-                 * save loses everything after a line comment, so its failure gets the hint a failed Save gets (serverErrorHint; the
+                 * save treats a line comment as never closed, so its failure gets the hint a failed Save gets (serverErrorHint; the
                  * author's RC2 test, 2026-10-16). A move from the run's temporary Data Extension sends no query of the user's. */
                 var queryHint = (stage === 'move' && !isUnconfirmed && model && model.mode === 'sql' && model.sql) ? serverErrorHint(model.sql, [message], true) : null;
                 var error = {
@@ -53706,7 +57655,11 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                     updateType: save.kind === 'existing' ? save.updateType : null,
                     /* The Backend answered the move's request with an error of its own (it has a code): it started nothing. A task
                      * that ended in an error has none, and an unconfirmed end is neither. */
-                    isRefused: !isUnconfirmed && !!(err && err.code)
+                    isRefused: !isUnconfirmed && !!(err && err.code),
+                    /* The activity the move asked for runs a query from another browser tab or window, which pickSlot cannot know
+                     * (RUN_IN_PROGRESS): the text is the Frontend's own, with the step that fits (saveBusyText). */
+                    isBusy: stage === 'move' && !isUnconfirmed && !!(err && err.code === 'RUN_IN_PROGRESS'),
+                    slot: save.slot
                 };
                 if (model) model.error = error;
                 /* What the toast says, which the Status panel says too, whether the overlay is open (it shows the end in place of a
@@ -53720,7 +57673,7 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                     /* A Data Extension that exists: nothing was created, so there is no create to refuse or lose. */
                     options = linked;
                     kind = isUnconfirmed ? 'warning' : 'error';
-                    text = isUnconfirmed ? saveExistingUnconfirmedText(name, save.updateType, error) : saveExistingFailedText(name, saveMoveMessage(error), error.isRefused);
+                    text = isUnconfirmed ? saveExistingUnconfirmedText(name, save.updateType, error) : saveExistingFailedText(name, saveMoveMessage(error, 'open Save to DE and save again'), error.isRefused);
                 } else if (stage === 'create' && mayExist) {
                     kind = 'warning';
                     text = saveCreateUnknownText(name, error);
@@ -53731,7 +57684,8 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
                     kind = 'warning';
                     text = saveUnconfirmedText(name, error);
                 } else {
-                    text = 'The Data Extension ' + name + ' was created and kept, but its rows were not moved. ' + saveMoveMessage(error) + (model ? ' Open Save to DE to move them again.' : '');
+                    /* A move refused for a busy activity has its step in its own sentence (saveBusyText), so the tail is for the others. */
+                    text = 'The Data Extension ' + name + ' was created and kept, but its rows were not moved. ' + saveMoveMessage(error, model ? 'open Save to DE and click Move the rows again' : '') + (model && !error.isBusy ? ' Open Save to DE to move them again.' : '');
                 };
                 UI.addTabStatusNotice(tab, SAVE_NOTICE_PREFIX + text);
                 if (model && model.view) {
@@ -53805,8 +57759,9 @@ window.SQLStudioEmbeddedCss = "/* ==============================================
             var model = null;
             if (source) {
                 model = {};
+                /* The checks of a taken name belong to this page: one still on its way would never answer on the next (_checkTakenName). */
                 Object.keys(source).forEach(function (key) {
-                    if (key !== 'view' && key !== 'error') model[key] = source[key];
+                    if (key !== 'view' && key !== 'error' && key !== 'nameChecks') model[key] = source[key];
                 });
             };
             var entry = {
